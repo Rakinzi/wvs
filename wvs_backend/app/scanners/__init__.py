@@ -1,6 +1,6 @@
 from .malicious import EnhancedMaliciousDetector
-from .sql import SQLInjectionScanner
-from .ssl import SSLScanner
+from .sql_scanner import SQLInjectionScanner
+from .ssl_scanner import SSLScanner
 
 class SecurityScanner:
     def __init__(self):

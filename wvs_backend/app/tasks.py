@@ -2,8 +2,8 @@ from app import celery, db
 from app.scanners import SecurityScanner
 from app.utils.reports import generate_report
 from datetime import datetime
+from .models import ScanResult
 import os
-from app.models import ScanResult
 
 @celery.task
 def scan_website(url):

@@ -1,26 +1,32 @@
 import tldextract
 import re
 import requests
-from pydnsbl import DNSBLChecker
+from pydnsbl import DNSBLIpChecker
+import socket
 
 class EnhancedMaliciousDetector:
     def __init__(self):
-        self.dnsbl_checker = DNSBLChecker()
-        self.phishing_db_url = 'https://raw.githubusercontent.com/mitchellkrogza/Phishing.Database/master/phishing-links/output/domains/ACTIVE/list.txt'
+        self.dnsbl_checker = DNSBLIpChecker()
+        self.phishing_db_url = 'https://raw.githubusercontent.com/mitchellkrogza/Phishing.Database/master/phishing-domains-ACTIVE.txt'
 
     def check_dnsbl(self, domain):
-        result = self.dnsbl_checker.check(domain)
-        return {
-            'detected': result.detected,
-            'providers': result.detected_by,
-            'total_checks': len(result.providers)
-        }
+        try:
+            ip_address = socket.gethostbyname(domain)  
+            result = self.dnsbl_checker.check(ip_address) 
+            return {
+                'detected': result.detected_by,
+                'providers': result.providers,
+                'total_checks': len(result.providers)
+            }
+        except socket.gaierror:
+            return {'error': 'Unable to resolve domain to IP'}
 
     def check_phishing_db(self, domain):
         try:
             response = requests.get(self.phishing_db_url)
-            return domain in response.text
-        except:
+            phishing_domains = set(response.text.splitlines())  # Convert to a set for exact matching
+            return domain in phishing_domains  # Check exact match
+        except requests.RequestException:
             return False
 
     def analyze_url(self, url):
