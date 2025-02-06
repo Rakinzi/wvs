@@ -1,38 +1,40 @@
 from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
+from flask_jwt_extended import JWTManager
 from celery import Celery
 
 db = SQLAlchemy()
-celery = Celery(__name__)
+jwt = JWTManager()
+celery = Celery('app')
 
 def create_app(config_class='app.config.Config'):
     app = Flask(__name__)
     app.config.from_object(config_class)
     
-    # Initialize Celery with app configuration
+    db.init_app(app)
+    jwt.init_app(app)
+    
+    # Configure Celery
     celery.conf.update(
         broker_url=app.config['CELERY_BROKER_URL'],
-        result_backend=app.config['CELERY_RESULT_BACKEND']
+        result_backend=app.config['CELERY_RESULT_BACKEND'],
+        task_serializer='json',
+        accept_content=['json'],
+        result_serializer='json',
+        timezone='UTC',
+        enable_utc=True,
+        broker_connection_retry_on_startup=True,
+        imports=('app.tasks',),  # Make sure tasks are imported
     )
-    
-    # Initialize SQLAlchemy
-    db.init_app(app)
     
     # Register blueprints
     from app.routes.scans import bp as scans_bp
+    from app.routes.users import bp as users_bp
     app.register_blueprint(scans_bp)
+    app.register_blueprint(users_bp)
 
     # Create database tables
     with app.app_context():
         db.create_all()
 
     return app
-
-def make_celery(app=None):
-    celery = Celery(
-        app.import_name,
-        broker=app.config['CELERY_BROKER_URL'],
-        backend=app.config['CELERY_RESULT_BACKEND']
-    )
-    celery.conf.update(app.config)
-    return celery

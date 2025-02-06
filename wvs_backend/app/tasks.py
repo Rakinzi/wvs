@@ -1,12 +1,13 @@
-from app import celery, db
+from celery import shared_task
+from app import db
 from app.scanners import SecurityScanner
+from app.models import ScanResult
 from app.utils.reports import generate_report
 from datetime import datetime
-from .models import ScanResult
 import os
 
-@celery.task
-def scan_website(url):
+@shared_task(name='app.tasks.scan_website', bind=True)
+def scan_website(self, url):
     try:
         scanner = SecurityScanner()
         
@@ -24,19 +25,30 @@ def scan_website(url):
         
         with open(filename, 'wb') as f:
             f.write(report_buffer.getbuffer())
-        
-        scan = ScanResult(
-            url=results['url'],
-            findings=results,
-            report_path=filename
-        )
-        db.session.add(scan)
-        db.session.commit()
-        
-        return {
-            'id': scan.id,
-            'url': scan.url,
-            'timestamp': scan.timestamp.isoformat()
-        }
+
+        try:
+            scan = ScanResult(
+                url=results['url'],
+                findings=results,
+                report_path=filename
+            )
+            
+            db.session.add(scan)
+            db.session.commit()
+            
+            return {
+                'status': 'success',
+                'id': scan.id,
+                'url': scan.url,
+                'timestamp': scan.timestamp.isoformat()
+            }
+        except Exception as db_error:
+            if db.session:
+                db.session.rollback()
+            raise db_error
+            
     except Exception as e:
-        return {'error': str(e)}
+        return {
+            'status': 'error',
+            'error': str(e)
+        }
