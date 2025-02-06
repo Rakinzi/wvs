@@ -1,9 +1,19 @@
-import Image from "next/image";
+'use client';
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { useAuth } from '@/context/AuthContext';
 
 export default function Home() {
-  return (
-    <div>
-      <h1>Home</h1>
-    </div>
-  );
+  const router = useRouter();
+  const { user } = useAuth();
+
+  useEffect(() => {
+    if (!user) {
+      router.push('/auth/login');
+    } else {
+      router.push('/dashboard');
+    }
+  }, [user, router]);
+
+  return null;
 }

@@ -1,15 +1,16 @@
-import './globals.css';
+"use client"
 
-export const metadata = {
-  title: 'Admin Dashboard',
-  description: 'Admin Dashboard for E-commerce',
-};
+import './globals.css';
+import { AuthProvider } from '@/context/AuthContext';
+
 
 export default function RootLayout({ children }) {
   return (
     <html lang="en">
       <body>
+        <AuthProvider>
         {children}
+        </AuthProvider>
       </body>
     </html>
   );
