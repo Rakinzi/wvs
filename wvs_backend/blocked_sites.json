@@ -1,0 +1,9 @@
+{
+  "domains": [
+    "malware.com",
+    "phishing-site.org",
+    "hellomagazine.com",
+    "000000login.weebly.com"
+  ],
+  "patterns": [".*\\.suspicious\\.[a-z]+", "temporary-[0-9]+\\.scam"]
+}
