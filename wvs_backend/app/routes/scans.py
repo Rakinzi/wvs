@@ -186,3 +186,23 @@ def health_check():
             'status': 'ERROR',
             'message': str(e)
         }), 503
+        
+@bp.route('/scan/ai_scan', methods=['POST'])
+def ai_scanner():
+        url = request.json.get('url')
+        if not url:
+            return jsonify({'error': 'URL is required'}), 400
+            
+        scanner = SecurityScanner()
+        print("url", url)
+        prediction_int, prediction_label = scanner.check_ai(url)
+        print(prediction_int, prediction_label)
+        
+        return jsonify({
+            'status': 'success',
+            'url': url,
+            'prediction': str(prediction_int),
+            'label': prediction_label
+        }), 200
+        
+        
