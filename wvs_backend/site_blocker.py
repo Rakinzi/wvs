@@ -4,88 +4,93 @@ import os
 import sys
 import json
 import re
+from app.scanners.ssl_scanner import SSLScanner
+from app.scanners.malicious import EnhancedMaliciousDetector
 
 class SiteBlocker:
     def __init__(self):
-        self.blocked_domains = [
-            "github.com",
-            "phishing-example.org",
-            "malware-distribution.net",
-            "example-scam.com"
-        ]
-        
-        self.blocked_patterns = [
-            r".*\.evil$",
-            r"suspicious-[0-9]+\.com"
-        ]
-        
-        self.load_blocked_domains()
-        ctx.log.info(f"Initialized site blocker with {len(self.blocked_domains)} domains and {len(self.blocked_patterns)} patterns")
+        self.ssl_scanner = SSLScanner()
+        self.malicious_detector = EnhancedMaliciousDetector()
+        ctx.log.info("Initialized site blocker")
     
-    def load_blocked_domains(self):
-        blocklist_file = os.path.join(os.path.dirname(__file__), "blocked_sites.json")
-        if os.path.exists(blocklist_file):
-            try:
-                with open(blocklist_file, 'r') as f:
-                    data = json.load(f)
-                    if "domains" in data:
-                        self.blocked_domains.extend(data["domains"])
-                    if "patterns" in data:
-                        self.blocked_patterns.extend(data["patterns"])
-                ctx.log.info(f"Loaded additional blocklist from {blocklist_file}")
-            except Exception as e:
-                ctx.log.error(f"Error loading blocklist: {e}")
-    
-    def is_blocked(self, host):
-        """Check if a host should be blocked"""
-        # Remove http:// or https:// from the host
-        host = re.sub(r'^https?://', '', host)
-        
-        # Direct domain match
-        if any(domain in host or host.endswith('.' + domain) for domain in self.blocked_domains):
-            ctx.log.info(f"Blocked by domain match: {host}")
-            return True
-                
-        # Regex pattern match
-        if any(re.match(pattern, host) for pattern in self.blocked_patterns):
-            ctx.log.info(f"Blocked by pattern match: {host}")
-            return True
-                
-        return False
+    def is_blocked(self, url, host):
+        """Check if a URL should be blocked"""
+        # First check for malicious indicators
+        malicious_result = self.malicious_detector.analyze_url(url)
+        if malicious_result['is_malicious']:
+            reasons = []
+            if malicious_result['phishing_match']:
+                reasons.append("Domain found in phishing database")
+            if malicious_result['dnsbl'].get('blacklisted', False):
+                reasons.append("Domain blacklisted by DNS blocklists")
+            if malicious_result['score'] >= 7:
+                reasons.append("Suspicious URL characteristics")
+            return True, " | ".join(reasons)
 
-    def get_block_page(self, url):
-        return """
+        # If not malicious, then check SSL/TLS
+        ssl_result = self.ssl_scanner.check(url)
+        if not ssl_result['valid']:
+            return True, f"Invalid SSL/TLS: {ssl_result.get('error', 'Unknown error')}"
+        
+        return False, None
+
+    def get_block_page(self, url, reason):
+        return f"""
         <!DOCTYPE html>
         <html>
-        <head><title>Site Blocked</title></head>
-        <body style="font-family: Arial; text-align: center; margin-top: 50px;">
-            <h1 style="color: red;">Access Blocked</h1>
-            <p>This website has been blocked for your protection.</p>
-            <p>Requested URL: {}</p>
+        <head>
+            <title>Security Alert - Access Blocked</title>
+            <style>
+                body {{
+                    font-family: Arial, sans-serif;
+                    text-align: center;
+                    margin-top: 50px;
+                    background-color: #f8f8f8;
+                }}
+                .container {{
+                    max-width: 600px;
+                    margin: 0 auto;
+                    padding: 20px;
+                    background-color: white;
+                    border-radius: 8px;
+                    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+                }}
+                h1 {{ color: #d32f2f; }}
+                .warning-icon {{
+                    font-size: 60px;
+                    margin-bottom: 20px;
+                }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="warning-icon">⚠️</div>
+                <h1>Security Alert - Access Blocked</h1>
+                <p>This website has been blocked for your protection.</p>
+                <p><strong>Reason:</strong> {reason}</p>
+                <p><strong>Requested URL:</strong> {url}</p>
+            </div>
         </body>
         </html>
-        """.format(url)
+        """
 
-addons = [
-    SiteBlocker()
-]
+addons = [SiteBlocker()]
 
 def request(flow: http.HTTPFlow) -> None:
-    """
-    Handle each request
-    """
+    """Handle each request"""
     blocker = ctx.master.addons.get("SiteBlocker")
     if not blocker:
         blocker = SiteBlocker()
-        
-    host = flow.request.pretty_host
-    url = flow.request.url
     
-    if blocker.is_blocked(host):
-        ctx.log.warn(f"🛑 Blocking access to: {host}")
+    url = flow.request.pretty_url
+    host = flow.request.pretty_host
+
+    is_blocked, reason = blocker.is_blocked(url, host)
+    if is_blocked:
+        ctx.log.warn(f"🛑 Blocking access to: {host} - Reason: {reason}")
         flow.response = http.Response.make(
             403,  # Forbidden status code
-            blocker.get_block_page(url).encode('utf-8'),
+            blocker.get_block_page(url, reason).encode('utf-8'),
             {"Content-Type": "text/html"}
         )
 
