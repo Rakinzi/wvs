@@ -1,0 +1,56 @@
+from app import db
+from app.models import MaliciousSite, ScanResult, User
+from urllib.parse import urlparse
+from datetime import datetime
+
+class DBManager:
+    @staticmethod
+    def check_malicious_url(url):
+        domain = urlparse(url).netloc
+        if not domain:
+            domain = urlparse("http://" + url).netloc
+            
+        existing = MaliciousSite.query.filter_by(domain=domain).first()
+        return existing is not None, existing.reason if existing else None
+    
+    @staticmethod
+    def add_malicious_url(url, reason="", source="scan"):
+        domain = urlparse(url).netloc
+        if not domain:
+            domain = urlparse("http://" + url).netloc
+            
+        existing = MaliciousSite.query.filter_by(domain=domain).first()
+        if not existing:
+            site = MaliciousSite(
+                domain=domain,
+                url=url,
+                reason=reason,
+                source=source,
+                date_added=datetime.utcnow()
+            )
+            db.session.add(site)
+            db.session.commit()
+            return True
+        return False
+    
+    @staticmethod
+    def get_user_scans(user_id, limit=20):
+        return ScanResult.query.filter_by(user_id=user_id).order_by(
+            ScanResult.timestamp.desc()
+        ).limit(limit).all()
+    
+    @staticmethod
+    def get_user_by_username(username):
+        return User.query.filter_by(username=username).first()
+    
+    @staticmethod
+    def save_scan_result(url, findings, report_path, user_id):
+        scan = ScanResult(
+            url=url,
+            findings=findings,
+            report_path=report_path,
+            user_id=user_id
+        )
+        db.session.add(scan)
+        db.session.commit()
+        return scan.id

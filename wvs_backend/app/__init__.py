@@ -2,6 +2,7 @@ from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
 from flask_jwt_extended import JWTManager
 from celery import Celery
+from flask_cors import CORS
 
 db = SQLAlchemy()
 jwt = JWTManager()
@@ -11,8 +12,10 @@ def create_app(config_class='app.config.Config'):
     app = Flask(__name__)
     app.config.from_object(config_class)
     
+    # Initialize extensions
     db.init_app(app)
     jwt.init_app(app)
+    CORS(app)
     
     # Configure Celery
     celery.conf.update(
@@ -24,14 +27,16 @@ def create_app(config_class='app.config.Config'):
         timezone='UTC',
         enable_utc=True,
         broker_connection_retry_on_startup=True,
-        imports=('app.tasks',),  # Make sure tasks are imported
+        imports=('app.tasks',),
     )
     
     # Register blueprints
     from app.routes.scans import bp as scans_bp
     from app.routes.users import bp as users_bp
+    from app.routes.malicious import bp as malicious_bp
     app.register_blueprint(scans_bp)
     app.register_blueprint(users_bp)
+    app.register_blueprint(malicious_bp)
 
     # Create database tables
     with app.app_context():
