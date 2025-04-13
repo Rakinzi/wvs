@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Camera, Shield, Lock, User, AlertTriangle, Eye, EyeOff } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 const Login = ({ onLogin, navigateTo }) => {
   const [username, setUsername] = useState('');
@@ -8,6 +9,7 @@ const Login = ({ onLogin, navigateTo }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [formState, setFormState] = useState('idle');
+  const navigate = useNavigate();
 
   useEffect(() => {
     setFormState('active');
@@ -40,7 +42,17 @@ const Login = ({ onLogin, navigateTo }) => {
         localStorage.setItem('token', data.access_token);
         localStorage.setItem('username', data.username);
         setFormState('success');
-        setTimeout(() => onLogin({ username: data.username }), 800);
+        
+        // Call onLogin to update parent component state
+        if (onLogin) {
+          onLogin({ username: data.username });
+        }
+        
+        // Use navigate directly instead of timeout
+        setTimeout(() => {
+          // Use React Router's navigate for a cleaner transition
+          navigate('/');
+        }, 800);
       } else {
         setError(data.error || 'Failed to login');
         setFormState('error');
@@ -60,7 +72,7 @@ const Login = ({ onLogin, navigateTo }) => {
   };
 
   const handleRegisterClick = () => {
-    navigateTo('register');
+    navigate('/register');
   };
 
   return (

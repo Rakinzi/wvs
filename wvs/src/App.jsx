@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate, useLocation, useParams } from 'react-router-dom';
 import Dashboard from './components/Dashboard';
 import ScanReport from './components/ScanReport';
 import ScanHistory from './components/ScanHistory';
@@ -58,32 +58,108 @@ const Layout = ({ children }) => {
   );
 };
 
+// Wrapper components with hooks for each route
+const DashboardWrapper = () => {
+  const navigate = useNavigate();
+  
+  const navigateTo = (page, scanId) => {
+    if (page === 'report' && scanId) {
+      navigate(`/report/${scanId}`);
+    } else {
+      navigate(page === 'dashboard' ? '/' : `/${page}`);
+    }
+  };
+  
+  return <Dashboard navigateTo={navigateTo} />;
+};
+
+const ScanReportWrapper = () => {
+  const navigate = useNavigate();
+  const params = useParams();
+  
+  const navigateTo = (page) => {
+    navigate(page === 'dashboard' ? '/' : `/${page}`);
+  };
+  
+  return <ScanReport scanId={params.scanId} navigateTo={navigateTo} />;
+};
+
+const ScanHistoryWrapper = () => {
+  const navigate = useNavigate();
+  
+  const navigateTo = (page, scanId) => {
+    if (page === 'report' && scanId) {
+      navigate(`/report/${scanId}`);
+    } else {
+      navigate(page === 'dashboard' ? '/' : `/${page}`);
+    }
+  };
+  
+  return <ScanHistory navigateTo={navigateTo} />;
+};
+
+const SettingsWrapper = () => {
+  const navigate = useNavigate();
+  const [userData, setUserData] = useState(null);
+  
+  useEffect(() => {
+    const username = localStorage.getItem('username');
+    if (username) {
+      setUserData({ username });
+    }
+  }, []);
+  
+  const navigateTo = (page) => {
+    navigate(page === 'dashboard' ? '/' : `/${page}`);
+  };
+  
+  return <Settings userData={userData} navigateTo={navigateTo} />;
+};
+
+const BlockedSitesWrapper = () => {
+  const navigate = useNavigate();
+  
+  const navigateTo = (page) => {
+    navigate(page === 'dashboard' ? '/' : `/${page}`);
+  };
+  
+  return <BlockedSites navigateTo={navigateTo} />;
+};
+
 const App = () => {
+  const [user, setUser] = useState(null);
+  
+  useEffect(() => {
+    // Check if user is already logged in
+    const username = localStorage.getItem('username');
+    if (username) {
+      setUser({ username });
+    }
+  }, []);
+  
+  const handleLogin = (userData) => {
+    setUser(userData);
+  };
+  
   return (
     <Router>
       <Routes>
         <Route path="/login" element={
           <Layout>
-            <Login navigateTo={(page) => window.location.href = page === 'dashboard' ? '/' : `/${page}`} />
+            <Login onLogin={handleLogin} />
           </Layout>
         } />
         
         <Route path="/register" element={
           <Layout>
-            <Register navigateTo={(page) => window.location.href = page === 'dashboard' ? '/' : `/${page}`} />
+            <Register />
           </Layout>
         } />
         
         <Route path="/" element={
           <Layout>
             <ProtectedRoute>
-              <Dashboard navigateTo={(page, scanId) => {
-                if (page === 'report' && scanId) {
-                  window.location.href = `/report/${scanId}`;
-                } else {
-                  window.location.href = page === 'dashboard' ? '/' : `/${page}`;
-                }
-              }} />
+              <DashboardWrapper />
             </ProtectedRoute>
           </Layout>
         } />
@@ -91,7 +167,7 @@ const App = () => {
         <Route path="/report/:scanId" element={
           <Layout>
             <ProtectedRoute>
-              <ScanReport navigateTo={(page) => window.location.href = page === 'dashboard' ? '/' : `/${page}`} />
+              <ScanReportWrapper />
             </ProtectedRoute>
           </Layout>
         } />
@@ -99,13 +175,7 @@ const App = () => {
         <Route path="/history" element={
           <Layout>
             <ProtectedRoute>
-              <ScanHistory navigateTo={(page, scanId) => {
-                if (page === 'report' && scanId) {
-                  window.location.href = `/report/${scanId}`;
-                } else {
-                  window.location.href = page === 'dashboard' ? '/' : `/${page}`;
-                }
-              }} />
+              <ScanHistoryWrapper />
             </ProtectedRoute>
           </Layout>
         } />
@@ -113,7 +183,7 @@ const App = () => {
         <Route path="/settings" element={
           <Layout>
             <ProtectedRoute>
-              <Settings navigateTo={(page) => window.location.href = page === 'dashboard' ? '/' : `/${page}`} />
+              <SettingsWrapper />
             </ProtectedRoute>
           </Layout>
         } />
@@ -121,7 +191,7 @@ const App = () => {
         <Route path="/blockedSites" element={
           <Layout>
             <ProtectedRoute>
-              <BlockedSites navigateTo={(page) => window.location.href = page === 'dashboard' ? '/' : `/${page}`} />
+              <BlockedSitesWrapper />
             </ProtectedRoute>
           </Layout>
         } />
