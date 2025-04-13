@@ -37,7 +37,7 @@ const Settings = ({ navigateTo, userData }) => {
   const [saveAttempted, setSaveAttempted] = useState(false);
   
   useEffect(() => {
-    // In a real app, we would fetch the user data from the API
+    document.title = 'Settings - Web Vulnernability Scanner';
     if (userData) {
       setFormData(prev => ({
         ...prev,

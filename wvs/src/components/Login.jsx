@@ -12,6 +12,7 @@ const Login = ({ onLogin, navigateTo }) => {
   const navigate = useNavigate();
 
   useEffect(() => {
+    document.title = 'Login - Web Vulnerability Scanner';
     setFormState('active');
   }, []);
 

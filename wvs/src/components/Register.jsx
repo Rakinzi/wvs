@@ -15,6 +15,7 @@ const Register = ({ navigateTo }) => {
   const [successMessage, setSuccessMessage] = useState('');
 
   useEffect(() => {
+    document.title = 'Register - Web Vulnerability Scanner';
     setFormState('active');
   }, []);
 

@@ -22,6 +22,7 @@ const ScanHistory = ({ navigateTo }) => {
   const scansPerPage = 10;
 
   useEffect(() => {
+    document.title = 'Scan History - Web Vulnernability Scanner';
     fetchScans();
   }, []);
 

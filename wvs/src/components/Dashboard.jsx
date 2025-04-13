@@ -3,7 +3,8 @@ import {
   Shield, AlertTriangle, Lock, Database, 
   RefreshCw, ExternalLink, CheckCircle, Search, 
   Info, Award, Clock, Activity, PieChart,
-  BarChart as BarChartIcon, Calendar, Globe, Filter
+  BarChart as BarChartIcon, Calendar, Globe, Filter,
+  ArrowRight, User
 } from 'lucide-react';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, 
@@ -63,10 +64,42 @@ const Dashboard = ({ navigateTo }) => {
       setIsLoadingStats(false);
     }
   };
-  
-  // Load dashboard stats on component mount
+
+  // Load dashboard stats and recent blocked access on component mount
   useEffect(() => {
-    fetchDashboardStats();
+    document.title = 'Dashboard - Web Vulnerability Scanner';
+    const fetchData = async () => {
+      await fetchDashboardStats();
+      
+      // Fetch recent blocked access attempts
+      try {
+        const response = await fetch('http://localhost:5000/dashboard/recent-blocked', {
+          headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          if (data.status === 'success') {
+            setDashboardStats(prev => prev ? {
+              ...prev,
+              recentBlockedAttempts: data.recent_blocked
+            } : null);
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching recent blocked access:', error);
+      }
+    };
+    
+    fetchData();
+    
+    // Set up auto-refresh interval
+    const refreshInterval = setInterval(fetchData, 60000); // Refresh every minute
+    
+    // Clean up on component unmount
+    return () => {
+      clearInterval(refreshInterval);
+    };
   }, []);
   
   // Format date for display
@@ -795,45 +828,62 @@ const Dashboard = ({ navigateTo }) => {
                 </div>
               </div>
             </div>
-            
-            {/* Top malicious domains */}
-            <div className="bg-white shadow-lg rounded-lg overflow-hidden lg:col-span-3">
-              <div className="px-6 py-4 border-b border-gray-200">
+          </div>
+        )}
+        
+        {/* Recent Blocked Access Attempts Section */}
+        {!isLoadingStats && !statsError && dashboardStats && dashboardStats.recentBlockedAttempts && dashboardStats.recentBlockedAttempts.length > 0 && (
+          <div className="mt-8 bg-white shadow-lg rounded-lg overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-200">
+              <div className="flex items-center justify-between">
                 <div className="flex items-center">
                   <Globe size={18} className="text-blue-800 mr-2" />
-                  <h3 className="text-lg font-medium text-gray-900">Top Blocked Malicious Domains</h3>
+                  <h3 className="text-lg font-medium text-gray-900">Recent Blocked Access Attempts</h3>
                 </div>
+                <button
+                  onClick={() => navigateTo('blockedAccess')}
+                  className="text-sm text-blue-800 hover:text-blue-600"
+                >
+                  View all
+                </button>
               </div>
-              
-              <div className="p-6">
-                <div className="h-64">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart
-                      data={dashboardStats.topMaliciousDomains}
-                      layout="vertical"
-                      margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
-                    >
-                      <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} />
-                      <XAxis type="number" />
-                      <YAxis type="category" dataKey="domain" width={150} />
-                      <Tooltip 
-                        formatter={(value) => [value, 'Blocked Attempts']}
-                        contentStyle={{ borderRadius: '0.375rem' }}
-                      />
-                      <Bar dataKey="count" fill="#8b5cf6" radius={[0, 4, 4, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
+            </div>
+            
+            <div className="divide-y divide-gray-200">
+              {dashboardStats.recentBlockedAttempts.map((attempt) => (
+                <div key={attempt.id} className="p-4 hover:bg-gray-50">
+                  <div className="flex items-start">
+                    <div className="flex-shrink-0 h-8 w-8 bg-red-100 rounded-md flex items-center justify-center text-red-600">
+                      <AlertTriangle size={14} />
+                    </div>
+                    <div className="ml-3 flex-1">
+                      <div className="flex justify-between">
+                        <p className="text-sm font-medium text-gray-900 truncate max-w-sm">{attempt.url}</p>
+                        <p className="text-xs text-gray-500">{formatDate(attempt.timestamp)}</p>
+                      </div>
+                      <div className="mt-1 flex items-center justify-between">
+                        <div className="flex items-center">
+                          <User size={12} className="text-gray-500 mr-1" />
+                          <span className="text-xs text-gray-600">{attempt.ip_address}</span>
+                        </div>
+                        <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-red-100 text-red-800">
+                          {attempt.reason || 'Malicious site'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
-                
-                <div className="mt-4 text-center">
-                  <button
-                    onClick={() => navigateTo('blockedSites')}
-                    className="text-sm text-blue-800 hover:text-blue-600 font-medium"
-                  >
-                    View All Blocked Sites
-                  </button>
-                </div>
-              </div>
+              ))}
+            </div>
+            
+            <div className="px-6 py-4 border-t border-gray-200 bg-gray-50">
+              <button
+                onClick={() => navigateTo('blockedAccess')}
+                className="text-sm text-blue-800 hover:text-blue-600 flex items-center justify-center w-full"
+              >
+                View all blocked access attempts
+                <ArrowRight size={14} className="ml-1" />
+              </button>
             </div>
           </div>
         )}
@@ -844,7 +894,7 @@ const Dashboard = ({ navigateTo }) => {
             <h3 className="text-lg font-medium text-gray-900">Security Features</h3>
           </div>
           
-          <div className="p-6 grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="p-6 grid grid-cols-1 md:grid-cols-4 gap-6">
             <div className="p-4 bg-gray-50 rounded-lg border">
               <div className="flex items-center text-blue-800 mb-3">
                 <Database size={20} className="mr-2" />
@@ -873,6 +923,39 @@ const Dashboard = ({ navigateTo }) => {
               <p className="text-sm text-gray-600">
                 Identify and block known malicious domains and phishing attempts
               </p>
+            </div>
+            
+            <div className="p-4 bg-gray-50 rounded-lg border">
+              <div className="flex items-center text-blue-800 mb-3">
+                <Globe size={20} className="mr-2" />
+                <h4 className="text-lg font-medium">Access Monitoring</h4>
+              </div>
+              <p className="text-sm text-gray-600">
+                Track and monitor all attempts to access malicious websites through the proxy
+              </p>
+              <div className="mt-4">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-xs text-gray-500">Blocked today</span>
+                  <span className="text-xs font-medium text-gray-700">
+                    {dashboardStats?.today?.blockedAttempts || 0}
+                  </span>
+                </div>
+                <div className="w-full bg-gray-200 rounded-full h-1.5">
+                  <div 
+                    className="h-1.5 rounded-full bg-red-500" 
+                    style={{ width: `${Math.min(100, ((dashboardStats?.today?.blockedAttempts || 0) / 10) * 100)}%` }}
+                  ></div>
+                </div>
+              </div>
+              <div className="mt-3">
+                <button
+                  onClick={() => navigateTo('blockedAccess')}
+                  className="text-sm text-blue-800 hover:text-blue-600 font-medium flex items-center"
+                >
+                  View access attempts
+                  <ArrowRight size={14} className="ml-1" />
+                </button>
+              </div>
             </div>
           </div>
           

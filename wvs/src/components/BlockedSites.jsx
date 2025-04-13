@@ -26,6 +26,7 @@ const BlockedSites = ({ navigateTo }) => {
   const sitesPerPage = 10;
 
   useEffect(() => {
+    document.title = 'Blocked Malicious Sites - Web Vulnerability Scanner';
     fetchBlockedSites();
   }, []);
 

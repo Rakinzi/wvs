@@ -16,6 +16,7 @@ const ScanReport = ({ scanId, navigateTo }) => {
   });
 
   useEffect(() => {
+    document.title = 'Scan Report - Web Vulnernability Scanner';
     fetchReport();
   }, [scanId]);
 

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Shield, Menu, X, User, BarChart2, Clock, Settings, 
-  LogOut, AlertTriangle, Bell, ChevronDown
+  LogOut, AlertTriangle, Bell, ChevronDown, Globe
 } from 'lucide-react';
 
 const Navbar = ({ isAuthenticated, onLogout, navigateTo, currentPage }) => {
@@ -82,6 +82,18 @@ const Navbar = ({ isAuthenticated, onLogout, navigateTo, currentPage }) => {
                 >
                   <AlertTriangle size={16} className="mr-1" />
                   Blocked Sites
+                </button>
+                
+                <button
+                  onClick={() => navigateTo('blockedAccess')}
+                  className={`${
+                    currentPage === 'blockedAccess'
+                      ? 'bg-blue-900 text-white'
+                      : 'text-blue-200 hover:bg-blue-700 hover:text-white'
+                  } px-3 py-2 rounded-md text-sm font-medium transition-colors duration-200 flex items-center`}
+                >
+                  <Globe size={16} className="mr-1" />
+                  Access Attempts
                 </button>
               </div>
             )}
@@ -258,6 +270,21 @@ const Navbar = ({ isAuthenticated, onLogout, navigateTo, currentPage }) => {
             >
               <AlertTriangle size={16} className="mr-2" />
               Blocked Sites
+            </button>
+            
+            <button
+              onClick={() => {
+                navigateTo('blockedAccess');
+                setMobileMenuOpen(false);
+              }}
+              className={`${
+                currentPage === 'blockedAccess'
+                  ? 'bg-blue-900 text-white'
+                  : 'text-blue-200 hover:bg-blue-700 hover:text-white'
+              } flex items-center w-full px-3 py-2 text-base font-medium`}
+            >
+              <Globe size={16} className="mr-2" />
+              Access Attempts
             </button>
             
             <button

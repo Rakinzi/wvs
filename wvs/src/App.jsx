@@ -9,6 +9,7 @@ import Login from './components/Login';
 import Register from './components/Register';
 import Settings from './components/Settings';
 import BlockedSites from './components/BlockedSites';
+import BlockedAccess from './components/BlockedAccess';
 
 // A wrapper component for authenticated routes
 const ProtectedRoute = ({ children }) => {
@@ -126,6 +127,16 @@ const BlockedSitesWrapper = () => {
   return <BlockedSites navigateTo={navigateTo} />;
 };
 
+const BlockedAccessWrapper = () => {
+  const navigate = useNavigate();
+  
+  const navigateTo = (page) => {
+    navigate(page === 'dashboard' ? '/' : `/${page}`);
+  };
+  
+  return <BlockedAccess navigateTo={navigateTo} />;
+};
+
 const App = () => {
   const [user, setUser] = useState(null);
   
@@ -192,6 +203,14 @@ const App = () => {
           <Layout>
             <ProtectedRoute>
               <BlockedSitesWrapper />
+            </ProtectedRoute>
+          </Layout>
+        } />
+        
+        <Route path="/blockedAccess" element={
+          <Layout>
+            <ProtectedRoute>
+              <BlockedAccessWrapper />
             </ProtectedRoute>
           </Layout>
         } />
