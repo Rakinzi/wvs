@@ -34,6 +34,8 @@ def create_app(config_class='app.config.Config'):
     from app.routes.scans import bp as scans_bp
     from app.routes.users import bp as users_bp
     from app.routes.malicious import bp as malicious_bp
+    from app.routes.dashboard import bp as dashboard_bp
+    app.register_blueprint(dashboard_bp)
     app.register_blueprint(scans_bp)
     app.register_blueprint(users_bp)
     app.register_blueprint(malicious_bp)
