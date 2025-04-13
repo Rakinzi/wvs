@@ -2,6 +2,7 @@ from app import db
 from app.models import MaliciousSite, ScanResult, User
 from urllib.parse import urlparse
 from datetime import datetime
+import os
 
 class DBManager:
     @staticmethod
@@ -45,6 +46,13 @@ class DBManager:
     
     @staticmethod
     def save_scan_result(url, findings, report_path, user_id):
+        # Convert report_path to absolute path if it's not already
+        if not os.path.isabs(report_path):
+            report_path = os.path.abspath(report_path)
+            
+        # Ensure the containing directory exists
+        os.makedirs(os.path.dirname(report_path), exist_ok=True)
+        
         scan = ScanResult(
             url=url,
             findings=findings,
@@ -53,4 +61,8 @@ class DBManager:
         )
         db.session.add(scan)
         db.session.commit()
+        
+        # Log the saved path for debugging
+        print(f"Saved scan result with report path: {report_path}")
+        
         return scan.id
