@@ -1,21 +1,18 @@
+# app/config.py
 import os
 from datetime import timedelta
 import urllib.parse
 
-# Encode password with special characters (if needed)
-# Replace 'your_root_password' with your actual MySQL root password
-root_password = urllib.parse.quote_plus("@Changeme123")
-
 class Config:
-    # Database config - Using root user
-    SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL') or f'mysql+pymysql://root:{root_password}@localhost/wvs_scanner'
+    # Database config
+    SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL') or f'mysql+pymysql://root:{urllib.parse.quote_plus("@Changeme123")}@localhost/wvs_scanner'
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     
     # JWT config
     JWT_SECRET_KEY = os.environ.get('JWT_SECRET_KEY') or 'development-jwt-secret'
     JWT_ACCESS_TOKEN_EXPIRES = timedelta(hours=1)
     
-    # Celery config
+    # Celery config with RabbitMQ
     CELERY_BROKER_URL = os.environ.get('CELERY_BROKER_URL') or 'amqp://guest:guest@localhost:5672//'
     CELERY_RESULT_BACKEND = os.environ.get('CELERY_RESULT_BACKEND') or 'rpc://'
     CELERY_TASK_SERIALIZER = 'json'
@@ -24,6 +21,16 @@ class Config:
     CELERY_TASK_TRACK_STARTED = True
     BROKER_CONNECTION_RETRY_ON_STARTUP = True
     CELERY_TASK_TIME_LIMIT = 30 * 60
+    
+    # Add Celery Beat schedule for SSL checking task
+    CELERY = {
+        'beat_schedule': {
+            'check-ssl-tls-updates-daily': {
+                'task': 'app.tasks.check_ssl_tls_updates',
+                'schedule': timedelta(hours=24),
+            },
+        },
+    }
     
     # Scanner config
     DNSBL_ENABLED = True
@@ -54,9 +61,9 @@ class ProductionConfig(Config):
     # Database URL must be set in environment
     SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL')
     
-    # Redis for production Celery
-    CELERY_BROKER_URL = os.environ.get('REDIS_URL')
-    CELERY_RESULT_BACKEND = os.environ.get('REDIS_URL')
+    # RabbitMQ for production Celery
+    CELERY_BROKER_URL = os.environ.get('CELERY_BROKER_URL')
+    CELERY_RESULT_BACKEND = os.environ.get('CELERY_RESULT_BACKEND')
 
 # Default to development config unless production is explicitly specified
 config = ProductionConfig if os.environ.get('FLASK_ENV') == 'production' else DevelopmentConfig

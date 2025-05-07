@@ -14,12 +14,14 @@ def check_ssl_tls_updates():
     """
     Celery task that checks websites previously flagged as not having valid SSL/TLS
     certificates. If they now have valid certificates, they will be removed from the
-    database or their status will be updated.
+    database as they are now secure.
     """
     # Find scan results with SSL issues from the last 30 days
     scan_results = ScanResult.query.filter(
         ScanResult.findings['ssl']['valid'].astext == 'false'
     ).all()
+    
+    removed_count = 0
     
     for scan in scan_results:
         url = scan.url
@@ -31,23 +33,20 @@ def check_ssl_tls_updates():
             ssl_valid, ssl_info = verify_ssl_certificate(hostname, port)
             
             if ssl_valid:
-                # Update the findings to reflect the valid SSL certificate
-                findings = scan.findings
-                findings['ssl']['valid'] = True
-                findings['ssl']['error'] = None
-                
-                # Add certificate details
-                if ssl_info:
-                    findings['ssl'].update(ssl_info)
-                
-                # Update record in database
-                scan.findings = findings
-                db.session.commit()
-                
-                print(f"Updated SSL status for {url} - now valid")
+                # Site is now secure, remove from database
+                db.session.delete(scan)
+                removed_count += 1
+                print(f"Removed {url} from database - now has valid SSL certificate")
         except Exception as e:
             print(f"Error checking SSL for {url}: {str(e)}")
             # Continue with the next site even if there's an error
+    
+    # Commit all changes at once
+    if removed_count > 0:
+        db.session.commit()
+        print(f"Removed {removed_count} entries from the database that now have valid SSL certificates")
+    
+    return removed_count
 
 def verify_ssl_certificate(hostname, port=443):
     """
