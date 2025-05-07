@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Shield, AlertTriangle, Lock, Database, 
-  RefreshCw, ExternalLink, CheckCircle, Search, 
+import {
+  Shield, AlertTriangle, Lock, Database,
+  RefreshCw, ExternalLink, CheckCircle, Search,
   Info, Award, Clock, Activity, PieChart,
   BarChart as BarChartIcon, Calendar, Globe, Filter,
   ArrowRight, User
 } from 'lucide-react';
-import { 
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, 
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, Legend, ResponsiveContainer,
   PieChart as RechartsPieChart, Pie, Cell,
   LineChart, Line, AreaChart, Area
@@ -17,41 +17,41 @@ const Dashboard = ({ navigateTo }) => {
   // URLs for scanning
   const [sqlScanUrl, setSqlScanUrl] = useState('');
   const [sslScanUrl, setSslScanUrl] = useState('');
-  
+
   // Scanning states
   const [isSqlScanning, setIsSqlScanning] = useState(false);
   const [isSslScanning, setIsSslScanning] = useState(false);
-  
+
   // Scan results
   const [sqlScanResult, setSqlScanResult] = useState(null);
   const [sslScanResult, setSslScanResult] = useState(null);
-  
+
   // Errors
   const [sqlError, setSqlError] = useState(null);
   const [sslError, setSslError] = useState(null);
-  
+
   // Stats and dashboard data
   const [dashboardStats, setDashboardStats] = useState(null);
   const [isLoadingStats, setIsLoadingStats] = useState(true);
   const [statsError, setStatsError] = useState(null);
-  
+
   // Fetch dashboard stats from the backend
   const fetchDashboardStats = async () => {
     setIsLoadingStats(true);
     setStatsError(null);
-    
+
     try {
       // Fetch dashboard statistics from API
       const response = await fetch('http://localhost:5000/api/dashboard/stats', {
         headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
       });
-      
+
       if (!response.ok) {
         throw new Error(`Error ${response.status}: ${response.statusText}`);
       }
-      
+
       const data = await response.json();
-      
+
       if (data.status === 'success') {
         setDashboardStats(data.stats);
       } else {
@@ -70,13 +70,13 @@ const Dashboard = ({ navigateTo }) => {
     document.title = 'Dashboard - Web Vulnerability Scanner';
     const fetchData = async () => {
       await fetchDashboardStats();
-      
+
       // Fetch recent blocked access attempts
       try {
         const response = await fetch('http://localhost:5000/dashboard/recent-blocked', {
           headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
         });
-        
+
         if (response.ok) {
           const data = await response.json();
           if (data.status === 'success') {
@@ -90,41 +90,41 @@ const Dashboard = ({ navigateTo }) => {
         console.error('Error fetching recent blocked access:', error);
       }
     };
-    
+
     fetchData();
-    
+
     // Set up auto-refresh interval
     const refreshInterval = setInterval(fetchData, 60000); // Refresh every minute
-    
+
     // Clean up on component unmount
     return () => {
       clearInterval(refreshInterval);
     };
   }, []);
-  
+
   // Format date for display
   const formatDate = (dateString) => {
     const date = new Date(dateString);
     return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
-  
+
   // Format relative time for recent scans
   const getRelativeTime = (dateString) => {
     const date = new Date(dateString);
     const now = new Date();
     const diffMs = now - date;
     const diffMin = Math.floor(diffMs / 60000);
-    
+
     if (diffMin < 1) return 'Just now';
     if (diffMin < 60) return `${diffMin} min ago`;
-    
+
     const diffHours = Math.floor(diffMin / 60);
     if (diffHours < 24) return `${diffHours} hours ago`;
-    
+
     const diffDays = Math.floor(diffHours / 24);
     return `${diffDays} days ago`;
   };
-  
+
   // Handle SQL Injection scan
   const handleSqlScan = async () => {
     if (!sqlScanUrl) {
@@ -141,23 +141,23 @@ const Dashboard = ({ navigateTo }) => {
     try {
       setIsSqlScanning(true);
       setSqlError(null);
-      
+
       // Make API call to the backend SQL scanner
       const response = await fetch('http://localhost:5000/scan/sqli', {
         method: 'POST',
-        headers: { 
+        headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         },
         body: JSON.stringify({ url: formattedUrl })
       });
-      
+
       if (!response.ok) {
         throw new Error(`Error ${response.status}: ${response.statusText}`);
       }
-      
+
       const data = await response.json();
-      
+
       if (data.status === 'success') {
         setSqlScanResult({
           url: data.url,
@@ -167,7 +167,7 @@ const Dashboard = ({ navigateTo }) => {
           findings: data.findings || [],
           recommendations: data.recommendations || []
         });
-        
+
         // Refresh stats after scan
         fetchDashboardStats();
       } else {
@@ -180,7 +180,7 @@ const Dashboard = ({ navigateTo }) => {
       setIsSqlScanning(false);
     }
   };
-  
+
   // Handle SSL/TLS scan
   const handleSslScan = async () => {
     if (!sslScanUrl) {
@@ -197,23 +197,23 @@ const Dashboard = ({ navigateTo }) => {
     try {
       setIsSslScanning(true);
       setSslError(null);
-      
+
       // Make API call to the backend SSL scanner
       const response = await fetch('http://localhost:5000/scan/ssl', {
         method: 'POST',
-        headers: { 
+        headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         },
         body: JSON.stringify({ url: formattedUrl })
       });
-      
+
       if (!response.ok) {
         throw new Error(`Error ${response.status}: ${response.statusText}`);
       }
-      
+
       const data = await response.json();
-      
+
       if (data.status === 'success') {
         setSslScanResult({
           url: data.url,
@@ -225,7 +225,7 @@ const Dashboard = ({ navigateTo }) => {
           },
           recommendations: data.recommendations || []
         });
-        
+
         // Refresh stats after scan
         fetchDashboardStats();
       } else {
@@ -238,14 +238,14 @@ const Dashboard = ({ navigateTo }) => {
       setIsSslScanning(false);
     }
   };
-  
+
   // Handle viewing detailed reports
   const handleViewSqlReport = () => {
     if (sqlScanResult && sqlScanResult.scan_id) {
       navigateTo('report', sqlScanResult.scan_id);
     }
   };
-  
+
   const handleViewSslReport = () => {
     if (sslScanResult && sslScanResult.scan_id) {
       navigateTo('report', sslScanResult.scan_id);
@@ -268,7 +268,7 @@ const Dashboard = ({ navigateTo }) => {
           <h1 className="text-3xl font-bold text-gray-900">Web Vulnerability Scanner Dashboard</h1>
           <p className="mt-2 text-gray-600">Monitor security scans, detect vulnerabilities, and protect your web applications</p>
         </div>
-        
+
         {/* Stats overview cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
           {isLoadingStats ? (
@@ -312,7 +312,7 @@ const Dashboard = ({ navigateTo }) => {
                   </div>
                 </div>
               </div>
-              
+
               <div className="bg-white shadow-lg rounded-lg p-6">
                 <div className="flex items-center">
                   <div className="h-12 w-12 bg-red-100 rounded-lg flex items-center justify-center">
@@ -330,7 +330,7 @@ const Dashboard = ({ navigateTo }) => {
                   </div>
                 </div>
               </div>
-              
+
               <div className="bg-white shadow-lg rounded-lg p-6">
                 <div className="flex items-center">
                   <div className="h-12 w-12 bg-purple-100 rounded-lg flex items-center justify-center">
@@ -351,7 +351,7 @@ const Dashboard = ({ navigateTo }) => {
             </>
           )}
         </div>
-        
+
         {/* Main content grid */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* SQL Injection Scanner */}
@@ -364,7 +364,7 @@ const Dashboard = ({ navigateTo }) => {
                 <h2 className="text-xl font-bold">SQL Injection Scanner</h2>
               </div>
             </div>
-            
+
             <div className="p-6">
               <div className="mb-6">
                 <label htmlFor="sqlUrl" className="block text-sm font-medium text-gray-700 mb-2">
@@ -382,11 +382,10 @@ const Dashboard = ({ navigateTo }) => {
                   <button
                     onClick={handleSqlScan}
                     disabled={isSqlScanning}
-                    className={`px-4 py-2 rounded-md text-white font-medium ${
-                      isSqlScanning 
-                        ? 'bg-blue-400 cursor-not-allowed' 
+                    className={`px-4 py-2 rounded-md text-white font-medium ${isSqlScanning
+                        ? 'bg-blue-400 cursor-not-allowed'
                         : 'bg-blue-800 hover:bg-blue-700'
-                    }`}
+                      }`}
                   >
                     {isSqlScanning ? (
                       <div className="flex items-center">
@@ -398,14 +397,14 @@ const Dashboard = ({ navigateTo }) => {
                 </div>
                 {sqlError && <p className="mt-2 text-sm text-red-600">{sqlError}</p>}
               </div>
-              
+
               {isSqlScanning && (
                 <div className="flex justify-center items-center p-6">
                   <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
                   <p className="ml-4 text-gray-700">Scanning for SQL injection vulnerabilities...</p>
                 </div>
               )}
-              
+
               {sqlScanResult && !isSqlScanning && (
                 <div className="border rounded-lg overflow-hidden">
                   <div className="bg-gray-50 px-4 py-3 border-b">
@@ -416,13 +415,13 @@ const Dashboard = ({ navigateTo }) => {
                       </div>
                     </div>
                   </div>
-                  
+
                   <div className="p-4">
                     <div className="flex justify-between items-start mb-4">
                       <p className="text-gray-700">
                         <span className="font-medium">URL:</span> {sqlScanResult.url}
                       </p>
-                      
+
                       <div className="flex items-center">
                         {sqlScanResult.vulnerable ? (
                           <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
@@ -437,13 +436,13 @@ const Dashboard = ({ navigateTo }) => {
                         )}
                       </div>
                     </div>
-                    
+
                     {sqlScanResult.vulnerable ? (
                       <div>
                         <p className="text-red-700 mb-3">
                           Found {sqlScanResult.findings.length} SQL injection {sqlScanResult.findings.length === 1 ? 'vulnerability' : 'vulnerabilities'}
                         </p>
-                        
+
                         <div className="space-y-3 mb-4">
                           {sqlScanResult.findings.map((finding, idx) => (
                             <div key={idx} className="bg-red-50 border border-red-200 rounded p-3">
@@ -452,7 +451,7 @@ const Dashboard = ({ navigateTo }) => {
                                 <div>
                                   <p className="font-medium text-red-800">{finding.type}</p>
                                   <p className="text-xs text-red-700 mt-1">
-                                    Parameter: <code className="bg-red-100 px-1 py-0.5 rounded">{finding.parameter}</code> | 
+                                    Parameter: <code className="bg-red-100 px-1 py-0.5 rounded">{finding.parameter}</code> |
                                     Severity: <span className="font-medium">{finding.severity}</span>
                                   </p>
                                 </div>
@@ -460,7 +459,7 @@ const Dashboard = ({ navigateTo }) => {
                             </div>
                           ))}
                         </div>
-                        
+
                         <div className="bg-blue-50 border border-blue-200 rounded p-3">
                           <h4 className="text-sm font-medium text-blue-800 mb-2">Recommendations</h4>
                           <ul className="list-disc pl-5 space-y-1 text-xs text-blue-700">
@@ -479,7 +478,7 @@ const Dashboard = ({ navigateTo }) => {
                         <p className="text-gray-600 mb-4">This website appears to be protected against SQL injection attacks.</p>
                       </div>
                     )}
-                    
+
                     <div className="flex justify-end mt-4">
                       <button
                         onClick={handleViewSqlReport}
@@ -493,7 +492,7 @@ const Dashboard = ({ navigateTo }) => {
               )}
             </div>
           </div>
-          
+
           {/* SSL/TLS Scanner */}
           <div className="bg-white shadow-lg rounded-lg overflow-hidden">
             <div className="bg-blue-800 px-6 py-4 text-white">
@@ -504,7 +503,7 @@ const Dashboard = ({ navigateTo }) => {
                 <h2 className="text-xl font-bold">SSL/TLS Certificate Scanner</h2>
               </div>
             </div>
-            
+
             <div className="p-6">
               <div className="mb-6">
                 <label htmlFor="sslUrl" className="block text-sm font-medium text-gray-700 mb-2">
@@ -522,11 +521,10 @@ const Dashboard = ({ navigateTo }) => {
                   <button
                     onClick={handleSslScan}
                     disabled={isSslScanning}
-                    className={`px-4 py-2 rounded-md text-white font-medium ${
-                      isSslScanning 
-                        ? 'bg-blue-400 cursor-not-allowed' 
+                    className={`px-4 py-2 rounded-md text-white font-medium ${isSslScanning
+                        ? 'bg-blue-400 cursor-not-allowed'
                         : 'bg-blue-800 hover:bg-blue-700'
-                    }`}
+                      }`}
                   >
                     {isSslScanning ? (
                       <div className="flex items-center">
@@ -538,14 +536,14 @@ const Dashboard = ({ navigateTo }) => {
                 </div>
                 {sslError && <p className="mt-2 text-sm text-red-600">{sslError}</p>}
               </div>
-              
+
               {isSslScanning && (
                 <div className="flex justify-center items-center p-6">
                   <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
                   <p className="ml-4 text-gray-700">Verifying SSL/TLS certificate...</p>
                 </div>
               )}
-              
+
               {sslScanResult && !isSslScanning && (
                 <div className="border rounded-lg overflow-hidden">
                   <div className="bg-gray-50 px-4 py-3 border-b">
@@ -556,13 +554,13 @@ const Dashboard = ({ navigateTo }) => {
                       </div>
                     </div>
                   </div>
-                  
+
                   <div className="p-4">
                     <div className="flex justify-between items-start mb-4">
                       <p className="text-gray-700">
                         <span className="font-medium">URL:</span> {sslScanResult.url}
                       </p>
-                      
+
                       <div className="flex items-center">
                         {sslScanResult.findings.valid ? (
                           <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
@@ -577,7 +575,7 @@ const Dashboard = ({ navigateTo }) => {
                         )}
                       </div>
                     </div>
-                    
+
                     {sslScanResult.findings.valid ? (
                       <div>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
@@ -591,14 +589,14 @@ const Dashboard = ({ navigateTo }) => {
                             </div>
                           )}
                         </div>
-                        
+
                         <div className="bg-green-50 border border-green-200 rounded p-3 mb-4">
                           <div className="flex items-start">
                             <CheckCircle size={16} className="text-green-600 mt-0.5 mr-2 flex-shrink-0" />
                             <div>
                               <p className="font-medium text-green-800">Secure Connection</p>
                               <p className="text-xs text-green-700 mt-1">
-                                Protocol: <span className="font-medium">{sslScanResult.findings.protocol}</span> | 
+                                Protocol: <span className="font-medium">{sslScanResult.findings.protocol}</span> |
                                 Self-Signed: <span className="font-medium">{sslScanResult.findings.self_signed ? 'Yes' : 'No'}</span>
                               </p>
                             </div>
@@ -619,7 +617,7 @@ const Dashboard = ({ navigateTo }) => {
                             </div>
                           </div>
                         </div>
-                        
+
                         <div className="bg-blue-50 border border-blue-200 rounded p-3">
                           <h4 className="text-sm font-medium text-blue-800 mb-2">Recommendations</h4>
                           <ul className="list-disc pl-5 space-y-1 text-xs text-blue-700">
@@ -630,7 +628,7 @@ const Dashboard = ({ navigateTo }) => {
                         </div>
                       </div>
                     )}
-                    
+
                     <div className="flex justify-end mt-4">
                       <button
                         onClick={handleViewSslReport}
@@ -645,7 +643,7 @@ const Dashboard = ({ navigateTo }) => {
             </div>
           </div>
         </div>
-        
+
         {/* Dashboard charts and stats */}
         {isLoadingStats ? null : statsError ? null : (
           <div className="mt-8 grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -657,7 +655,7 @@ const Dashboard = ({ navigateTo }) => {
                   <h3 className="text-lg font-medium text-gray-900">Vulnerability Types</h3>
                 </div>
               </div>
-              
+
               <div className="p-6">
                 <div className="h-64">
                   <ResponsiveContainer width="100%" height="100%">
@@ -673,26 +671,26 @@ const Dashboard = ({ navigateTo }) => {
                         label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
                       >
                         {dashboardStats.vulnerabilityTypes.map((entry, index) => (
-                          <Cell 
-                            key={`cell-${index}`} 
-                            fill={VULNERABILITY_COLORS[entry.name] || COLORS[index % COLORS.length]} 
+                          <Cell
+                            key={`cell-${index}`}
+                            fill={VULNERABILITY_COLORS[entry.name] || COLORS[index % COLORS.length]}
                           />
                         ))}
                       </Pie>
-                      <Tooltip 
-                        formatter={(value, name) => [value, name]} 
+                      <Tooltip
+                        formatter={(value, name) => [value, name]}
                         contentStyle={{ borderRadius: '0.375rem' }}
                       />
                     </RechartsPieChart>
                   </ResponsiveContainer>
                 </div>
-                
+
                 <div className="mt-4">
                   <div className="grid grid-cols-1 gap-2">
                     {dashboardStats.vulnerabilityTypes.map((type, index) => (
                       <div key={index} className="flex items-center">
-                        <div 
-                          className="w-3 h-3 rounded-full mr-2" 
+                        <div
+                          className="w-3 h-3 rounded-full mr-2"
                           style={{ backgroundColor: VULNERABILITY_COLORS[type.name] || COLORS[index % COLORS.length] }}
                         ></div>
                         <span className="text-xs text-gray-600">{type.name}: <span className="font-medium">{type.value}</span></span>
@@ -702,7 +700,7 @@ const Dashboard = ({ navigateTo }) => {
                 </div>
               </div>
             </div>
-            
+
             {/* Weekly scan activity chart */}
             <div className="bg-white shadow-lg rounded-lg overflow-hidden lg:col-span-2">
               <div className="px-6 py-4 border-b border-gray-200">
@@ -713,19 +711,19 @@ const Dashboard = ({ navigateTo }) => {
                   </div>
                 </div>
               </div>
-              
+
               <div className="p-6">
                 <div className="h-64">
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={dashboardStats.scansByDay}>
                       <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                      <XAxis 
-                        dataKey="date" 
+                      <XAxis
+                        dataKey="date"
                         tickFormatter={(value) => new Date(value).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
                       />
                       <YAxis />
-                      <Tooltip 
-                        formatter={(value, name) => [value, name === 'scans' ? 'Total Scans' : 'Vulnerabilities']} 
+                      <Tooltip
+                        formatter={(value, name) => [value, name === 'Total Scans' ? 'Total Scans' : 'Vulnerabilities']}
                         labelFormatter={(value) => new Date(value).toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })}
                         contentStyle={{ borderRadius: '0.375rem' }}
                       />
@@ -737,7 +735,7 @@ const Dashboard = ({ navigateTo }) => {
                 </div>
               </div>
             </div>
-            
+
             {/* Blocked attempts chart */}
             <div className="bg-white shadow-lg rounded-lg overflow-hidden lg:col-span-2">
               <div className="px-6 py-4 border-b border-gray-200">
@@ -746,19 +744,19 @@ const Dashboard = ({ navigateTo }) => {
                   <h3 className="text-lg font-medium text-gray-900">Blocked Access Attempts</h3>
                 </div>
               </div>
-              
+
               <div className="p-6">
                 <div className="h-64">
                   <ResponsiveContainer width="100%" height="100%">
                     <AreaChart data={dashboardStats.blockedAttemptsByDay}>
                       <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                      <XAxis 
-                        dataKey="date" 
+                      <XAxis
+                        dataKey="date"
                         tickFormatter={(value) => new Date(value).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
                       />
                       <YAxis />
-                      <Tooltip 
-                        formatter={(value) => [value, 'Blocked Attempts']} 
+                      <Tooltip
+                        formatter={(value) => [value, 'Blocked Attempts']}
                         labelFormatter={(value) => new Date(value).toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })}
                         contentStyle={{ borderRadius: '0.375rem' }}
                       />
@@ -768,7 +766,7 @@ const Dashboard = ({ navigateTo }) => {
                 </div>
               </div>
             </div>
-            
+
             {/* Recent scans list */}
             <div className="bg-white shadow-lg rounded-lg overflow-hidden">
               <div className="px-6 py-4 border-b border-gray-200">
@@ -777,15 +775,14 @@ const Dashboard = ({ navigateTo }) => {
                   <h3 className="text-lg font-medium text-gray-900">Recent Scans</h3>
                 </div>
               </div>
-              
+
               <div className="p-4">
                 <ul className="divide-y divide-gray-200">
                   {dashboardStats.recentScans.map((scan) => (
                     <li key={scan.id} className="py-3">
                       <div className="flex items-start">
-                        <div className={`flex-shrink-0 h-8 w-8 rounded-full flex items-center justify-center ${
-                          scan.hasVulnerabilities ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'
-                        }`}>
+                        <div className={`flex-shrink-0 h-8 w-8 rounded-full flex items-center justify-center ${scan.hasVulnerabilities ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'
+                          }`}>
                           {scan.hasVulnerabilities ? <AlertTriangle size={14} /> : <CheckCircle size={14} />}
                         </div>
                         <div className="ml-3 flex-1">
@@ -817,7 +814,7 @@ const Dashboard = ({ navigateTo }) => {
                     </li>
                   ))}
                 </ul>
-                
+
                 <div className="mt-4 text-center">
                   <button
                     onClick={() => navigateTo('history')}
@@ -830,7 +827,7 @@ const Dashboard = ({ navigateTo }) => {
             </div>
           </div>
         )}
-        
+
         {/* Recent Blocked Access Attempts Section */}
         {!isLoadingStats && !statsError && dashboardStats && dashboardStats.recentBlockedAttempts && dashboardStats.recentBlockedAttempts.length > 0 && (
           <div className="mt-8 bg-white shadow-lg rounded-lg overflow-hidden">
@@ -848,7 +845,7 @@ const Dashboard = ({ navigateTo }) => {
                 </button>
               </div>
             </div>
-            
+
             <div className="divide-y divide-gray-200">
               {dashboardStats.recentBlockedAttempts.map((attempt) => (
                 <div key={attempt.id} className="p-4 hover:bg-gray-50">
@@ -875,7 +872,7 @@ const Dashboard = ({ navigateTo }) => {
                 </div>
               ))}
             </div>
-            
+
             <div className="px-6 py-4 border-t border-gray-200 bg-gray-50">
               <button
                 onClick={() => navigateTo('blockedAccess')}
@@ -887,13 +884,13 @@ const Dashboard = ({ navigateTo }) => {
             </div>
           </div>
         )}
-        
+
         {/* Feature cards */}
         <div className="mt-8 bg-white shadow-lg rounded-lg overflow-hidden">
           <div className="px-6 py-4 border-b border-gray-200">
             <h3 className="text-lg font-medium text-gray-900">Security Features</h3>
           </div>
-          
+
           <div className="p-6 grid grid-cols-1 md:grid-cols-4 gap-6">
             <div className="p-4 bg-gray-50 rounded-lg border">
               <div className="flex items-center text-blue-800 mb-3">
@@ -904,7 +901,7 @@ const Dashboard = ({ navigateTo }) => {
                 Detect and prevent SQL injection vulnerabilities in web forms and URL parameters
               </p>
             </div>
-            
+
             <div className="p-4 bg-gray-50 rounded-lg border">
               <div className="flex items-center text-blue-800 mb-3">
                 <Lock size={20} className="mr-2" />
@@ -914,7 +911,7 @@ const Dashboard = ({ navigateTo }) => {
                 Check for valid SSL certificates and secure HTTPS implementation
               </p>
             </div>
-            
+
             <div className="p-4 bg-gray-50 rounded-lg border">
               <div className="flex items-center text-blue-800 mb-3">
                 <Shield size={20} className="mr-2" />
@@ -924,7 +921,7 @@ const Dashboard = ({ navigateTo }) => {
                 Identify and block known malicious domains and phishing attempts
               </p>
             </div>
-            
+
             <div className="p-4 bg-gray-50 rounded-lg border">
               <div className="flex items-center text-blue-800 mb-3">
                 <Globe size={20} className="mr-2" />
@@ -941,8 +938,8 @@ const Dashboard = ({ navigateTo }) => {
                   </span>
                 </div>
                 <div className="w-full bg-gray-200 rounded-full h-1.5">
-                  <div 
-                    className="h-1.5 rounded-full bg-red-500" 
+                  <div
+                    className="h-1.5 rounded-full bg-red-500"
                     style={{ width: `${Math.min(100, ((dashboardStats?.today?.blockedAttempts || 0) / 10) * 100)}%` }}
                   ></div>
                 </div>
@@ -958,7 +955,7 @@ const Dashboard = ({ navigateTo }) => {
               </div>
             </div>
           </div>
-          
+
           <div className="px-6 py-4 border-t border-gray-200 bg-gray-50">
             <div className="flex items-center">
               <Info size={16} className="text-blue-800 mr-2" />
