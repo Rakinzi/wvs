@@ -24,10 +24,8 @@ class SiteBlocker:
     def __init__(self):
         # Initialize scanners
         self.ssl_scanner = SSLScanner()
-        self.malicious_detector = EnhancedMaliciousDetector()
         
         # MySQL database configuration
-        # Using the configuration from the app's config file
         self.db_config = {
             'host': 'localhost',
             'user': 'wvs_user',
@@ -40,6 +38,14 @@ class SiteBlocker:
         self.last_db_refresh = 0
         self.refresh_interval = 300  # Refresh every 5 minutes
         
+        # Configuration flags
+        self.config = {
+            'block_database_domains': True,    # Block domains in malicious database
+            'block_ssl_issues': True,         # Set to False by default - enable if needed
+            'ssl_block_level': 'critical',     # 'critical', 'high', 'medium', 'all'
+            'debug_mode': True                 # Enable for verbose logging
+        }
+        
         # Test MySQL connection before starting
         self.test_mysql_connection()
         
@@ -50,7 +56,11 @@ class SiteBlocker:
         self.refresh_thread = threading.Thread(target=self.periodic_refresh, daemon=True)
         self.refresh_thread.start()
         
-        ctx.log.info("Initialized site blocker with MySQL database connection")
+        ctx.log.info("Initialized site blocker - only blocking domains from database")
+        if self.config['block_ssl_issues']:
+            ctx.log.info(f"SSL blocking enabled at level: {self.config['ssl_block_level']}")
+        else:
+            ctx.log.info("SSL blocking disabled")
     
     def test_mysql_connection(self):
         """Test the MySQL connection and adjust credentials if needed"""
@@ -189,66 +199,95 @@ class SiteBlocker:
                 ctx.log.warn(f"Periodic refresh error: {str(e)}")
                 time.sleep(60)  # Retry after 1 minute on error
     
-    def is_domain_malicious(self, domain):
+    def is_domain_in_blocklist(self, domain):
         """Check if domain is in malicious domain list"""
         if not domain:
-            return False
+            return False, "No domain provided"
         
         domain = domain.lower()
         
-        # Direct match
+        # Direct match in malicious database
         if domain in self.malicious_domains:
-            return True
+            return True, "Domain in malicious database"
         
-        # Check for subdomain matches
+        # Check for subdomain matches in malicious database
         domain_parts = domain.split('.')
         for i in range(len(domain_parts) - 1):
             parent_domain = '.'.join(domain_parts[i:])
             if parent_domain in self.malicious_domains:
-                return True
+                return True, f"Parent domain '{parent_domain}' in malicious database"
         
-        return False
+        # Not found in blacklist
+        return False, "Domain not in database"
+    
+    def check_ssl_certificate(self, url):
+        """Check SSL certificate validity"""
+        if not url.startswith('https://'):
+            return False, "Not HTTPS"
+            
+        try:
+            ssl_result = self.ssl_scanner.check(url)
+            
+            # If valid certificate, no need to block
+            if ssl_result.get('valid', False):
+                return False, "Valid SSL certificate"
+                
+            # Determine SSL issue severity
+            error = ssl_result.get('error', '').lower()
+            
+            # Critical SSL issues
+            critical_issues = ['expired', 'revoked', 'untrusted root', 'certificate not trusted']
+            # High severity issues
+            high_issues = ['self signed', 'hostname mismatch', 'unable to verify']
+            # Medium severity issues
+            medium_issues = ['weak cipher', 'outdated protocol', 'weak key']
+            
+            # Check severity based on configuration
+            if self.config['ssl_block_level'] == 'critical':
+                block = any(issue in error for issue in critical_issues)
+            elif self.config['ssl_block_level'] == 'high':
+                block = any(issue in error for issue in critical_issues + high_issues)
+            elif self.config['ssl_block_level'] == 'medium':
+                block = any(issue in error for issue in critical_issues + high_issues + medium_issues)
+            else:  # 'all'
+                block = True
+                
+            if block:
+                return True, f"SSL certificate issue: {ssl_result.get('error', 'Unknown error')}"
+            else:
+                # Minor SSL issue, not blocking
+                if self.config['debug_mode']:
+                    ctx.log.info(f"Minor SSL issue detected (below {self.config['ssl_block_level']} threshold): {ssl_result.get('error', 'Unknown error')}")
+                return False, "SSL issue below blocking threshold"
+                
+        except Exception as e:
+            ctx.log.warn(f"SSL check error: {str(e)}")
+            return False, f"SSL check error: {str(e)}"
+        
+        return False, "SSL check passed"
     
     def is_blocked(self, url, host):
         """Check if a URL should be blocked"""
-        # First check cached malicious domains (fastest)
         domain = urlparse(url).netloc.lower()
-        if domain and self.is_domain_malicious(domain):
-            return True, "Domain in malicious database"
-            
-        # Then check with malicious detector
-        try:
-            malicious_result = self.malicious_detector.analyze_url(url)
-            if malicious_result['is_malicious']:
-                reasons = []
-                if malicious_result['phishing_match']:
-                    reasons.append("Domain found in phishing database")
-                if malicious_result['dnsbl'].get('blacklisted', False):
-                    reasons.append("Domain blacklisted by DNS blocklists")
-                if malicious_result['score'] >= 7:
-                    reasons.append("Suspicious URL characteristics")
-                    
-                reason_str = " | ".join(reasons) or "Malicious site"
-                
-                # Add to our cache for future checks
-                if domain:
-                    self.malicious_domains.add(domain)
-                    # Save to database asynchronously
-                    threading.Thread(target=self.add_to_database, args=(url, domain, reason_str)).start()
-                    
-                return True, reason_str
-        except Exception as e:
-            ctx.log.warn(f"Error in malicious detection: {str(e)}")
-            
-        # If not malicious, then check SSL/TLS if it's HTTPS
-        if url.startswith('https://'):
-            try:
-                ssl_result = self.ssl_scanner.check(url)
-                if not ssl_result['valid']:
-                    return True, f"Invalid SSL/TLS: {ssl_result.get('error', 'Unknown error')}"
-            except Exception as e:
-                ctx.log.warn(f"SSL check error: {str(e)}")
         
+        # Debug info
+        if self.config['debug_mode']:
+            ctx.log.info(f"Checking URL: {url}")
+            ctx.log.info(f"Extracted domain: {domain}")
+            
+        # Check if domain is in blocklist
+        if self.config['block_database_domains']:
+            is_blacklisted, reason = self.is_domain_in_blocklist(domain)
+            if is_blacklisted:
+                return True, reason
+        
+        # Check SSL certificate if enabled
+        if self.config['block_ssl_issues'] and url.startswith('https://'):
+            ssl_blocked, ssl_reason = self.check_ssl_certificate(url)
+            if ssl_blocked:
+                return True, ssl_reason
+        
+        # Not blocked
         return False, None
     
     def add_to_database(self, url, domain, reason):

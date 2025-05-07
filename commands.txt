@@ -1,0 +1,1 @@
+mitmweb --set block_global=false --ssl-insecure -s site_blocker.py -p 8080
