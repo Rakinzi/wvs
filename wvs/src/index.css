@@ -1,1 +1,159 @@
 @import "tailwindcss";
+
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+
+@theme {
+  --font-sans: 'DM Sans', system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', 'Fira Code', monospace;
+
+  /* Dark OLED palette */
+  --color-bg:        #020617;
+  --color-surface:   #0A0F1E;
+  --color-card:      #0D1526;
+  --color-elevated:  #162035;
+  --color-muted:     #1A2540;
+
+  --color-border:        #1F2D47;
+  --color-border-subtle: #131F33;
+  --color-border-bright: #2D4163;
+
+  --color-text:      #EEF2FF;
+  --color-text-muted:#7A90B0;
+  --color-text-dim:  #4A607A;
+
+  --color-primary:       #3B82F6;
+  --color-primary-hover: #2563EB;
+  --color-primary-dim:   #1E3A6E;
+
+  --color-secure:    #10B981;
+  --color-secure-dim:#042E1B;
+  --color-warn:      #F59E0B;
+  --color-warn-dim:  #2D1F00;
+  --color-danger:    #F43F5E;
+  --color-danger-dim:#2D0A14;
+  --color-info:      #38BDF8;
+  --color-info-dim:  #0C2340;
+
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+}
+
+/* Light theme overrides */
+[data-theme="light"] {
+  --color-bg:        #F0F4FF;
+  --color-surface:   #FFFFFF;
+  --color-card:      #FAFBFF;
+  --color-elevated:  #EEF2FF;
+  --color-muted:     #E2E8F5;
+
+  --color-border:        #CBD5E8;
+  --color-border-subtle: #DDE3F0;
+  --color-border-bright: #A3B4CF;
+
+  --color-text:      #0F172A;
+  --color-text-muted:#475A7A;
+  --color-text-dim:  #8497B5;
+
+  --color-primary:       #2563EB;
+  --color-primary-hover: #1D4ED8;
+  --color-primary-dim:   #DBEAFE;
+
+  --color-secure:    #059669;
+  --color-secure-dim:#D1FAE5;
+  --color-warn:      #D97706;
+  --color-warn-dim:  #FEF3C7;
+  --color-danger:    #E11D48;
+  --color-danger-dim:#FFE4E6;
+  --color-info:      #0284C7;
+  --color-info-dim:  #E0F2FE;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html { color-scheme: dark; }
+[data-theme="light"] { color-scheme: light; }
+
+body {
+  font-family: var(--font-sans);
+  background-color: var(--color-bg);
+  color: var(--color-text);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  min-height: 100dvh;
+  letter-spacing: -0.01em;
+  transition: background-color 200ms ease, color 200ms ease;
+}
+
+/* Monospace for technical strings: IPs, URLs, IDs, timestamps */
+.font-mono { font-family: var(--font-mono); }
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--color-border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--color-border-bright); }
+
+/* Focus ring */
+:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+/* Page-level accent line — top border of each main content area */
+.page-accent {
+  border-top: 2px solid var(--color-primary);
+}
+
+/* Card hover lift */
+.card-hover {
+  transition: border-color 150ms, box-shadow 150ms;
+}
+.card-hover:hover {
+  border-color: var(--color-border-bright) !important;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.3);
+}
+
+/* Status indicator dot */
+.status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+/* Glow utilities */
+.glow-blue  { box-shadow: 0 0 0 1px #3B82F618, 0 8px 32px #3B82F610; }
+.glow-green { box-shadow: 0 0 0 1px #10B98118, 0 8px 32px #10B98110; }
+.glow-red   { box-shadow: 0 0 0 1px #F43F5E18, 0 8px 32px #F43F5E10; }
+
+/* Animated scan line */
+@keyframes scan-line {
+  0%   { transform: translateY(-100%); opacity: 0; }
+  10%  { opacity: 1; }
+  90%  { opacity: 1; }
+  100% { transform: translateY(100vh); opacity: 0; }
+}
+
+@keyframes pulse-soft {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.5; }
+}
+
+/* Staggered fade-in for lists */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.fade-up {
+  animation: fadeUp 250ms ease forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

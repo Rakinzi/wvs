@@ -1,6 +1,7 @@
 from flask import Blueprint, jsonify, request
-from flask_jwt_extended import jwt_required, get_jwt_identity
-from app.models import BlockedRequest, User
+from flask_jwt_extended import jwt_required
+from app.auth import get_current_user
+from app.models import BlockedRequest
 from app import db
 from datetime import datetime, timedelta
 from urllib.parse import urlparse
@@ -11,7 +12,7 @@ bp = Blueprint('blocked_access', __name__)
 @jwt_required()
 def get_blocked_access():
     try:
-        current_user = User.query.filter_by(username=get_jwt_identity()).first()
+        current_user = get_current_user()
         if not current_user:
             return jsonify({'error': 'User not found'}), 404
             
@@ -61,7 +62,7 @@ def get_blocked_access():
 @jwt_required()
 def get_blocked_access_stats():
     try:
-        current_user = User.query.filter_by(username=get_jwt_identity()).first()
+        current_user = get_current_user()
         if not current_user:
             return jsonify({'error': 'User not found'}), 404
             
@@ -141,7 +142,7 @@ def get_blocked_access_stats():
                         'domain': domain,
                         'count': count
                     })
-            except:
+            except Exception:
                 # Skip invalid URLs
                 pass
         
@@ -166,9 +167,15 @@ def get_blocked_access_stats():
 @jwt_required()
 def get_recent_blocked():
     try:
-        current_user = User.query.filter_by(username=get_jwt_identity()).first()
+        current_user = get_current_user()
         if not current_user:
             return jsonify({'error': 'User not found'}), 404
+
+        if not current_user.is_admin:
+            return jsonify({
+                'status': 'success',
+                'recent_blocked': []
+            }), 200
         
         # Get recent blocked requests
         recent_blocked = BlockedRequest.query.order_by(

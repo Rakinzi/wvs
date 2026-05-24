@@ -65,4 +65,4 @@ class DBManager:
         # Log the saved path for debugging
         print(f"Saved scan result with report path: {report_path}")
         
-        return scan.id
+        return scan

@@ -1,1 +1,2 @@
 mitmweb --set block_global=false --ssl-insecure -s site_blocker.py -p 8080
+ ZAP_ENABLED=true ZAP_AUTO_START=true uv run python start.py

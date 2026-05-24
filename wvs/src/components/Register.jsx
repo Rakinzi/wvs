@@ -1,278 +1,224 @@
 import React, { useState, useEffect } from 'react';
-import { Shield, Lock, User, Mail, AlertTriangle, Eye, EyeOff, CheckCircle, ArrowLeft } from 'lucide-react';
+import { Shield, Lock, User, Mail, AlertTriangle, Eye, EyeOff, CheckCircle, ArrowLeft, ArrowRight } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { apiJson, ApiError } from '../lib/api';
 
-const Register = ({ navigateTo }) => {
-  const [formData, setFormData] = useState({
-    username: '',
-    email: '',
-    password: '',
-    confirmPassword: ''
-  });
-  const [errors, setErrors] = useState({});
+const Field = ({ id, name, label, type = 'text', icon: Icon, value, onChange, error, placeholder, extra }) => (
+  <div className="flex flex-col gap-1.5">
+    <label htmlFor={id} className="text-xs font-medium" style={{ color: 'var(--color-text-muted)' }}>
+      {label}
+    </label>
+    <div className="relative">
+      <Icon size={15} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--color-text-dim)' }} />
+      <input
+        id={id}
+        name={name}
+        type={type}
+        value={value}
+        onChange={onChange}
+        placeholder={placeholder}
+        autoComplete={id}
+        className="w-full pl-9 py-2.5 rounded-lg text-sm outline-none transition-all duration-150"
+        style={{
+          background: 'var(--color-card)',
+          border: `1px solid ${error ? 'var(--color-danger)' : 'var(--color-border)'}`,
+          color: 'var(--color-text)',
+          paddingRight: extra ? '2.5rem' : '1rem',
+        }}
+        aria-invalid={!!error}
+        aria-describedby={error ? `${id}-error` : undefined}
+      />
+      {extra}
+    </div>
+    {error && (
+      <p id={`${id}-error`} className="text-xs" style={{ color: 'var(--color-danger)' }} role="alert">
+        {error}
+      </p>
+    )}
+  </div>
+);
+
+const Register = () => {
+  const [formData, setFormData] = useState({ username: '', email: '', password: '', confirmPassword: '' });
+  const [errors, setErrors]       = useState({});
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [formState, setFormState] = useState('idle');
-  const [successMessage, setSuccessMessage] = useState('');
+  const [success, setSuccess]     = useState(false);
+  const [visible, setVisible]     = useState(false);
+  const navigate = useNavigate();
 
   useEffect(() => {
-    document.title = 'Register - Web Vulnerability Scanner';
-    setFormState('active');
+    document.title = 'Register — WebVulnScanner';
+    requestAnimationFrame(() => setVisible(true));
   }, []);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
-    
-    // Clear specific error when user types
-    if (errors[name]) {
-      setErrors(prev => ({ ...prev, [name]: '' }));
-    }
+    setFormData(p => ({ ...p, [name]: value }));
+    if (errors[name]) setErrors(p => ({ ...p, [name]: '' }));
   };
 
-  const validateForm = () => {
-    const newErrors = {};
-    
-    if (!formData.username.trim()) {
-      newErrors.username = 'Username is required';
-    } else if (formData.username.length < 4) {
-      newErrors.username = 'Username must be at least 4 characters';
-    }
-    
-    if (!formData.email.trim()) {
-      newErrors.email = 'Email is required';
-    } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
-      newErrors.email = 'Email is invalid';
-    }
-    
-    if (!formData.password) {
-      newErrors.password = 'Password is required';
-    } else if (formData.password.length < 6) {
-      newErrors.password = 'Password must be at least 6 characters';
-    }
-    
-    if (formData.password !== formData.confirmPassword) {
-      newErrors.confirmPassword = 'Passwords do not match';
-    }
-    
-    return newErrors;
+  const validate = () => {
+    const e = {};
+    if (!formData.username.trim())       e.username = 'Username is required';
+    else if (formData.username.length < 4) e.username = 'At least 4 characters';
+    if (!formData.email.trim())          e.email = 'Email is required';
+    else if (!/\S+@\S+\.\S+/.test(formData.email)) e.email = 'Invalid email address';
+    if (!formData.password)              e.password = 'Password is required';
+    else if (formData.password.length < 8) e.password = 'At least 8 characters';
+    if (formData.password !== formData.confirmPassword) e.confirmPassword = 'Passwords do not match';
+    return e;
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
-    const validationErrors = validateForm();
-    if (Object.keys(validationErrors).length > 0) {
-      setErrors(validationErrors);
-      setFormState('error');
-      setTimeout(() => setFormState('active'), 500);
-      return;
-    }
-    
+    const errs = validate();
+    if (Object.keys(errs).length) { setErrors(errs); return; }
     setIsLoading(true);
-    setFormState('submitting');
-    
     try {
-      const response = await fetch('http://localhost:5000/register', {
+      await apiJson('/register', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          username: formData.username,
-          email: formData.email,
-          password: formData.password
-        })
+        json: true,
+        body: { username: formData.username, email: formData.email, password: formData.password },
       });
-      
-      const data = await response.json();
-      
-      if (response.ok) {
-        setSuccessMessage('Registration successful! You can now log in.');
-        setFormState('success');
-        setTimeout(() => navigateTo('login'), 2000);
-      } else {
-        setErrors({ form: data.error || 'Registration failed' });
-        setFormState('error');
-        setTimeout(() => setFormState('active'), 500);
-      }
+      setSuccess(true);
     } catch (err) {
-      setErrors({ form: 'Failed to connect to server' });
-      setFormState('error');
-      setTimeout(() => setFormState('active'), 500);
+      setErrors({ form: err instanceof ApiError ? err.message : 'Failed to connect to server' });
     } finally {
       setIsLoading(false);
     }
   };
 
-  const togglePasswordVisibility = () => {
-    setShowPassword(!showPassword);
-  };
-
-  const handleBackToLogin = () => {
-    navigateTo('login');
-  };
-
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-900 via-blue-800 to-blue-700 overflow-hidden">
-      <div className={`absolute inset-0 overflow-hidden ${formState === 'active' ? 'opacity-100' : 'opacity-0'} transition-opacity duration-1000`}>
-        <div className="absolute top-0 left-0 w-full h-full">
-          <div className="absolute top-10 left-10 w-6 h-6 bg-white rounded-full opacity-20 animate-ping" style={{ animationDuration: '3s' }}></div>
-          <div className="absolute top-1/4 right-1/3 w-4 h-4 bg-white rounded-full opacity-10 animate-ping" style={{ animationDuration: '5s' }}></div>
-          <div className="absolute bottom-1/3 left-1/4 w-8 h-8 bg-white rounded-full opacity-15 animate-ping" style={{ animationDuration: '7s' }}></div>
-          <div className="absolute bottom-10 right-10 w-5 h-5 bg-white rounded-full opacity-20 animate-ping" style={{ animationDuration: '4s' }}></div>
-        </div>
-      </div>
+    <div
+      className="min-h-screen flex items-center justify-center px-4 py-8"
+      style={{ background: 'var(--color-bg)' }}
+    >
+      <div
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          backgroundImage:
+            'linear-gradient(var(--color-border-subtle) 1px, transparent 1px), linear-gradient(90deg, var(--color-border-subtle) 1px, transparent 1px)',
+          backgroundSize: '48px 48px',
+          opacity: 0.4,
+        }}
+      />
 
-      <div className={`relative w-full max-w-md transform transition-all duration-500 ease-in-out 
-        ${formState === 'idle' ? 'opacity-0 translate-y-10' : 'opacity-100 translate-y-0'} 
-        ${formState === 'submitting' ? 'scale-95' : ''} 
-        ${formState === 'success' ? 'scale-105' : ''} 
-        ${formState === 'error' ? 'translate-x-1 translate-y-1 translate-x-0 translate-y-0' : ''}`}>
-        
-        <div className="bg-white rounded-2xl shadow-2xl overflow-hidden">
-          <div className="relative h-28 bg-blue-800 flex items-center justify-center">
-            <div className="absolute inset-0 overflow-hidden">
-              <div className="absolute -top-10 -left-10 w-40 h-40 bg-blue-600 rounded-full opacity-30"></div>
-              <div className="absolute -bottom-10 -right-10 w-40 h-40 bg-blue-600 rounded-full opacity-30"></div>
+      <div
+        className="relative w-full max-w-md transition-all duration-500"
+        style={{ opacity: visible ? 1 : 0, transform: visible ? 'translateY(0)' : 'translateY(16px)' }}
+      >
+        <div
+          className="rounded-2xl overflow-hidden"
+          style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', boxShadow: '0 24px 64px rgba(0,0,0,0.5)' }}
+        >
+          {/* Header */}
+          <div
+            className="px-8 pt-8 pb-6 flex flex-col items-center gap-3"
+            style={{ borderBottom: '1px solid var(--color-border-subtle)' }}
+          >
+            <div
+              className="w-14 h-14 rounded-2xl flex items-center justify-center"
+              style={{ background: 'var(--color-primary)', boxShadow: '0 0 32px #3B82F640' }}
+            >
+              <Shield size={26} className="text-white" />
             </div>
-            
-            <div className="relative flex flex-col items-center">
-              <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center shadow-lg mb-2">
-                <Shield size={28} className="text-blue-800" />
-              </div>
-              <h2 className="text-white text-xl font-bold">Web Vulnerability Scanner</h2>
+            <div className="text-center">
+              <h1 className="text-xl font-semibold" style={{ color: 'var(--color-text)' }}>Create Account</h1>
+              <p className="text-sm mt-0.5" style={{ color: 'var(--color-text-muted)' }}>Join WebVulnScanner</p>
             </div>
           </div>
-          
-          <div className="p-8">
-            <div className="flex items-center mb-6">
-              <button 
-                onClick={handleBackToLogin}
-                className="flex items-center text-blue-800 hover:text-blue-600 transition-colors"
-              >
-                <ArrowLeft size={16} className="mr-1" />
-                <span>Back to login</span>
-              </button>
-              <h3 className="text-2xl font-bold text-gray-800 text-center flex-1">Create Account</h3>
-            </div>
-            
-            {formState === 'success' ? (
-              <div className="bg-green-50 text-green-800 p-4 rounded-lg flex items-start">
-                <CheckCircle size={20} className="mr-2 mt-0.5 flex-shrink-0" />
-                <div>
-                  <p className="font-medium">{successMessage}</p>
-                  <p className="text-sm mt-1">Redirecting to login page...</p>
+
+          <div className="px-8 py-7">
+            {success ? (
+              <div className="flex flex-col items-center gap-4 py-4 text-center">
+                <div className="w-14 h-14 rounded-full flex items-center justify-center" style={{ background: 'var(--color-secure-dim)' }}>
+                  <Mail size={24} style={{ color: 'var(--color-secure)' }} />
                 </div>
+                <div>
+                  <p className="font-semibold text-sm" style={{ color: 'var(--color-text)' }}>Account created — check your email</p>
+                  <p className="text-xs mt-1 leading-relaxed" style={{ color: 'var(--color-text-muted)' }}>
+                    We sent a verification link to <strong>{formData.email}</strong>. Click it to activate your account, then log in.
+                  </p>
+                </div>
+                <button onClick={() => navigate('/login')} className="text-sm font-medium cursor-pointer" style={{ color: 'var(--color-primary)' }}>
+                  Go to login
+                </button>
               </div>
             ) : (
-              <form onSubmit={handleSubmit} className="space-y-5">
-                <div className="space-y-4">
-                  <div className="relative">
-                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                      <User size={18} className="text-blue-800" />
-                    </div>
-                    <input
-                      type="text"
-                      id="username"
-                      name="username"
-                      className={`pl-10 w-full px-4 py-3 rounded-lg border ${errors.username ? 'border-red-500' : 'border-gray-300'} focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200`}
-                      placeholder="Username"
-                      value={formData.username}
-                      onChange={handleChange}
-                    />
-                  </div>
-                  {errors.username && (
-                    <p className="text-red-500 text-xs pl-2">{errors.username}</p>
-                  )}
-                  
-                  <div className="relative">
-                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                      <Mail size={18} className="text-blue-800" />
-                    </div>
-                    <input
-                      type="email"
-                      id="email"
-                      name="email"
-                      className={`pl-10 w-full px-4 py-3 rounded-lg border ${errors.email ? 'border-red-500' : 'border-gray-300'} focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200`}
-                      placeholder="Email address"
-                      value={formData.email}
-                      onChange={handleChange}
-                    />
-                  </div>
-                  {errors.email && (
-                    <p className="text-red-500 text-xs pl-2">{errors.email}</p>
-                  )}
-                  
-                  <div className="relative">
-                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                      <Lock size={18} className="text-blue-800" />
-                    </div>
-                    <input
-                      type={showPassword ? "text" : "password"}
-                      id="password"
-                      name="password"
-                      className={`pl-10 w-full px-4 py-3 rounded-lg border ${errors.password ? 'border-red-500' : 'border-gray-300'} focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200`}
-                      placeholder="Password"
-                      value={formData.password}
-                      onChange={handleChange}
-                    />
-                    <div className="absolute inset-y-0 right-0 pr-3 flex items-center">
-                      <button
-                        type="button"
-                        onClick={togglePasswordVisibility}
-                        className="text-gray-400 hover:text-gray-600 focus:outline-none"
-                      >
-                        {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                      </button>
-                    </div>
-                  </div>
-                  {errors.password && (
-                    <p className="text-red-500 text-xs pl-2">{errors.password}</p>
-                  )}
-                  
-                  <div className="relative">
-                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                      <Lock size={18} className="text-blue-800" />
-                    </div>
-                    <input
-                      type={showPassword ? "text" : "password"}
-                      id="confirmPassword"
-                      name="confirmPassword"
-                      className={`pl-10 w-full px-4 py-3 rounded-lg border ${errors.confirmPassword ? 'border-red-500' : 'border-gray-300'} focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200`}
-                      placeholder="Confirm password"
-                      value={formData.confirmPassword}
-                      onChange={handleChange}
-                    />
-                  </div>
-                  {errors.confirmPassword && (
-                    <p className="text-red-500 text-xs pl-2">{errors.confirmPassword}</p>
-                  )}
-                </div>
-                
+              <form onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
+                <Field
+                  id="username" name="username" label="Username" icon={User}
+                  value={formData.username} onChange={handleChange} error={errors.username}
+                  placeholder="Choose a username"
+                />
+                <Field
+                  id="email" name="email" label="Email" type="email" icon={Mail}
+                  value={formData.email} onChange={handleChange} error={errors.email}
+                  placeholder="your@email.com"
+                />
+                <Field
+                  id="password" name="password" label="Password"
+                  type={showPassword ? 'text' : 'password'} icon={Lock}
+                  value={formData.password} onChange={handleChange} error={errors.password}
+                  placeholder="Min. 8 characters"
+                  extra={
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(v => !v)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 cursor-pointer"
+                      style={{ color: 'var(--color-text-dim)' }}
+                      aria-label={showPassword ? 'Hide password' : 'Show password'}
+                    >
+                      {showPassword ? <EyeOff size={14} /> : <Eye size={14} />}
+                    </button>
+                  }
+                />
+                <Field
+                  id="confirmPassword" name="confirmPassword" label="Confirm password"
+                  type={showPassword ? 'text' : 'password'} icon={Lock}
+                  value={formData.confirmPassword} onChange={handleChange} error={errors.confirmPassword}
+                  placeholder="Repeat password"
+                />
+
                 {errors.form && (
-                  <div className="flex items-center text-red-500 text-sm p-2 bg-red-50 rounded-lg">
-                    <AlertTriangle size={16} className="mr-2 flex-shrink-0" />
-                    <span>{errors.form}</span>
+                  <div
+                    className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm"
+                    role="alert"
+                    style={{ background: 'var(--color-danger-dim)', color: 'var(--color-danger)', border: '1px solid #EF444430' }}
+                  >
+                    <AlertTriangle size={14} className="flex-shrink-0" />
+                    {errors.form}
                   </div>
                 )}
-                
+
                 <button
                   type="submit"
                   disabled={isLoading}
-                  className={`w-full py-3 px-4 rounded-lg font-bold text-white transition-all duration-300 
-                  ${isLoading 
-                    ? 'bg-blue-400 cursor-not-allowed' 
-                    : 'bg-blue-800 hover:bg-blue-700 shadow-lg hover:shadow-xl'}`}
+                  className="flex items-center justify-center gap-2 w-full py-2.5 rounded-lg text-sm font-semibold text-white transition-all duration-150 cursor-pointer mt-1"
+                  style={{ background: isLoading ? 'var(--color-primary-dim)' : 'var(--color-primary)', opacity: isLoading ? 0.7 : 1 }}
                 >
                   {isLoading ? (
-                    <div className="flex items-center justify-center">
-                      <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-white mr-2"></div>
-                      <span>Creating account...</span>
-                    </div>
+                    <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Creating account…</>
                   ) : (
-                    'Register'
+                    <>Create Account <ArrowRight size={15} /></>
                   )}
                 </button>
               </form>
             )}
+
+            <p className="text-sm text-center mt-5" style={{ color: 'var(--color-text-dim)' }}>
+              Already have an account?{' '}
+              <button
+                type="button"
+                onClick={() => navigate('/login')}
+                className="font-medium cursor-pointer"
+                style={{ color: 'var(--color-primary)' }}
+              >
+                <ArrowLeft size={12} className="inline mr-0.5" />
+                Sign in
+              </button>
+            </p>
           </div>
         </div>
       </div>

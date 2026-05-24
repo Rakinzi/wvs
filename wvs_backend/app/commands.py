@@ -5,8 +5,8 @@ from app.models import MaliciousSite, User
 import requests
 import json
 from datetime import datetime
-from flask_migrate import Migrate
 import os
+import sqlite3
 
 @click.command('init-db')
 @with_appcontext
@@ -14,6 +14,44 @@ def init_db_command():
     """Create and initialize the database."""
     db.create_all()
     click.echo('Initialized the database.')
+
+@click.command('migrate-legacy-sqlite')
+@with_appcontext
+def migrate_legacy_sqlite_command():
+    """Import legacy instance/scans.db rows into the default SQLite database when present."""
+    instance_dir = os.path.join(os.getcwd(), 'instance')
+    legacy_path = os.path.join(instance_dir, 'scans.db')
+    default_path = os.path.join(instance_dir, 'wvs.db')
+
+    if not os.path.exists(legacy_path):
+        click.echo('No legacy scans.db file found.')
+        return
+    if os.path.abspath(legacy_path) == os.path.abspath(default_path):
+        click.echo('Legacy and default database paths are the same; nothing to do.')
+        return
+
+    legacy = sqlite3.connect(legacy_path)
+    legacy.row_factory = sqlite3.Row
+
+    try:
+        imported_users = 0
+        for row in legacy.execute("SELECT username, password, email, is_admin FROM user"):
+            existing = User.query.filter_by(username=row["username"]).first()
+            if existing:
+                continue
+            user = User(
+                username=row["username"],
+                password=row["password"],
+                email=row["email"],
+                is_admin=bool(row["is_admin"]),
+            )
+            db.session.add(user)
+            imported_users += 1
+
+        db.session.commit()
+        click.echo(f'Imported {imported_users} users from legacy scans.db')
+    finally:
+        legacy.close()
 
 @click.command('create-admin')
 @click.argument('username')
@@ -126,5 +164,6 @@ def update_blocklist_command():
 
 def register_commands(app):
     app.cli.add_command(init_db_command)
+    app.cli.add_command(migrate_legacy_sqlite_command)
     app.cli.add_command(create_admin_command)
     app.cli.add_command(update_blocklist_command)

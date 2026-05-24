@@ -5,7 +5,6 @@ import argparse
 import subprocess
 import time
 import requests
-import signal
 import atexit
 
 def start_api_server():
@@ -66,10 +65,10 @@ def main():
     parser.add_argument("--no-mitm", action="store_true", help="Don't start the MITM proxy")
     args = parser.parse_args()
     
-    # First, make sure database is initialized
-    if not os.path.exists("instance/scans.db"):
-        print("[*] Database not found, initializing...")
-        subprocess.run(["python", "init_db.py"])
+    # First, make sure the default application database exists.
+    if not os.path.exists("instance/wvs.db") and not os.environ.get('DATABASE_URL'):
+        print("[*] Local database not found, initializing default app schema...")
+        subprocess.run(["python", "-m", "flask", "--app", "manage.py", "init-db"], check=False)
     
     # Start the API server
     api_process = start_api_server()

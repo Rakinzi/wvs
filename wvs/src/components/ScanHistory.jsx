@@ -1,320 +1,393 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Clock, Search, FileText, Filter, 
-  ChevronDown, ChevronUp, RefreshCw, 
+import {
+  Clock, Search, FileText, Filter,
+  ChevronDown, ChevronUp, RefreshCw,
   AlertTriangle, CheckCircle, ExternalLink,
-  ArrowLeft, Calendar, Download
+  ArrowLeft, Calendar, Download, ShieldAlert, ShieldCheck, Activity, Trash2,
+  GitCompare, X
 } from 'lucide-react';
+import { useScanHistoryData } from '../hooks/useScanHistoryData';
+import { apiJson } from '../lib/api';
+import ConfirmDialog from './ConfirmDialog';
 
-const ScanHistory = ({ navigateTo }) => {
-  const [scans, setScans] = useState([]);
+const T = {
+  bg:          'var(--color-bg)',
+  surface:     'var(--color-surface)',
+  card:        'var(--color-card)',
+  elev:        'var(--color-elevated)',
+  border:      'var(--color-border)',
+  borderSubtle:'var(--color-border-subtle)',
+  borderBright:'var(--color-border-bright)',
+  text:        'var(--color-text)',
+  muted:       'var(--color-text-muted)',
+  dim:         'var(--color-text-dim)',
+  primary:     'var(--color-primary)',
+  secure:      'var(--color-secure)',
+  secureDim:   'var(--color-secure-dim)',
+  danger:      'var(--color-danger)',
+  dangerDim:   'var(--color-danger-dim)',
+  warn:        'var(--color-warn)',
+  info:        'var(--color-info)',
+};
+
+const fmt = (d) => {
+  const dt = new Date(d);
+  return dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+    + ' · ' + dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+};
+
+const StatPill = ({ icon: Icon, label, value, color, dimColor }) => (
+  <div className="flex items-center gap-3 px-4 py-3 rounded-xl" style={{ background: T.card, border: `1px solid ${T.border}` }}>
+    <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: dimColor }}>
+      <Icon size={14} style={{ color }} />
+    </div>
+    <div>
+      <p className="text-xs font-medium" style={{ color: T.muted }}>{label}</p>
+      <p className="text-lg font-bold leading-tight" style={{ color: T.text }}>{value}</p>
+    </div>
+  </div>
+);
+
+const Pagination = ({ page, totalPages, setPage }) => {
+  if (totalPages <= 1) return null;
+  const pages = [...Array(Math.min(totalPages, 5))].map((_, i) => i + 1);
+  return (
+    <div className="flex items-center justify-between px-5 py-3.5" style={{ borderTop: `1px solid ${T.border}`, background: T.surface }}>
+      <p className="text-xs font-mono" style={{ color: T.dim }}>
+        pg {page} / {totalPages}
+      </p>
+      <div className="flex items-center gap-1">
+        <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}
+          className="px-2.5 py-1.5 rounded-lg text-xs cursor-pointer disabled:opacity-30 transition-colors"
+          style={{ background: T.card, color: T.muted, border: `1px solid ${T.border}` }}>‹</button>
+        {pages.map(p => (
+          <button key={p} onClick={() => setPage(p)}
+            className="px-2.5 py-1.5 rounded-lg text-xs cursor-pointer transition-colors"
+            style={{ background: page === p ? T.primary : T.card, color: page === p ? '#fff' : T.muted, border: `1px solid ${page === p ? T.primary : T.border}` }}>
+            {p}
+          </button>
+        ))}
+        <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages}
+          className="px-2.5 py-1.5 rounded-lg text-xs cursor-pointer disabled:opacity-30 transition-colors"
+          style={{ background: T.card, color: T.muted, border: `1px solid ${T.border}` }}>›</button>
+      </div>
+    </div>
+  );
+};
+
+const SCANNERS = ['sql', 'ssl', 'headers', 'xss', 'malicious', 'exposure'];
+const SCANNER_LABELS = { sql: 'SQLi', ssl: 'SSL/TLS', headers: 'Headers', xss: 'XSS', malicious: 'Malicious', exposure: 'Exposure' };
+
+const ScoreBadge = ({ score }) => {
+  const color = score >= 80 ? T.secure : score >= 50 ? T.warn : T.danger;
+  const bg    = score >= 80 ? T.secureDim : score >= 50 ? `${T.warn}20` : T.dangerDim;
+  return (
+    <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-bold"
+      style={{ background: bg, color }}>{score}</span>
+  );
+};
+
+const CompareView = ({ ids, onClose }) => {
+  const [reports, setReports] = useState([null, null]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [sortOrder, setSortOrder] = useState('desc');
-  const [filterStatus, setFilterStatus] = useState('all');
-  const [showFilterDropdown, setShowFilterDropdown] = useState(false);
-  const [showExportDropdown, setShowExportDropdown] = useState(false);
-  const [selectedScans, setSelectedScans] = useState([]);
-  const [selectAll, setSelectAll] = useState(false);
-  
-  const scansPerPage = 10;
 
   useEffect(() => {
-    document.title = 'Scan History - Web Vulnernability Scanner';
-    fetchScans();
-  }, []);
+    Promise.all(ids.map(id => apiJson(`/report/${id}?format=json`, { auth: true }).then(r => r.data)))
+      .then(data => { setReports(data); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, [ids.join(',')]);
 
-  const fetchScans = async () => {
-    setLoading(true);
-    try {
-      const response = await fetch('http://localhost:5000/scans/history?limit=100', {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
-      });
-      
-      if (response.ok) {
-        const data = await response.json();
-        if (data.status === 'success' && data.scans) {
-          setScans(data.scans);
-        } else {
-          setScans([]);
-        }
-      } else {
-        const data = await response.json();
-        setError(data.error || 'Failed to fetch scan history');
-      }
-    } catch (err) {
-      setError('Failed to connect to server');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleSearchChange = (e) => {
-    setSearchQuery(e.target.value);
-    setCurrentPage(1); // Reset to first page on search
-  };
-
-  const toggleSortOrder = () => {
-    setSortOrder(sortOrder === 'desc' ? 'asc' : 'desc');
-  };
-
-  const toggleFilterDropdown = () => {
-    setShowFilterDropdown(!showFilterDropdown);
-  };
-
-  const toggleExportDropdown = () => {
-    setShowExportDropdown(!showExportDropdown);
-  };
-
-  const handleFilterChange = (status) => {
-    setFilterStatus(status);
-    setShowFilterDropdown(false);
-    setCurrentPage(1); // Reset to first page on filter change
-  };
-
-  const handleCheckboxChange = (scanId) => {
-    setSelectedScans(prev => {
-      if (prev.includes(scanId)) {
-        return prev.filter(id => id !== scanId);
-      } else {
-        return [...prev, scanId];
-      }
-    });
-  };
-
-  const handleSelectAllChange = () => {
-    if (selectAll) {
-      setSelectedScans([]);
-    } else {
-      setSelectedScans(filteredScans.map(scan => scan.id));
-    }
-    setSelectAll(!selectAll);
-  };
-
-  const handleExport = (format) => {
-    // In a real app, this would call an API to generate the export
-    console.log(`Exporting ${selectedScans.length} scans as ${format}`);
-    setShowExportDropdown(false);
-  };
-
-  const handleViewReport = (scanId) => {
-    navigateTo('report', scanId);
-  };
-
-  const formatDate = (dateString) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  };
-
-  // Filter and sort scans
-  const filteredScans = scans
-    .filter(scan => {
-      // Apply text search filter
-      const matchesSearch = searchQuery === '' || 
-        scan.url.toLowerCase().includes(searchQuery.toLowerCase());
-      
-      // Apply status filter
-      const matchesStatus = filterStatus === 'all' || 
-        (filterStatus === 'vulnerable' && scan.has_vulnerabilities) || 
-        (filterStatus === 'secure' && !scan.has_vulnerabilities);
-      
-      return matchesSearch && matchesStatus;
-    })
-    .sort((a, b) => {
-      // Apply sorting
-      const dateA = new Date(a.timestamp);
-      const dateB = new Date(b.timestamp);
-      return sortOrder === 'desc' ? dateB - dateA : dateA - dateB;
-    });
-
-  // Pagination
-  const totalPages = Math.ceil(filteredScans.length / scansPerPage);
-  const indexOfLastScan = currentPage * scansPerPage;
-  const indexOfFirstScan = indexOfLastScan - scansPerPage;
-  const currentScans = filteredScans.slice(indexOfFirstScan, indexOfLastScan);
-
-  const paginate = (pageNumber) => setCurrentPage(pageNumber);
+  const fmt = (d) => new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center mb-4 sm:mb-0">
-            <button
-              onClick={() => navigateTo('dashboard')}
-              className="mr-4 flex items-center text-gray-700 hover:text-blue-800"
-            >
-              <ArrowLeft size={16} className="mr-1" />
-              Back
-            </button>
-            <h1 className="text-2xl font-bold text-gray-900 flex items-center">
-              <Clock size={24} className="mr-2 text-blue-800" />
-              Scan History
-            </h1>
-          </div>
-          
-          <button
-            onClick={fetchScans}
-            className="flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
-          >
-            <RefreshCw size={16} className="mr-2" />
-            Refresh
-          </button>
+    <div className="fixed inset-0 z-50 flex flex-col" style={{ background: T.bg }}>
+      {/* Header */}
+      <div className="flex items-center justify-between px-6 py-4 flex-shrink-0"
+        style={{ background: T.surface, borderBottom: `1px solid ${T.border}` }}>
+        <div className="flex items-center gap-2.5">
+          <GitCompare size={16} style={{ color: T.primary }} />
+          <span className="text-sm font-semibold" style={{ color: T.text }}>Scan Comparison</span>
         </div>
-        
-        <div className="bg-white shadow-lg rounded-lg overflow-hidden">
-          <div className="px-4 py-5 sm:px-6 border-b border-gray-200 bg-gray-50">
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between space-y-4 md:space-y-0">
-              <div className="relative flex-grow max-w-md">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <Search size={16} className="text-gray-400" />
-                </div>
-                <input
-                  type="text"
-                  className="pl-10 block w-full border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                  placeholder="Search by URL..."
-                  value={searchQuery}
-                  onChange={handleSearchChange}
-                />
+        <button onClick={onClose} className="cursor-pointer" style={{ color: T.muted }}>
+          <X size={18} />
+        </button>
+      </div>
+
+      {loading ? (
+        <div className="flex-1 flex items-center justify-center gap-3">
+          <RefreshCw size={18} className="animate-spin" style={{ color: T.primary }} />
+          <span className="text-sm" style={{ color: T.muted }}>Loading reports…</span>
+        </div>
+      ) : (
+        <div className="flex-1 overflow-y-auto">
+          <div className="grid grid-cols-2 divide-x h-full" style={{ borderColor: T.border }}>
+            {reports.map((r, idx) => !r ? (
+              <div key={idx} className="flex items-center justify-center p-10">
+                <p className="text-sm" style={{ color: T.danger }}>Failed to load report</p>
               </div>
-              
-              <div className="flex space-x-3">
-                <div className="relative">
-                  <button
-                    onClick={toggleFilterDropdown}
-                    className="flex items-center px-3 py-1.5 border border-gray-300 rounded-md text-sm text-gray-700 bg-white hover:bg-gray-50"
-                  >
-                    <Filter size={14} className="mr-1" />
-                    Filter
-                    {filterStatus !== 'all' && (
-                      <span className="ml-1 bg-blue-100 text-blue-800 text-xs px-1.5 py-0.5 rounded-full">
-                        1
-                      </span>
-                    )}
-                    <ChevronDown size={14} className="ml-1" />
-                  </button>
-                  
-                  {showFilterDropdown && (
-                    <div className="origin-top-right absolute right-0 mt-2 w-48 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 focus:outline-none z-10">
-                      <div className="py-1">
-                        <button
-                          onClick={() => handleFilterChange('all')}
-                          className={`flex items-center px-4 py-2 text-sm w-full text-left ${
-                            filterStatus === 'all' ? 'bg-blue-50 text-blue-800 font-medium' : 'text-gray-700 hover:bg-gray-100'
-                          }`}
-                        >
-                          All Scans
-                        </button>
-                        <button
-                          onClick={() => handleFilterChange('vulnerable')}
-                          className={`flex items-center px-4 py-2 text-sm w-full text-left ${
-                            filterStatus === 'vulnerable' ? 'bg-blue-50 text-blue-800 font-medium' : 'text-gray-700 hover:bg-gray-100'
-                          }`}
-                        >
-                          <AlertTriangle size={14} className="mr-2 text-red-500" />
-                          Vulnerable
-                        </button>
-                        <button
-                          onClick={() => handleFilterChange('secure')}
-                          className={`flex items-center px-4 py-2 text-sm w-full text-left ${
-                            filterStatus === 'secure' ? 'bg-blue-50 text-blue-800 font-medium' : 'text-gray-700 hover:bg-gray-100'
-                          }`}
-                        >
-                          <CheckCircle size={14} className="mr-2 text-green-500" />
-                          Secure
-                        </button>
-                      </div>
-                    </div>
-                  )}
+            ) : (
+              <div key={idx} className="p-5 flex flex-col gap-5 overflow-y-auto">
+                {/* Scan identity */}
+                <div className="flex flex-col gap-1">
+                  <p className="text-xs font-mono font-medium truncate" style={{ color: T.text }}>{r.url}</p>
+                  <p className="text-xs font-mono" style={{ color: T.dim }}>{fmt(r.timestamp)} · {String(r.scan_id).slice(0, 8)}</p>
                 </div>
-                
-                {selectedScans.length > 0 && (
-                  <div className="relative">
-                    <button
-                      onClick={toggleExportDropdown}
-                      className="flex items-center px-3 py-1.5 border border-gray-300 rounded-md text-sm text-gray-700 bg-white hover:bg-gray-50"
-                    >
-                      <Download size={14} className="mr-1" />
-                      Export ({selectedScans.length})
-                      <ChevronDown size={14} className="ml-1" />
-                    </button>
-                    
-                    {showExportDropdown && (
-                      <div className="origin-top-right absolute right-0 mt-2 w-48 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 focus:outline-none z-10">
-                        <div className="py-1">
-                          <button
-                            onClick={() => handleExport('pdf')}
-                            className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 w-full text-left"
-                          >
-                            Export as PDF
-                          </button>
-                          <button
-                            onClick={() => handleExport('csv')}
-                            className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 w-full text-left"
-                          >
-                            Export as CSV
-                          </button>
+
+                {/* Overall score */}
+                <div className="flex items-center justify-between px-4 py-3 rounded-xl"
+                  style={{ background: T.card, border: `1px solid ${T.border}` }}>
+                  <span className="text-xs font-semibold" style={{ color: T.muted }}>Overall score</span>
+                  <ScoreBadge score={r.summary?.score ?? 0} />
+                </div>
+
+                {/* Issue summary */}
+                <div className="grid grid-cols-2 gap-3">
+                  {[
+                    { label: 'Total issues', value: r.summary?.total_issues ?? 0 },
+                    { label: 'Critical', value: r.summary?.critical ?? 0 },
+                    { label: 'High', value: r.summary?.high ?? 0 },
+                    { label: 'Medium', value: r.summary?.medium ?? 0 },
+                  ].map(({ label, value }) => (
+                    <div key={label} className="flex flex-col px-3 py-2.5 rounded-lg"
+                      style={{ background: T.surface, border: `1px solid ${T.border}` }}>
+                      <span className="text-xs" style={{ color: T.muted }}>{label}</span>
+                      <span className="text-base font-bold" style={{ color: T.text }}>{value}</span>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Per-scanner scores */}
+                <div className="flex flex-col gap-2">
+                  <p className="text-xs font-mono uppercase tracking-widest" style={{ color: T.dim }}>Scanner scores</p>
+                  {SCANNERS.map(key => {
+                    const s = r.findings?.[key]?.score ?? r.findings?.[key]?.score;
+                    if (s === undefined) return null;
+                    const color = s >= 80 ? T.secure : s >= 50 ? T.warn : T.danger;
+                    return (
+                      <div key={key} className="flex items-center justify-between">
+                        <span className="text-xs" style={{ color: T.muted }}>{SCANNER_LABELS[key]}</span>
+                        <div className="flex items-center gap-2 flex-1 mx-3">
+                          <div className="flex-1 h-1.5 rounded-full" style={{ background: T.surface }}>
+                            <div className="h-full rounded-full" style={{ width: `${s}%`, background: color }} />
+                          </div>
                         </div>
+                        <span className="text-xs font-mono w-8 text-right" style={{ color }}>{s}</span>
                       </div>
-                    )}
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+const ScanHistory = ({ navigateTo }) => {
+  const [page, setPage]     = useState(1);
+  const [q, setQ]           = useState('');
+  const [sort, setSort]     = useState('desc');
+  const [filter, setFilter] = useState('all');
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
+  const [selected, setSelected] = useState([]);
+  const [deleting, setDeleting] = useState(null);
+  const [pendingDelete, setPendingDelete] = useState(null);
+  const [comparing, setComparing] = useState(false);
+  const perPage = 10;
+  const { scans, loading, error, fetchScans, deleteScan } = useScanHistoryData();
+
+  useEffect(() => { document.title = 'Scan History — WebVulnScanner'; }, []);
+
+  const filtered = scans
+    .filter(s => {
+      const mq = !q || s.url.toLowerCase().includes(q.toLowerCase());
+      const mf = filter === 'all'
+        || (filter === 'vulnerable' && s.has_vulnerabilities)
+        || (filter === 'secure' && !s.has_vulnerabilities);
+      return mq && mf;
+    })
+    .sort((a, b) => sort === 'desc'
+      ? new Date(b.timestamp) - new Date(a.timestamp)
+      : new Date(a.timestamp) - new Date(b.timestamp));
+
+  const totalPages = Math.ceil(filtered.length / perPage);
+  const pageScans  = filtered.slice((page - 1) * perPage, page * perPage);
+
+  const vulnCount   = scans.filter(s => s.has_vulnerabilities).length;
+  const secureCount = scans.length - vulnCount;
+
+  const toggleSelect = (id) => setSelected(p => p.includes(id) ? p.filter(x => x !== id) : [...p, id]);
+  const toggleAll    = () => setSelected(p => p.length === filtered.length ? [] : filtered.map(s => s.id));
+
+  const handleDelete = async (id) => {
+    setDeleting(id);
+    try { await deleteScan(id); setSelected(p => p.filter(x => x !== id)); }
+    catch { /* scan stays in list if delete fails */ }
+    finally { setDeleting(null); setPendingDelete(null); }
+  };
+
+  return (
+    <div className="min-h-screen" style={{ background: T.bg }}>
+
+      {comparing && (
+        <CompareView ids={selected} onClose={() => setComparing(false)} />
+      )}
+
+      <ConfirmDialog
+        open={pendingDelete !== null}
+        title="Delete Scan"
+        message="This scan record will be permanently removed. This cannot be undone."
+        confirmLabel="Delete"
+        onConfirm={() => handleDelete(pendingDelete)}
+        onCancel={() => setPendingDelete(null)}
+      />
+
+      {/* Sticky header */}
+      <div className="sticky top-0 z-20 px-6 lg:px-10 py-4 flex items-center justify-between"
+        style={{ background: `${T.surface}E0`, backdropFilter: 'blur(12px)', borderBottom: `1px solid ${T.border}` }}>
+        <div className="flex items-center gap-4">
+          <button onClick={() => navigateTo('dashboard')}
+            className="flex items-center gap-1.5 text-xs font-medium cursor-pointer transition-colors px-3 py-1.5 rounded-lg"
+            style={{ color: T.muted, background: T.card, border: `1px solid ${T.border}` }}>
+            <ArrowLeft size={13} /> Back
+          </button>
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: `${T.primary}22`, border: `1px solid ${T.primary}40` }}>
+              <Clock size={15} style={{ color: T.primary }} />
+            </div>
+            <div>
+              <h1 className="text-base font-bold leading-tight" style={{ color: T.text }}>Scan History</h1>
+              <p className="text-xs" style={{ color: T.dim }}>{scans.length} total records</p>
+            </div>
+          </div>
+        </div>
+        <button onClick={fetchScans}
+          className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium cursor-pointer transition-colors"
+          style={{ background: T.card, color: T.muted, border: `1px solid ${T.border}` }}>
+          <RefreshCw size={12} /> Refresh
+        </button>
+      </div>
+
+      <div className="px-6 lg:px-10 py-6 flex flex-col gap-5">
+
+        {/* Stats strip */}
+        <div className="grid grid-cols-3 gap-3">
+          <StatPill icon={Activity}     label="Total Scans"  value={scans.length} color={T.primary}  dimColor={`${T.primary}20`} />
+          <StatPill icon={ShieldAlert}  label="Vulnerable"   value={vulnCount}    color={T.danger}   dimColor={T.dangerDim} />
+          <StatPill icon={ShieldCheck}  label="Secure"       value={secureCount}  color={T.secure}   dimColor={T.secureDim} />
+        </div>
+
+        {/* Table card */}
+        <div className="rounded-xl overflow-hidden" style={{ background: T.card, border: `1px solid ${T.border}` }}>
+
+          {/* Toolbar */}
+          <div className="px-5 py-3.5 flex flex-col sm:flex-row sm:items-center gap-3"
+            style={{ borderBottom: `1px solid ${T.border}`, background: T.surface }}>
+            <div className="relative flex-1">
+              <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: T.dim }} />
+              <input type="text" value={q} onChange={e => { setQ(e.target.value); setPage(1); }}
+                placeholder="Search by URL…"
+                className="w-full pl-9 pr-4 py-2 rounded-lg text-xs outline-none font-mono"
+                style={{ background: T.card, border: `1px solid ${T.border}`, color: T.text }} />
+            </div>
+            <div className="flex items-center gap-2 flex-shrink-0">
+
+              {/* Filter dropdown */}
+              <div className="relative">
+                <button onClick={() => setFilterOpen(o => !o)}
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium cursor-pointer"
+                  style={{ background: T.card, color: T.muted, border: `1px solid ${T.border}` }}>
+                  <Filter size={12} />
+                  {filter === 'all' ? 'All' : filter.charAt(0).toUpperCase() + filter.slice(1)}
+                  <ChevronDown size={11} />
+                </button>
+                {filterOpen && (
+                  <div className="absolute right-0 mt-1.5 w-40 rounded-xl overflow-hidden z-30 shadow-2xl"
+                    style={{ background: T.elev, border: `1px solid ${T.border}` }}>
+                    {['all', 'vulnerable', 'secure'].map(f => (
+                      <button key={f} onClick={() => { setFilter(f); setFilterOpen(false); setPage(1); }}
+                        className="flex items-center gap-2 w-full px-4 py-2.5 text-xs text-left cursor-pointer transition-colors"
+                        style={{ color: filter === f ? T.primary : T.muted, background: filter === f ? `${T.primary}12` : 'transparent' }}>
+                        {f === 'vulnerable' && <AlertTriangle size={11} style={{ color: T.danger }} />}
+                        {f === 'secure'     && <CheckCircle  size={11} style={{ color: T.secure }} />}
+                        {f.charAt(0).toUpperCase() + f.slice(1)}
+                      </button>
+                    ))}
                   </div>
                 )}
               </div>
+
+              {/* Compare — shown only when exactly 2 selected */}
+              {selected.length === 2 && (
+                <button onClick={() => setComparing(true)}
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold cursor-pointer text-white"
+                  style={{ background: T.primary }}>
+                  <GitCompare size={12} /> Compare
+                </button>
+              )}
+
+              {/* Export */}
+              {selected.length > 0 && selected.length !== 2 && (
+                <div className="relative">
+                  <button onClick={() => setExportOpen(o => !o)}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold cursor-pointer text-white"
+                    style={{ background: T.primary }}>
+                    <Download size={12} /> Export ({selected.length}) <ChevronDown size={11} />
+                  </button>
+                  {exportOpen && (
+                    <div className="absolute right-0 mt-1.5 w-40 rounded-xl overflow-hidden z-30 shadow-2xl"
+                      style={{ background: T.elev, border: `1px solid ${T.border}` }}>
+                      {['PDF', 'CSV'].map(f => (
+                        <button key={f} onClick={() => setExportOpen(false)}
+                          className="flex items-center gap-2 w-full px-4 py-2.5 text-xs text-left cursor-pointer transition-colors"
+                          style={{ color: T.muted }}>
+                          Export as {f}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
-          
+
+          {/* Body states */}
           {loading ? (
-            <div className="flex justify-center items-center p-12">
-              <RefreshCw size={24} className="text-blue-800 animate-spin mr-3" />
-              <p className="text-gray-600">Loading scan history...</p>
+            <div className="flex items-center justify-center gap-3 py-20">
+              <RefreshCw size={16} className="animate-spin" style={{ color: T.primary }} />
+              <p className="text-sm" style={{ color: T.muted }}>Loading scan history…</p>
             </div>
           ) : error ? (
-            <div className="flex flex-col items-center justify-center p-12">
-              <div className="h-12 w-12 bg-red-100 rounded-full flex items-center justify-center mb-4">
-                <AlertTriangle size={20} className="text-red-600" />
+            <div className="flex flex-col items-center gap-4 py-20">
+              <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ background: T.dangerDim }}>
+                <AlertTriangle size={20} style={{ color: T.danger }} />
               </div>
-              <h3 className="text-lg font-medium text-gray-900 mb-2">Error loading scan history</h3>
-              <p className="text-red-600 mb-4">{error}</p>
-              <button
-                onClick={fetchScans}
-                className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-800 hover:bg-blue-700"
-              >
-                <RefreshCw size={16} className="mr-2" />
-                Try Again
+              <p className="text-sm font-medium" style={{ color: T.text }}>Error loading history</p>
+              <p className="text-xs" style={{ color: T.muted }}>{error}</p>
+              <button onClick={fetchScans} className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium cursor-pointer text-white" style={{ background: T.primary }}>
+                <RefreshCw size={13} /> Retry
               </button>
             </div>
-          ) : filteredScans.length === 0 ? (
-            <div className="flex flex-col items-center justify-center p-12">
-              <div className="h-16 w-16 bg-gray-100 rounded-full flex items-center justify-center mb-4">
-                <Search size={24} className="text-gray-400" />
+          ) : filtered.length === 0 ? (
+            <div className="flex flex-col items-center gap-4 py-20">
+              <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ background: T.surface }}>
+                <Search size={20} style={{ color: T.dim }} />
               </div>
-              {searchQuery || filterStatus !== 'all' ? (
+              {q || filter !== 'all' ? (
                 <>
-                  <h3 className="text-lg font-medium text-gray-900 mb-2">No matching scans found</h3>
-                  <p className="text-gray-500 mb-4">Try adjusting your search or filters</p>
-                  <button
-                    onClick={() => {
-                      setSearchQuery('');
-                      setFilterStatus('all');
-                    }}
-                    className="text-blue-800 font-medium hover:text-blue-700"
-                  >
+                  <p className="text-sm font-medium" style={{ color: T.text }}>No matching scans</p>
+                  <button onClick={() => { setQ(''); setFilter('all'); }} className="text-xs cursor-pointer" style={{ color: T.primary }}>
                     Clear filters
                   </button>
                 </>
               ) : (
                 <>
-                  <h3 className="text-lg font-medium text-gray-900 mb-2">No scan history yet</h3>
-                  <p className="text-gray-500 mb-4">Start scanning websites to build your history</p>
-                  <button
-                    onClick={() => navigateTo('dashboard')}
-                    className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-800 hover:bg-blue-700"
-                  >
-                    Scan a Website
+                  <p className="text-sm font-medium" style={{ color: T.text }}>No scan history yet</p>
+                  <button onClick={() => navigateTo('scanners')} className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium cursor-pointer text-white" style={{ background: T.primary }}>
+                    Start scanning
                   </button>
                 </>
               )}
@@ -322,89 +395,73 @@ const ScanHistory = ({ navigateTo }) => {
           ) : (
             <>
               <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-10">
-                        <input
-                          type="checkbox"
-                          className="h-4 w-4 text-blue-800 border-gray-300 rounded focus:ring-blue-500"
-                          checked={selectAll}
-                          onChange={handleSelectAllChange}
-                        />
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr style={{ background: T.surface, borderBottom: `1px solid ${T.border}` }}>
+                      <th className="px-5 py-3 w-10" style={{ borderBottom: `1px solid ${T.border}` }}>
+                        <input type="checkbox"
+                          checked={selected.length === filtered.length && filtered.length > 0}
+                          onChange={toggleAll}
+                          style={{ accentColor: T.primary }} />
                       </th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">URL</th>
-                      <th 
-                        scope="col" 
-                        className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer"
-                        onClick={toggleSortOrder}
-                      >
-                        <div className="flex items-center">
-                          <span>Date</span>
-                          {sortOrder === 'desc' ? (
-                            <ChevronDown size={14} className="ml-1" />
-                          ) : (
-                            <ChevronUp size={14} className="ml-1" />
-                          )}
+                      <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-widest" style={{ color: T.dim }}>Target URL</th>
+                      <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-widest cursor-pointer select-none"
+                        style={{ color: T.dim }}
+                        onClick={() => setSort(s => s === 'desc' ? 'asc' : 'desc')}>
+                        <div className="flex items-center gap-1">
+                          Date {sort === 'desc' ? <ChevronDown size={11} /> : <ChevronUp size={11} />}
                         </div>
                       </th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                      <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                      <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-widest" style={{ color: T.dim }}>Status</th>
+                      <th className="px-5 py-3 text-right text-xs font-semibold uppercase tracking-widest" style={{ color: T.dim }}>Actions</th>
                     </tr>
                   </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {currentScans.map((scan) => (
-                      <tr key={scan.id} className="hover:bg-gray-50">
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <input
-                            type="checkbox"
-                            className="h-4 w-4 text-blue-800 border-gray-300 rounded focus:ring-blue-500"
-                            checked={selectedScans.includes(scan.id)}
-                            onChange={() => handleCheckboxChange(scan.id)}
-                          />
+                  <tbody>
+                    {pageScans.map((scan, i) => (
+                      <tr key={scan.id}
+                        className="transition-colors group"
+                        style={{ borderBottom: `1px solid ${T.borderSubtle}` }}>
+                        <td className="px-5 py-4">
+                          <input type="checkbox" checked={selected.includes(scan.id)}
+                            onChange={() => toggleSelect(scan.id)} style={{ accentColor: T.primary }} />
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="flex items-center">
-                            <div className="ml-4">
-                              <div className="text-sm font-medium text-gray-900 max-w-xs truncate">{scan.url}</div>
-                              <div className="text-xs text-gray-500">ID: {scan.id}</div>
-                            </div>
+                        <td className="px-5 py-4">
+                          <p className="text-xs font-mono font-medium truncate max-w-sm" style={{ color: T.text }}>{scan.url}</p>
+                          <p className="text-xs font-mono mt-0.5" style={{ color: T.dim }}>{String(scan.id).slice(0, 8)}</p>
+                        </td>
+                        <td className="px-5 py-4">
+                          <div className="flex items-center gap-1.5 text-xs font-mono" style={{ color: T.muted }}>
+                            <Calendar size={11} />
+                            {fmt(scan.timestamp)}
                           </div>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="flex items-center text-sm text-gray-900">
-                            <Calendar size={14} className="mr-1 text-gray-500" />
-                            {formatDate(scan.timestamp)}
-                          </div>
+                        <td className="px-5 py-4">
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold"
+                            style={scan.has_vulnerabilities
+                              ? { background: T.dangerDim, color: T.danger }
+                              : { background: T.secureDim, color: T.secure }}>
+                            {scan.has_vulnerabilities
+                              ? <><AlertTriangle size={10} /> Vulnerable</>
+                              : <><CheckCircle size={10} /> Secure</>}
+                          </span>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          {scan.has_vulnerabilities ? (
-                            <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">
-                              Vulnerable
-                            </span>
-                          ) : (
-                            <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
-                              Secure
-                            </span>
-                          )}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                          <div className="flex justify-end space-x-3">
-                            <a 
-                              href={scan.url} 
-                              target="_blank" 
-                              rel="noopener noreferrer"
-                              className="text-gray-500 hover:text-gray-800"
-                              title="Visit Website"
-                            >
-                              <ExternalLink size={16} />
+                        <td className="px-5 py-4">
+                          <div className="flex items-center justify-end gap-3">
+                            <a href={scan.url} target="_blank" rel="noopener noreferrer" title="Visit site"
+                              className="transition-colors" style={{ color: T.dim }}>
+                              <ExternalLink size={14} />
                             </a>
-                            <button
-                              onClick={() => handleViewReport(scan.id)}
-                              className="text-blue-800 hover:text-blue-600"
-                              title="View Report"
-                            >
-                              <FileText size={16} />
+                            <button onClick={() => navigateTo('report', scan.id)} title="View report"
+                              className="cursor-pointer transition-colors" style={{ color: T.primary }}>
+                              <FileText size={14} />
+                            </button>
+                            <button onClick={() => setPendingDelete(scan.id)} title="Delete scan"
+                              disabled={deleting === scan.id}
+                              className="cursor-pointer transition-colors disabled:opacity-40"
+                              style={{ color: T.danger }}>
+                              {deleting === scan.id
+                                ? <RefreshCw size={14} className="animate-spin" />
+                                : <Trash2 size={14} />}
                             </button>
                           </div>
                         </td>
@@ -413,66 +470,7 @@ const ScanHistory = ({ navigateTo }) => {
                   </tbody>
                 </table>
               </div>
-              
-              {/* Pagination */}
-              {totalPages > 1 && (
-                <div className="flex items-center justify-between px-6 py-3 bg-gray-50 border-t border-gray-200 sm:px-6">
-                  <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
-                    <div>
-                      <p className="text-sm text-gray-700">
-                        Showing <span className="font-medium">{indexOfFirstScan + 1}</span> to{' '}
-                        <span className="font-medium">
-                          {Math.min(indexOfLastScan, filteredScans.length)}
-                        </span>{' '}
-                        of <span className="font-medium">{filteredScans.length}</span> results
-                      </p>
-                    </div>
-                    <div>
-                      <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
-                        <button
-                          onClick={() => paginate(Math.max(1, currentPage - 1))}
-                          disabled={currentPage === 1}
-                          className={`relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium ${
-                            currentPage === 1 
-                              ? 'text-gray-300 cursor-not-allowed' 
-                              : 'text-gray-500 hover:bg-gray-50'
-                          }`}
-                        >
-                          <span className="sr-only">Previous</span>
-                          <ChevronUp className="h-5 w-5 transform rotate-90" />
-                        </button>
-                        
-                        {[...Array(totalPages)].map((_, i) => (
-                          <button
-                            key={i}
-                            onClick={() => paginate(i + 1)}
-                            className={`relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium ${
-                              currentPage === i + 1
-                                ? 'z-10 bg-blue-50 border-blue-500 text-blue-800'
-                                : 'bg-white text-gray-500 hover:bg-gray-50'
-                            }`}
-                          >
-                            {i + 1}
-                          </button>
-                        ))}
-                        
-                        <button
-                          onClick={() => paginate(Math.min(totalPages, currentPage + 1))}
-                          disabled={currentPage === totalPages}
-                          className={`relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium ${
-                            currentPage === totalPages 
-                              ? 'text-gray-300 cursor-not-allowed' 
-                              : 'text-gray-500 hover:bg-gray-50'
-                          }`}
-                        >
-                          <span className="sr-only">Next</span>
-                          <ChevronDown className="h-5 w-5 transform rotate-90" />
-                        </button>
-                      </nav>
-                    </div>
-                  </div>
-                </div>
-              )}
+              <Pagination page={page} totalPages={totalPages} setPage={setPage} />
             </>
           )}
         </div>

@@ -1,19 +1,24 @@
 from flask import Blueprint, jsonify, request
+from app.auth import get_current_user
 from app.models import MaliciousSite, BlockedRequest
+from app.schemas import AddMaliciousPayload, BlockedLogPayload
 from app.utils.db_manager import DBManager
 from app.scanners import SecurityScanner
-from flask_jwt_extended import jwt_required, get_jwt_identity
-from app import db
+from flask_jwt_extended import jwt_required
+from app.utils.scan_helpers import normalize_target_url
+from app import db, limiter
 from datetime import datetime
-import time
+from pydantic import ValidationError
 
 bp = Blueprint('malicious', __name__)
 
 @bp.route('/api/malicious/check', methods=['GET'])
+@limiter.limit("30 per hour")
 def check_malicious():
-    url = request.args.get('url')
-    if not url:
-        return jsonify({'error': 'URL is required'}), 400
+    try:
+        url = normalize_target_url(request.args.get('url'))
+    except ValueError as exc:
+        return jsonify({'error': str(exc)}), 400
         
     # Check database first (fastest)
     is_blocked, reason = DBManager.check_malicious_url(url)
@@ -22,7 +27,8 @@ def check_malicious():
         return jsonify({
             'url': url,
             'blocked': True,
-            'reason': reason or 'Domain in database'
+            'reason': reason or 'Domain in database',
+            'source': 'database',
         }), 200
     
     # If not in database, use the malicious detector
@@ -47,29 +53,39 @@ def check_malicious():
             'url': url,
             'blocked': True,
             'reason': reason_str,
-            'details': malicious_result
+            'details': malicious_result,
+            'source': 'rule_engine',
         }), 200
     
     # Run AI prediction as a final check
     try:
-        prediction_int, prediction_label = scanner.check_ai(url)
+        prediction_int, prediction_label, prediction_source = scanner.check_ai(url)
         if prediction_label in ["phishing", "malware", "defacement"]:
             reason_str = f"AI classified as {prediction_label}"
             DBManager.add_malicious_url(url, reason_str, "ai")
             return jsonify({
                 'url': url,
                 'blocked': True,
-                'reason': reason_str
+                'reason': reason_str,
+                'source': prediction_source,
+                'ai': {
+                    'backend': prediction_source,
+                    'label': prediction_label,
+                    'prediction': prediction_int,
+                },
             }), 200
     except Exception:
         pass
         
     return jsonify({
         'url': url,
-        'blocked': False
+        'blocked': False,
+        'source': 'none',
     }), 200
 
 @bp.route('/api/malicious/list', methods=['GET'])
+@jwt_required()
+@limiter.limit("30 per hour")
 def list_malicious():
     since = request.args.get('since', 0, type=int)
     limit = request.args.get('limit', 1000, type=int)
@@ -82,21 +98,22 @@ def list_malicious():
     else:
         sites = MaliciousSite.query.limit(limit).all()
     
-    domains = [site.domain for site in sites]
-    
     return jsonify({
-        'count': len(domains),
-        'domains': domains
+        'count': len(sites),
+        'domains': [site.domain for site in sites],
+        'sites': [site.to_dict() for site in sites],
     }), 200
 
 @bp.route('/api/malicious/add', methods=['POST'])
 @jwt_required()
+@limiter.limit("10 per hour")
 def add_malicious():
-    url = request.json.get('url')
-    reason = request.json.get('reason', '')
-    
-    if not url:
-        return jsonify({'error': 'URL is required'}), 400
+    try:
+        payload = AddMaliciousPayload.model_validate(request.get_json(silent=True) or {})
+        reason = payload.reason
+        url = normalize_target_url(payload.url)
+    except (ValueError, ValidationError) as exc:
+        return jsonify({'error': str(exc)}), 400
         
     success = DBManager.add_malicious_url(url, reason, "manual")
     
@@ -106,14 +123,16 @@ def add_malicious():
         return jsonify({'status': 'warning', 'message': 'URL already exists in database'}), 200
         
 @bp.route('/api/blocked/log', methods=['POST'])
+@limiter.limit("60 per hour")
 def log_blocked():
-    url = request.json.get('url')
-    ip_address = request.json.get('ip_address')
-    user_agent = request.json.get('user_agent')
-    reason = request.json.get('reason')
-    
-    if not url:
-        return jsonify({'error': 'URL is required'}), 400
+    try:
+        payload = BlockedLogPayload.model_validate(request.get_json(silent=True) or {})
+        url = normalize_target_url(payload.url)
+    except (ValueError, ValidationError) as exc:
+        return jsonify({'error': str(exc)}), 400
+    ip_address = payload.ip_address
+    user_agent = payload.user_agent
+    reason = payload.reason
         
     log = BlockedRequest(
         url=url,
@@ -130,6 +149,12 @@ def log_blocked():
 @bp.route('/api/blocked/stats', methods=['GET'])
 @jwt_required()
 def blocked_stats():
+    current_user = get_current_user()
+    if not current_user:
+        return jsonify({'error': 'User not found'}), 404
+    if not current_user.is_admin:
+        return jsonify({'error': 'Unauthorized access'}), 403
+
     period = request.args.get('period', 'day')
     
     if period == 'hour':

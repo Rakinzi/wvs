@@ -1,16 +1,80 @@
-import joblib
-import string
 import re
+import hashlib
+import ipaddress
+import logging
+import string
+from pathlib import Path
+from urllib.parse import urlparse
+
+import joblib
 import numpy as np
 import pandas as pd
-from urllib.parse import urlparse
-import ipaddress
-import hashlib
+import requests
+
+from app.settings import settings
 
 
 class AI_Scanner:
     def __init__(self):
-        self.model = joblib.load("app/model/eTc.sav")
+        self.model_path = Path(__file__).resolve().parent.parent / "model" / "eTc.sav"
+        self.model = None
+        self.model_available = self.model_path.exists()
+        self.hf_model = settings.huggingface_url_model
+        self.hf_api_token = settings.huggingface_api_token
+        self.hf_timeout_seconds = settings.huggingface_timeout_seconds
+
+        if not self.model_available:
+            logging.warning("AI model file not found: %s", self.model_path)
+        else:
+            self.model = joblib.load(self.model_path)
+
+    def _hf_predict(self, url):
+        if not self.hf_api_token:
+            return None, "unavailable", "none"
+
+        endpoint = f"https://api-inference.huggingface.co/models/{self.hf_model}"
+        headers = {"Authorization": f"Bearer {self.hf_api_token}"}
+        payload = {
+            "inputs": url,
+            "options": {"wait_for_model": True},
+        }
+
+        try:
+            response = requests.post(
+                endpoint,
+                headers=headers,
+                json=payload,
+                timeout=self.hf_timeout_seconds,
+            )
+            response.raise_for_status()
+            body = response.json()
+        except Exception as exc:
+            logging.warning("Hugging Face inference failed for %s: %s", url, exc)
+            return None, "unavailable", "huggingface"
+
+        candidates = []
+        if isinstance(body, list):
+            if body and isinstance(body[0], list):
+                candidates = body[0]
+            elif body and isinstance(body[0], dict):
+                candidates = body
+
+        if not candidates:
+            return None, "unknown", "huggingface"
+
+        top = max(candidates, key=lambda item: item.get("score", 0))
+        raw_label = str(top.get("label", "unknown")).strip().lower()
+        label_mapping = {
+            "benign": "benign",
+            "safe": "benign",
+            "phishing": "phishing",
+            "malware": "malware",
+            "defacement": "defacement",
+            "malicious": "malware",
+        }
+        normalized_label = label_mapping.get(raw_label, raw_label)
+        class_mapping = {"benign": 0, "defacement": 1, "phishing": 2, "malware": 3}
+        return class_mapping.get(normalized_label), normalized_label, "huggingface"
 
     def get_url_length(self, url):
         prefixes = ["http://", "https://"]
@@ -429,13 +493,14 @@ class AI_Scanner:
         return int(hash_object.hexdigest(), 16) % (10**8)
 
     def model_predict(self, url):
+        if not self.model_available or self.model is None:
+            return self._hf_predict(url)
+
         class_mapping = {0: "benign", 1: "defacement", 2: "phishing", 3: "malware"}
         numerical_values = self.get_numerical_values(url)
-        print(numerical_values)
         prediction_int = self.model.predict(
             np.array(list(numerical_values.values())).reshape(1, -1)
         )[0]
         prediction_label = class_mapping.get(prediction_int, "unknown")
-        return prediction_int, prediction_label
+        return prediction_int, prediction_label, "local_model"
     
-

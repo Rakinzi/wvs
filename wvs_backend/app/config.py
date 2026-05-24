@@ -1,69 +1,115 @@
-# app/config.py
-import os
 from datetime import timedelta
-import urllib.parse
+from pathlib import Path
+
+from app.settings import INSTANCE_DIR, settings
+
 
 class Config:
-    # Database config
-    SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL') or f'mysql+pymysql://root:{urllib.parse.quote_plus("@Changeme123")}@localhost/wvs_scanner'
+    SQLALCHEMY_DATABASE_URI = settings.database_url
     SQLALCHEMY_TRACK_MODIFICATIONS = False
-    
-    # JWT config
-    JWT_SECRET_KEY = os.environ.get('JWT_SECRET_KEY') or 'development-jwt-secret'
+
+    SECRET_KEY = settings.secret_key
+    JWT_SECRET_KEY = settings.effective_jwt_secret_key
     JWT_ACCESS_TOKEN_EXPIRES = timedelta(hours=1)
-    
-    # Celery config with RabbitMQ
-    CELERY_BROKER_URL = os.environ.get('CELERY_BROKER_URL') or 'amqp://guest:guest@localhost:5672//'
-    CELERY_RESULT_BACKEND = os.environ.get('CELERY_RESULT_BACKEND') or 'rpc://'
-    CELERY_TASK_SERIALIZER = 'json'
-    CELERY_RESULT_SERIALIZER = 'json'
-    CELERY_ACCEPT_CONTENT = ['json']
+    JWT_TOKEN_LOCATION = ["cookies"]
+    JWT_ERROR_MESSAGE_KEY = "error"
+    JWT_COOKIE_SECURE = settings.app_env.lower() == "production"
+    JWT_COOKIE_SAMESITE = "Lax"
+    JWT_COOKIE_CSRF_PROTECT = True
+    JWT_SESSION_COOKIE = True
+    JWT_ACCESS_CSRF_HEADER_NAME = "X-CSRF-TOKEN"
+    SESSION_COOKIE_SECURE = settings.app_env.lower() == "production"
+    SESSION_COOKIE_HTTPONLY = True
+    SESSION_COOKIE_SAMESITE = "Lax"
+    FRONTEND_BASE_URL = settings.frontend_base_url
+    CORS_ORIGINS = settings.allowed_frontend_origins
+    RESET_PASSWORD_TOKEN_TTL_MINUTES = settings.reset_password_token_ttl_minutes
+    SECURITY_HEADERS_ENABLED = settings.security_headers_enabled
+    ALLOW_PRIVATE_SCAN_TARGETS = settings.allow_private_scan_targets
+
+    SMTP_HOST = settings.smtp_host
+    SMTP_PORT = settings.smtp_port
+    SMTP_USE_TLS = settings.smtp_use_tls
+    SMTP_USER = settings.smtp_user
+    SMTP_PASSWORD = settings.smtp_password
+    SMTP_FROM_EMAIL = settings.smtp_from_email or settings.smtp_user
+
+    CELERY_BROKER_URL = settings.celery_broker_url
+    CELERY_RESULT_BACKEND = settings.celery_result_backend
+    CELERY_TASK_SERIALIZER = "json"
+    CELERY_RESULT_SERIALIZER = "json"
+    CELERY_ACCEPT_CONTENT = ["json"]
     CELERY_TASK_TRACK_STARTED = True
-    BROKER_CONNECTION_RETRY_ON_STARTUP = True
     CELERY_TASK_TIME_LIMIT = 30 * 60
-    
-    # Add Celery Beat schedule for SSL checking task
-    CELERY = {
-        'beat_schedule': {
-            'check-ssl-tls-updates-daily': {
-                'task': 'app.tasks.check_ssl_tls_updates',
-                'schedule': timedelta(hours=24),
-            },
+    CELERY_TIMEZONE = settings.celery_timezone
+    BROKER_CONNECTION_RETRY_ON_STARTUP = True
+    CELERY_IMPORTS = ("app.tasks.ssl_checks", "app.tasks.scan_jobs")
+    CELERY_BEAT_SCHEDULE = {
+        "check-ssl-tls-updates-daily": {
+            "task": "app.tasks.check_ssl_tls_updates",
+            "schedule": timedelta(hours=24),
         },
     }
-    
-    # Scanner config
+
     DNSBL_ENABLED = True
-    PHISHING_DB_URL = 'https://raw.githubusercontent.com/mitchellkrogza/Phishing.Database/master/phishing-domains-ACTIVE.txt'
-    REPORT_FOLDER = 'reports'
-    MAX_SCAN_TIME = 60  # Maximum scan time in seconds
-    
-    # Security settings
-    SECRET_KEY = os.environ.get('SECRET_KEY') or 'development-secret-key'
-    
-    # Cross-Origin settings
-    CORS_HEADERS = 'Content-Type,Authorization'
+    PHISHING_DB_URL = settings.phishing_db_url
+    REPORT_FOLDER = settings.report_folder
+    MAX_SCAN_TIME = settings.max_scan_time
+    AUTO_CREATE_TABLES = settings.auto_create_tables
+    CORS_HEADERS = "Content-Type,Authorization,X-CSRF-TOKEN"
+    RATELIMIT_STORAGE_URI = settings.ratelimit_storage_uri
+    RATELIMIT_HEADERS_ENABLED = True
+    REQUESTS_CACHE_NAME = settings.requests_cache_name
+    REQUESTS_CACHE_TTL_SECONDS = settings.requests_cache_ttl_seconds
+    ZAP_ENABLED = settings.zap_enabled
+    ZAP_BASE_URL = settings.zap_base_url
+    ZAP_API_KEY = settings.zap_api_key
+    ZAP_SPIDER_MAX_MINUTES = settings.zap_spider_max_minutes
+    ZAP_ACTIVE_SCAN_MAX_MINUTES = settings.zap_active_scan_max_minutes
+
+    @classmethod
+    def validate(cls) -> None:
+        INSTANCE_DIR.mkdir(parents=True, exist_ok=True)
+        Path(cls.REPORT_FOLDER).mkdir(parents=True, exist_ok=True)
+
 
 class DevelopmentConfig(Config):
-    DEBUG = True
-    
+    DEBUG = settings.debug or settings.app_env.lower() == "development"
+    AUTO_CREATE_TABLES = settings.auto_create_tables
+
+
 class ProductionConfig(Config):
     DEBUG = False
-    
-    # Use more secure settings in production
     JWT_COOKIE_SECURE = True
     JWT_ACCESS_TOKEN_EXPIRES = timedelta(minutes=30)
-    
-    # Use environment variables for all secrets in production
-    JWT_SECRET_KEY = os.environ.get('JWT_SECRET_KEY')
-    SECRET_KEY = os.environ.get('SECRET_KEY')
-    
-    # Database URL must be set in environment
-    SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL')
-    
-    # RabbitMQ for production Celery
-    CELERY_BROKER_URL = os.environ.get('CELERY_BROKER_URL')
-    CELERY_RESULT_BACKEND = os.environ.get('CELERY_RESULT_BACKEND')
+    SECRET_KEY = settings.secret_key
+    JWT_SECRET_KEY = settings.jwt_secret_key
+    SQLALCHEMY_DATABASE_URI = settings.database_url
+    CELERY_BROKER_URL = settings.celery_broker_url
+    CELERY_RESULT_BACKEND = settings.celery_result_backend
 
-# Default to development config unless production is explicitly specified
-config = ProductionConfig if os.environ.get('FLASK_ENV') == 'production' else DevelopmentConfig
+    @classmethod
+    def validate(cls) -> None:
+        super().validate()
+        missing = [
+            name
+            for name, value in {
+                "SECRET_KEY": cls.SECRET_KEY,
+                "JWT_SECRET_KEY": cls.JWT_SECRET_KEY,
+                "DATABASE_URL": cls.SQLALCHEMY_DATABASE_URI,
+                "CELERY_BROKER_URL": cls.CELERY_BROKER_URL,
+                "CELERY_RESULT_BACKEND": cls.CELERY_RESULT_BACKEND,
+            }.items()
+            if not value
+        ]
+        if missing:
+            raise RuntimeError(
+                f"Missing required production environment variables: {', '.join(missing)}"
+            )
+
+
+def get_config():
+    environment = settings.app_env.lower()
+    if environment == "production":
+        return ProductionConfig
+    return DevelopmentConfig

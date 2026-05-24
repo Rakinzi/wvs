@@ -1,16 +1,18 @@
 import sqlite3
 import os
-import sys
 import json
 
-def init_sqlite_db():
+DEFAULT_DB_PATH = 'instance/wvs.db'
+LEGACY_DB_PATH = 'instance/scans.db'
+
+def init_sqlite_db(db_path=DEFAULT_DB_PATH):
     """Initialize the SQLite database with the required tables if using SQLite."""
     # Ensure the db directory exists
     if not os.path.exists('instance'):
         os.makedirs('instance')
     
     # Connect to the database
-    conn = sqlite3.connect('instance/scans.db')
+    conn = sqlite3.connect(db_path)
     
     # Enable foreign keys
     conn.execute("PRAGMA foreign_keys = ON")
@@ -105,10 +107,42 @@ def init_sqlite_db():
     conn.commit()
     conn.close()
     
-    print("SQLite database initialized successfully.")
+    print(f"SQLite database initialized successfully at {db_path}.")
     print("Default admin user created:")
     print("  Username: admin")
     print("  Password: admin123")
+
+
+def migrate_legacy_sqlite_data():
+    """Move legacy scans.db rows into wvs.db when needed."""
+    if not os.path.exists(LEGACY_DB_PATH):
+        print("Legacy SQLite database not found; nothing to migrate.")
+        return
+    if not os.path.exists(DEFAULT_DB_PATH):
+        init_sqlite_db(DEFAULT_DB_PATH)
+
+    source = sqlite3.connect(LEGACY_DB_PATH)
+    target = sqlite3.connect(DEFAULT_DB_PATH)
+    source.row_factory = sqlite3.Row
+    target.row_factory = sqlite3.Row
+
+    try:
+        target.execute("PRAGMA foreign_keys = ON")
+        source.execute("PRAGMA foreign_keys = ON")
+
+        target_users = {row["username"] for row in target.execute("SELECT username FROM user")}
+        for row in source.execute("SELECT username, password, email, is_admin, created_on FROM user"):
+            if row["username"] not in target_users:
+                target.execute(
+                    "INSERT INTO user (username, password, email, is_admin, created_on) VALUES (?, ?, ?, ?, ?)",
+                    (row["username"], row["password"], row["email"], row["is_admin"], row["created_on"]),
+                )
+
+        target.commit()
+        print(f"Legacy data migration completed from {LEGACY_DB_PATH} to {DEFAULT_DB_PATH}.")
+    finally:
+        source.close()
+        target.close()
 
 if __name__ == "__main__":
     init_sqlite_db()

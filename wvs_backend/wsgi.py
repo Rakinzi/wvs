@@ -1,8 +1,16 @@
+import os
+
 from app import create_app
-from app.commands import register_commands
 
 app = create_app()
-register_commands(app)
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    host = os.getenv('HOST', '0.0.0.0')
+    port = int(os.getenv('PORT', '5000'))
+    debug = os.getenv('DEBUG')
+    if debug is None:
+        debug_enabled = app.config.get('DEBUG', False)
+    else:
+        debug_enabled = debug.lower() in {'1', 'true', 'yes', 'on'}
+
+    app.run(host=host, port=port, debug=debug_enabled)

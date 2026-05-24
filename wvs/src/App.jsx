@@ -1,60 +1,72 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
+import { ThemeContext, useThemeProvider } from './hooks/useTheme';
 import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate, useLocation, useParams } from 'react-router-dom';
+import { clearSession, getSessionUsername, isAuthenticated } from './lib/auth';
+import { apiJson } from './lib/api';
 import Dashboard from './components/Dashboard';
+import Scanners from './components/Scanners';
 import ScanReport from './components/ScanReport';
 import ScanHistory from './components/ScanHistory';
-import Navbar from './components/Navbar';
-import Footer from './components/Footer';
+import Sidebar from './components/Sidebar';
 import Login from './components/Login';
 import Register from './components/Register';
+import ResetPassword from './components/ResetPassword';
+import VerifyEmail from './components/VerifyEmail';
 import Settings from './components/Settings';
 import BlockedSites from './components/BlockedSites';
 import BlockedAccess from './components/BlockedAccess';
 
 // A wrapper component for authenticated routes
 const ProtectedRoute = ({ children }) => {
-  const token = localStorage.getItem('token');
-  const username = localStorage.getItem('username');
-  
-  if (!token || !username) {
+  if (!isAuthenticated()) {
     return <Navigate to="/login" replace />;
   }
   
   return children;
 };
 
-// Layout component that includes the Navbar and Footer
+const AUTH_ROUTES = ['/login', '/register', '/reset-password', '/verify-email'];
+
+// Layout component that includes the Sidebar and Footer
 const Layout = ({ children }) => {
   const location = useLocation();
-  const isAuthenticated = localStorage.getItem('token') && localStorage.getItem('username');
+  const authenticated = isAuthenticated();
   const navigate = useNavigate();
-  
-  const handleLogout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('username');
-    navigate('/login');
+  const isAuthRoute = AUTH_ROUTES.includes(location.pathname);
+
+  const handleLogout = async () => {
+    try {
+      await apiJson('/logout', { method: 'POST', auth: true });
+    } catch {
+      // Clear client session even if the server cookie is already missing or expired.
+    } finally {
+      clearSession();
+      navigate('/login');
+    }
   };
-  
-  // Determine current page for the Navbar
+
   const getCurrentPage = () => {
     const path = location.pathname;
     if (path === '/') return 'dashboard';
     if (path.startsWith('/report')) return 'report';
     return path.replace('/', '');
   };
-  
+
+  if (isAuthRoute) {
+    return <>{children}</>;
+  }
+
   return (
-    <div className="flex flex-col min-h-screen bg-gray-50">
-      <Navbar 
-        isAuthenticated={isAuthenticated} 
-        onLogout={handleLogout} 
+    <div className="flex min-h-screen" style={{ background: 'var(--color-bg)' }}>
+      <Sidebar
+        isAuthenticated={authenticated}
+        onLogout={handleLogout}
         currentPage={getCurrentPage()}
         navigateTo={(page) => navigate(page === 'dashboard' ? '/' : `/${page}`)}
       />
-      <main className="flex-grow">
+      <main className="flex-1 min-w-0">
         {children}
       </main>
-      <Footer />
     </div>
   );
 };
@@ -72,6 +84,20 @@ const DashboardWrapper = () => {
   };
   
   return <Dashboard navigateTo={navigateTo} />;
+};
+
+const ScannersWrapper = () => {
+  const navigate = useNavigate();
+
+  const navigateTo = (page, scanId) => {
+    if (page === 'report' && scanId) {
+      navigate(`/report/${scanId}`);
+    } else {
+      navigate(page === 'dashboard' ? '/' : `/${page}`);
+    }
+  };
+
+  return <Scanners navigateTo={navigateTo} />;
 };
 
 const ScanReportWrapper = () => {
@@ -101,19 +127,18 @@ const ScanHistoryWrapper = () => {
 
 const SettingsWrapper = () => {
   const navigate = useNavigate();
-  const [userData, setUserData] = useState(null);
-  
-  useEffect(() => {
-    const username = localStorage.getItem('username');
-    if (username) {
-      setUserData({ username });
-    }
+  const [userData, setUserData] = React.useState({ username: getSessionUsername() });
+
+  React.useEffect(() => {
+    apiJson('/profile', { auth: true })
+      .then(({ data }) => setUserData(data))
+      .catch(() => {});
   }, []);
-  
+
   const navigateTo = (page) => {
     navigate(page === 'dashboard' ? '/' : `/${page}`);
   };
-  
+
   return <Settings userData={userData} navigateTo={navigateTo} />;
 };
 
@@ -138,32 +163,32 @@ const BlockedAccessWrapper = () => {
 };
 
 const App = () => {
-  const [user, setUser] = useState(null);
-  
-  useEffect(() => {
-    // Check if user is already logged in
-    const username = localStorage.getItem('username');
-    if (username) {
-      setUser({ username });
-    }
-  }, []);
-  
-  const handleLogin = (userData) => {
-    setUser(userData);
-  };
-  
+  const themeValue = useThemeProvider();
   return (
+    <ThemeContext.Provider value={themeValue}>
     <Router>
       <Routes>
         <Route path="/login" element={
           <Layout>
-            <Login onLogin={handleLogin} />
+            <Login />
           </Layout>
         } />
         
         <Route path="/register" element={
           <Layout>
             <Register />
+          </Layout>
+        } />
+
+        <Route path="/reset-password" element={
+          <Layout>
+            <ResetPassword />
+          </Layout>
+        } />
+
+        <Route path="/verify-email" element={
+          <Layout>
+            <VerifyEmail />
           </Layout>
         } />
         
@@ -175,6 +200,14 @@ const App = () => {
           </Layout>
         } />
         
+        <Route path="/scanners" element={
+          <Layout>
+            <ProtectedRoute>
+              <ScannersWrapper />
+            </ProtectedRoute>
+          </Layout>
+        } />
+
         <Route path="/report/:scanId" element={
           <Layout>
             <ProtectedRoute>
@@ -219,6 +252,7 @@ const App = () => {
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Router>
+    </ThemeContext.Provider>
   );
 };
 

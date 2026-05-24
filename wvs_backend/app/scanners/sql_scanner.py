@@ -105,15 +105,17 @@ class AdvancedSQLiScanner:
     def _test_forms(self, url):
         results = []
         try:
-            response = self.session.get(url)
-            soup = BeautifulSoup(response.text, 'html.parser')
-            
+            baseline_response = self.session.get(url)
+            baseline_text = baseline_response.text
+            soup = BeautifulSoup(baseline_text, 'html.parser')
+
             for form in soup.find_all('form'):
                 form_details = self._parse_form(form)
                 for payload in self.payloads:
-                    # Get response from form submission
                     submission_response, response_time = self._submit_form(form_details, payload, url)
-                    if submission_response and self._analyze_response(submission_response, payload, response_time):
+                    if submission_response and self._analyze_response(
+                        submission_response, payload, response_time, baseline_text
+                    ):
                         results.append(self._create_vulnerability(form_details, payload, submission_response))
         except Exception as e:
             print(f"Form test error: {str(e)}")
@@ -208,18 +210,24 @@ class AdvancedSQLiScanner:
             if not any(c in p for c in ['\n', '\r', '\x00'])
         ]
 
-    def _analyze_response(self, response, payload, response_time):
+    def _analyze_response(self, response, payload, response_time, baseline_text=None):
         try:
-            # Check for errors
+            # Error-based detection
             for db_type, errors in self.sql_errors.items():
                 if any(error in response.text for error in errors):
                     return True
-            
-            # Check for time delays
+
+            # Time-based detection
             if 'SLEEP' in payload or 'BENCHMARK' in payload:
                 if response_time >= self.time_based_threshold:
                     return True
-            
+
+            # Boolean-blind detection: compare true vs false page lengths
+            if baseline_text is not None and ('OR 1=1' in payload or "OR '1'='1" in payload):
+                len_diff = abs(len(response.text) - len(baseline_text))
+                if len_diff > 50:
+                    return True
+
             return False
         except Exception as e:
             print(f"Analysis error: {str(e)}")

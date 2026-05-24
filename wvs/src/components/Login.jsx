@@ -1,196 +1,325 @@
 import React, { useState, useEffect } from 'react';
-import { Camera, Shield, Lock, User, AlertTriangle, Eye, EyeOff } from 'lucide-react';
+import { Shield, Lock, AlertTriangle, Eye, EyeOff, ArrowRight, Mail, X, CheckCircle, AtSign } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { saveSession } from '../lib/auth';
+import { apiJson, ApiError } from '../lib/api';
 
-const Login = ({ onLogin, navigateTo }) => {
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
+const ForgotPasswordModal = ({ onClose }) => {
+  const [email, setEmail]       = useState('');
+  const [loading, setLoading]   = useState(false);
+  const [sent, setSent]         = useState(false);
+  const [error, setError]       = useState('');
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!email) { setError('Please enter your email address'); return; }
+    setLoading(true);
+    setError('');
+    try {
+      await apiJson('/forgot-password', { method: 'POST', json: true, body: { email } });
+      setSent(true);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Failed to send reset email');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.75)' }}
+      onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="w-full max-w-sm rounded-2xl overflow-hidden shadow-2xl"
+        style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)' }}>
+
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4" style={{ borderBottom: '1px solid var(--color-border-subtle)' }}>
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: '#3B82F620' }}>
+              <Lock size={13} style={{ color: 'var(--color-primary)' }} />
+            </div>
+            <h3 className="text-sm font-semibold" style={{ color: 'var(--color-text)' }}>Reset Password</h3>
+          </div>
+          <button onClick={onClose} className="cursor-pointer" style={{ color: 'var(--color-text-dim)' }} aria-label="Close">
+            <X size={16} />
+          </button>
+        </div>
+
+        <div className="px-6 py-5">
+          {sent ? (
+            <div className="flex flex-col items-center gap-3 py-3 text-center">
+              <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ background: '#22C55E20' }}>
+                <CheckCircle size={22} style={{ color: '#22C55E' }} />
+              </div>
+              <p className="text-sm font-medium" style={{ color: 'var(--color-text)' }}>Check your inbox</p>
+              <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
+                If an account exists for <strong style={{ color: 'var(--color-text)' }}>{email}</strong>, you'll receive a password reset link shortly.
+              </p>
+              <button onClick={onClose} className="mt-2 w-full py-2.5 rounded-lg text-sm font-semibold text-white cursor-pointer"
+                style={{ background: 'var(--color-primary)' }}>
+                Back to Sign In
+              </button>
+            </div>
+          ) : (
+            <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+              <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
+                Enter the email address associated with your account and we'll send you a reset link.
+              </p>
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="reset-email" className="text-xs font-medium" style={{ color: 'var(--color-text-muted)' }}>
+                  Email address
+                </label>
+                <div className="relative">
+                  <Mail size={14} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--color-text-dim)' }} />
+                  <input
+                    id="reset-email"
+                    type="email"
+                    autoComplete="email"
+                    value={email}
+                    onChange={e => { setEmail(e.target.value); setError(''); }}
+                    placeholder="you@example.com"
+                    className="w-full pl-9 pr-4 py-2.5 rounded-lg text-sm outline-none"
+                    style={{
+                      background: 'var(--color-card)',
+                      border: `1px solid ${error ? 'var(--color-danger)' : 'var(--color-border)'}`,
+                      color: 'var(--color-text)',
+                    }}
+                  />
+                </div>
+                {error && <p className="text-xs" style={{ color: 'var(--color-danger)' }}>{error}</p>}
+              </div>
+              <div className="flex gap-2 pt-1">
+                <button type="button" onClick={onClose}
+                  className="flex-1 py-2.5 rounded-lg text-sm cursor-pointer"
+                  style={{ background: 'var(--color-card)', color: 'var(--color-text-muted)', border: '1px solid var(--color-border)' }}>
+                  Cancel
+                </button>
+                <button type="submit" disabled={loading}
+                  className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-semibold text-white cursor-pointer"
+                  style={{ background: 'var(--color-primary)', opacity: loading ? 0.7 : 1 }}>
+                  {loading ? (
+                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  ) : 'Send Reset Link'}
+                </button>
+              </div>
+            </form>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const Login = () => {
+  const [identifier, setIdentifier]     = useState('');
+  const [password, setPassword]         = useState('');
+  const [error, setError]               = useState('');
+  const [isLoading, setIsLoading]       = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [formState, setFormState] = useState('idle');
+  const [visible, setVisible]           = useState(false);
+  const [showForgot, setShowForgot]     = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
-    document.title = 'Login - Web Vulnerability Scanner';
-    setFormState('active');
+    document.title = 'Sign In — WebVulnScanner';
+    requestAnimationFrame(() => setVisible(true));
   }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
-    if (!username || !password) {
-      setError('Please enter both username and password');
-      setFormState('error');
-      setTimeout(() => setFormState('active'), 500);
+    if (!identifier || !password) {
+      setError('Please enter your username or email and password');
       return;
     }
-    
     setIsLoading(true);
     setError('');
-    setFormState('submitting');
-    
     try {
-      const response = await fetch('http://localhost:5000/login', {
+      const { data } = await apiJson('/login', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password })
+        json: true,
+        credentials: 'include',
+        body: { identifier, password },
       });
-      
-      const data = await response.json();
-      
-      if (response.ok) {
-        localStorage.setItem('token', data.access_token);
-        localStorage.setItem('username', data.username);
-        setFormState('success');
-        
-        // Call onLogin to update parent component state
-        if (onLogin) {
-          onLogin({ username: data.username });
-        }
-        
-        // Use navigate directly instead of timeout
-        setTimeout(() => {
-          // Use React Router's navigate for a cleaner transition
-          navigate('/');
-        }, 800);
-      } else {
-        setError(data.error || 'Failed to login');
-        setFormState('error');
-        setTimeout(() => setFormState('active'), 500);
-      }
+      saveSession({
+        username: data.username,
+        userId: data.user_id,
+        expiresInSeconds: data.expires_in,
+      });
+      navigate('/');
     } catch (err) {
-      setError('Failed to connect to server');
-      setFormState('error');
-      setTimeout(() => setFormState('active'), 500);
+      setError(err instanceof ApiError ? err.message : 'Failed to connect to server');
     } finally {
       setIsLoading(false);
     }
   };
 
-  const togglePasswordVisibility = () => {
-    setShowPassword(!showPassword);
-  };
-
-  const handleRegisterClick = () => {
-    navigate('/register');
-  };
-
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-900 via-blue-800 to-blue-700 overflow-hidden">
-      <div className={`absolute inset-0 overflow-hidden ${formState === 'active' ? 'opacity-100' : 'opacity-0'} transition-opacity duration-1000`}>
-        <div className="absolute top-0 left-0 w-full h-full">
-          <div className="absolute top-10 left-10 w-6 h-6 bg-white rounded-full opacity-20 animate-ping" style={{ animationDuration: '3s' }}></div>
-          <div className="absolute top-1/4 right-1/3 w-4 h-4 bg-white rounded-full opacity-10 animate-ping" style={{ animationDuration: '5s' }}></div>
-          <div className="absolute bottom-1/3 left-1/4 w-8 h-8 bg-white rounded-full opacity-15 animate-ping" style={{ animationDuration: '7s' }}></div>
-          <div className="absolute bottom-10 right-10 w-5 h-5 bg-white rounded-full opacity-20 animate-ping" style={{ animationDuration: '4s' }}></div>
-        </div>
-      </div>
+    <>
+    <div
+      className="min-h-screen flex items-center justify-center px-4"
+      style={{ background: 'var(--color-bg)' }}
+    >
+      {/* Background grid */}
+      <div
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          backgroundImage:
+            'linear-gradient(var(--color-border-subtle) 1px, transparent 1px), linear-gradient(90deg, var(--color-border-subtle) 1px, transparent 1px)',
+          backgroundSize: '48px 48px',
+          opacity: 0.4,
+        }}
+      />
 
-      <div className={`relative w-full max-w-md transform transition-all duration-500 ease-in-out 
-        ${formState === 'idle' ? 'opacity-0 translate-y-10' : 'opacity-100 translate-y-0'} 
-        ${formState === 'submitting' ? 'scale-95' : ''} 
-        ${formState === 'success' ? 'scale-105 opacity-0' : ''} 
-        ${formState === 'error' ? 'translate-x-1 translate-y-1 translate-x-0 translate-y-0' : ''}`}>
-        
-        <div className="bg-white rounded-2xl shadow-2xl overflow-hidden">
-          <div className="relative h-28 bg-blue-800 flex items-center justify-center">
-            <div className="absolute inset-0 overflow-hidden">
-              <div className="absolute -top-10 -left-10 w-40 h-40 bg-blue-600 rounded-full opacity-30"></div>
-              <div className="absolute -bottom-10 -right-10 w-40 h-40 bg-blue-600 rounded-full opacity-30"></div>
+      <div
+        className="relative w-full max-w-md transition-all duration-500"
+        style={{ opacity: visible ? 1 : 0, transform: visible ? 'translateY(0)' : 'translateY(16px)' }}
+      >
+        {/* Card */}
+        <div
+          className="rounded-2xl overflow-hidden"
+          style={{
+            background: 'var(--color-surface)',
+            border: '1px solid var(--color-border)',
+            boxShadow: '0 24px 64px rgba(0,0,0,0.5)',
+          }}
+        >
+          {/* Header band */}
+          <div
+            className="px-8 pt-8 pb-6 flex flex-col items-center gap-3"
+            style={{ borderBottom: '1px solid var(--color-border-subtle)' }}
+          >
+            <div
+              className="w-14 h-14 rounded-2xl flex items-center justify-center"
+              style={{ background: 'var(--color-primary)', boxShadow: '0 0 32px #3B82F640' }}
+            >
+              <Shield size={26} className="text-white" />
             </div>
-            
-            <div className="relative flex flex-col items-center">
-              <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center shadow-lg mb-2">
-                <Shield size={28} className="text-blue-800" />
-              </div>
-              <h2 className="text-white text-xl font-bold">Web Vulnerability Scanner</h2>
+            <div className="text-center">
+              <h1 className="text-xl font-semibold" style={{ color: 'var(--color-text)' }}>WebVulnScanner</h1>
+              <p className="text-sm mt-0.5" style={{ color: 'var(--color-text-muted)' }}>Security Intelligence Platform</p>
             </div>
           </div>
-          
-          <div className="p-8">
-            <h3 className="text-2xl font-bold text-gray-800 mb-6 text-center">Sign In</h3>
-            
-            <form onSubmit={handleSubmit} className="space-y-6">
-              <div className="space-y-4">
+
+          {/* Form */}
+          <div className="px-8 py-7">
+            <h2 className="text-lg font-semibold mb-6" style={{ color: 'var(--color-text)' }}>Sign in to continue</h2>
+
+            <form onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
+              {/* Username or Email */}
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="identifier" className="text-xs font-medium" style={{ color: 'var(--color-text-muted)' }}>
+                  Username or Email
+                </label>
                 <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <User size={18} className="text-blue-800" />
-                  </div>
+                  <AtSign size={15} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--color-text-dim)' }} />
                   <input
+                    id="identifier"
                     type="text"
-                    id="username"
-                    className="pl-10 w-full px-4 py-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
-                    placeholder="Username"
-                    value={username}
-                    onChange={(e) => setUsername(e.target.value)}
+                    autoComplete="username"
+                    value={identifier}
+                    onChange={(e) => setIdentifier(e.target.value)}
+                    placeholder="Username or email address"
+                    className="w-full pl-9 pr-4 py-2.5 rounded-lg text-sm outline-none transition-all duration-150"
+                    style={{
+                      background: 'var(--color-card)',
+                      border: '1px solid var(--color-border)',
+                      color: 'var(--color-text)',
+                    }}
                   />
-                </div>
-                
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <Lock size={18} className="text-blue-800" />
-                  </div>
-                  <input
-                    type={showPassword ? "text" : "password"}
-                    id="password"
-                    className="pl-10 w-full px-4 py-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
-                    placeholder="Password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                  />
-                  <div className="absolute inset-y-0 right-0 pr-3 flex items-center">
-                    <button
-                      type="button"
-                      onClick={togglePasswordVisibility}
-                      className="text-gray-400 hover:text-gray-600 focus:outline-none"
-                    >
-                      {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                    </button>
-                  </div>
                 </div>
               </div>
-              
+
+              {/* Password */}
+              <div className="flex flex-col gap-1.5">
+                <div className="flex items-center justify-between">
+                  <label htmlFor="password" className="text-xs font-medium" style={{ color: 'var(--color-text-muted)' }}>
+                    Password
+                  </label>
+                  <button type="button" onClick={() => setShowForgot(true)}
+                    className="text-xs cursor-pointer transition-colors duration-150"
+                    style={{ color: 'var(--color-primary)' }}>
+                    Forgot password?
+                  </button>
+                </div>
+                <div className="relative">
+                  <Lock size={15} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--color-text-dim)' }} />
+                  <input
+                    id="password"
+                    type={showPassword ? 'text' : 'password'}
+                    autoComplete="current-password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="Enter password"
+                    className="w-full pl-9 pr-10 py-2.5 rounded-lg text-sm outline-none transition-all duration-150"
+                    style={{
+                      background: 'var(--color-card)',
+                      border: '1px solid var(--color-border)',
+                      color: 'var(--color-text)',
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(v => !v)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 cursor-pointer"
+                    style={{ color: 'var(--color-text-dim)' }}
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  >
+                    {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                  </button>
+                </div>
+              </div>
+
               {error && (
-                <div className="flex items-center text-red-500 text-sm p-2 bg-red-50 rounded-lg">
-                  <AlertTriangle size={16} className="mr-2 flex-shrink-0" />
-                  <span>{error}</span>
+                <div
+                  className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm"
+                  role="alert"
+                  style={{ background: 'var(--color-danger-dim)', color: 'var(--color-danger)', border: '1px solid #EF444430' }}
+                >
+                  <AlertTriangle size={14} className="flex-shrink-0" />
+                  {error}
                 </div>
               )}
-              
+
               <button
                 type="submit"
                 disabled={isLoading}
-                className={`w-full py-3 px-4 rounded-lg font-bold text-white transition-all duration-300 
-                ${isLoading 
-                  ? 'bg-blue-400 cursor-not-allowed' 
-                  : 'bg-blue-800 hover:bg-blue-700 shadow-lg hover:shadow-xl'}`}
+                className="flex items-center justify-center gap-2 w-full py-2.5 rounded-lg text-sm font-semibold text-white transition-all duration-150 cursor-pointer mt-1"
+                style={{
+                  background: isLoading ? 'var(--color-primary-dim)' : 'var(--color-primary)',
+                  opacity: isLoading ? 0.7 : 1,
+                }}
               >
                 {isLoading ? (
-                  <div className="flex items-center justify-center">
-                    <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-white mr-2"></div>
-                    <span>Signing in...</span>
-                  </div>
+                  <>
+                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    Signing in…
+                  </>
                 ) : (
-                  'Sign in'
+                  <>
+                    Sign in
+                    <ArrowRight size={15} />
+                  </>
                 )}
               </button>
-              
-              <div className="flex items-center justify-center text-gray-600 text-sm">
-                <span>Don't have an account?</span>
-                <button
-                  type="button"
-                  onClick={handleRegisterClick}
-                  className="ml-2 text-blue-800 font-medium hover:text-blue-600 focus:outline-none"
-                >
-                  Register now
-                </button>
-              </div>
             </form>
+
+            <p className="text-sm text-center mt-5" style={{ color: 'var(--color-text-dim)' }}>
+              Don't have an account?{' '}
+              <button
+                type="button"
+                onClick={() => navigate('/register')}
+                className="font-medium cursor-pointer"
+                style={{ color: 'var(--color-primary)' }}
+              >
+                Register now
+              </button>
+            </p>
           </div>
         </div>
       </div>
     </div>
+
+    {showForgot && <ForgotPasswordModal onClose={() => setShowForgot(false)} />}
+    </>
   );
 };
 
