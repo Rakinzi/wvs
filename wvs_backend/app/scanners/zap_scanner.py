@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+import socket
 from typing import Any
 
-from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 from zapv2 import ZAPv2
 
 from app.settings import settings
@@ -23,12 +23,17 @@ class ZAPScanner:
             }
             self.client = ZAPv2(apikey=self.api_key or None, proxies=proxies)
 
-    @retry(
-        retry=retry_if_exception_type(Exception),
-        stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=1, min=1, max=5),
-        reraise=True,
-    )
+    def _zap_reachable(self) -> bool:
+        from urllib.parse import urlparse
+        parsed = urlparse(self.base_url)
+        host = parsed.hostname or "localhost"
+        port = parsed.port or 8080
+        try:
+            with socket.create_connection((host, port), timeout=2):
+                return True
+        except OSError:
+            return False
+
     def _status(self):
         return self.client.core.version
 
@@ -43,6 +48,14 @@ class ZAPScanner:
             }
 
         try:
+            if not self._zap_reachable():
+                return {
+                    "enabled": True,
+                    "status": "unavailable",
+                    "issues": [],
+                    "alerts": [],
+                    "summary": f"ZAP is not running at {self.base_url}",
+                }
             self._status()
             self.client.urlopen(url)
             spider_id = self.client.spider.scan(url)

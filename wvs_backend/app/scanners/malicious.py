@@ -89,7 +89,7 @@ class EnhancedMaliciousDetector:
                 # Additional lists
                 for url in self.additional_lists:
                     try:
-                        resp = self._get(url, timeout=10)
+                        resp = self._get(url, timeout=5)
                         if resp.status_code == 200:
                             for line in resp.text.splitlines():
                                 line = line.strip().lower()

@@ -163,6 +163,15 @@ def _safe_text(value, limit=None):
     return escape(text)
 
 
+def _strip_html(text: str) -> str:
+    """Remove HTML tags and collapse whitespace for clean PDF display."""
+    import re
+    text = re.sub(r'<[^>]+>', ' ', text)
+    text = re.sub(r'&[a-z]+;', ' ', text)
+    text = re.sub(r'\s+', ' ', text)
+    return text.strip()
+
+
 def _findings_block(items, color, ST):
     """Render a list of findings as a styled table block."""
     rows = []
@@ -738,79 +747,84 @@ def generate_report(results):
                 for email in discovered_emails[:20]
             ], INFO, ST))
             story.append(sp(4))
+        from reportlab.platypus import KeepTogether
         for i in exp_issues:
             sev = i.get('severity', 'Medium')
-            sev_color = DANGER if sev in ('Critical', 'High') else (WARN if sev == 'Medium' else DIM)
-            stack_label = i.get('stack', '')
-            stack_str = f' [{stack_label}]' if stack_label and stack_label != 'universal' else ''
+            sev_colors = {
+                'Critical': DANGER, 'High': DANGER,
+                'Medium': WARN, 'Low': INFO,
+            }
+            sev_color = sev_colors.get(sev, DIM)
             cl = i.get('content_length')
-            size_str = f'  {cl:,} bytes' if cl else ''
+            issue_url = _safe_text(i.get('url') or i.get('path') or '')
             issue_emails = i.get('emails') or []
-            header_parts = [
-                Paragraph(
-                    f'<font color="#{sev_color.hexval()[2:]}">[{sev}]</font>  '
-                    f'<b>{i.get("name", "Exposed path")}</b>',
-                    ST['body_w'],
-                ),
-                Paragraph(
-                    f'<font color="#{INFO.hexval()[2:]}">{i.get("url", i.get("path", ""))}</font>'
-                    f'<font color="#{DIM.hexval()[2:]}">{stack_str}{size_str}</font>',
-                    ST['mono'],
-                ),
+
+            # Build structured metadata rows
+            meta_rows = [
+                [Paragraph('SEVERITY', ST['label']),
+                 Paragraph(f'<font color="#{sev_color.hexval()[2:]}">{sev}</font>', ST['body_w'])],
+                [Paragraph('URL', ST['label']),
+                 Paragraph(issue_url, ST['mono'])],
             ]
+            if cl:
+                meta_rows.append([
+                    Paragraph('SIZE', ST['label']),
+                    Paragraph(f'{cl:,} bytes', ST['body_w']),
+                ])
             if issue_emails:
-                header_parts.append(
+                meta_rows.append([
+                    Paragraph('EMAILS FOUND', ST['label']),
                     Paragraph(
-                        f'<font color="#{INFO.hexval()[2:]}">Emails:</font> '
-                        f'<font color="#{DIM.hexval()[2:]}">{", ".join(_obfuscate_email(email) for email in issue_emails[:10])}</font>',
+                        ', '.join(_obfuscate_email(e) for e in issue_emails[:5]),
                         ST['body_w'],
-                    )
-                )
-            preview = (i.get('content_preview') or '').strip()
-            block_rows = [header_parts]
-            if preview:
-                # Show up to 40 lines of the actual file content
-                lines = preview.splitlines()[:40]
-                preview_text = '\n'.join(lines)
-                # Escape XML special chars for ReportLab
-                preview_safe = (
-                    preview_text
-                    .replace('&', '&amp;')
-                    .replace('<', '&lt;')
-                    .replace('>', '&gt;')
-                )
-                block_rows.append([
-                    Paragraph(
-                        f'<font color="#{DIM.hexval()[2:]}">Content preview:</font><br/>'
-                        f'<font color="#{INFO.hexval()[2:]}">{preview_safe}</font>',
-                        ParagraphStyle(
-                            'preview',
-                            fontName='Courier',
-                            fontSize=7,
-                            leading=10,
-                            textColor=INFO,
-                            backColor=ELEVATED,
-                            leftIndent=6,
-                            rightIndent=6,
-                            spaceBefore=3,
-                            spaceAfter=3,
-                        ),
                     ),
                 ])
-            tbl = Table(
-                block_rows,
-                colWidths=[PAGE_W - 2 * MARGIN - 12],
+
+            # Content preview — strip HTML, show only plaintext files
+            raw_preview = (i.get('content_preview') or '').strip()
+            import re as _re
+            looks_like_html = bool(_re.search(r'<\s*(html|head|body|div|script)\b', raw_preview, _re.I))
+            if raw_preview and not looks_like_html:
+                clean = _strip_html(raw_preview)[:400]
+                if clean:
+                    meta_rows.append([
+                        Paragraph('PREVIEW', ST['label']),
+                        Paragraph(
+                            escape(clean),
+                            ParagraphStyle('prev', fontName='Courier', fontSize=7,
+                                           leading=10, textColor=INFO),
+                        ),
+                    ])
+
+            meta_t = Table(
+                meta_rows,
+                colWidths=[72, PAGE_W - 2 * MARGIN - 72],
                 style=TableStyle([
-                    ('BACKGROUND', (0, 0), (-1, -1), CARD),
-                    ('BOX',        (0, 0), (-1, -1), 0.5, sev_color),
-                    ('LEFTPADDING',  (0, 0), (-1, -1), 8),
-                    ('RIGHTPADDING', (0, 0), (-1, -1), 8),
-                    ('TOPPADDING',   (0, 0), (-1, -1), 6),
-                    ('BOTTOMPADDING',(0, 0), (-1, -1), 6),
-                    ('ROWBACKGROUNDS', (0, 1), (-1, -1), [ELEVATED]),
+                    ('BACKGROUND',    (0, 0), (-1, -1), CARD),
+                    ('LINEBELOW',     (0, 0), (-1, -2), 0.3, BORDER),
+                    ('TOPPADDING',    (0, 0), (-1, -1), 4),
+                    ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+                    ('LEFTPADDING',   (0, 0), (-1, -1), 10),
+                    ('VALIGN',        (0, 0), (-1, -1), 'TOP'),
                 ]),
             )
-            story.append(KeepTogether([tbl, sp(4)]))
+
+            title_row = Table(
+                [[Paragraph(
+                    f'<b>{_safe_text(i.get("name", "Exposed path"))}</b>',
+                    ParagraphStyle('etitle', fontName='Helvetica-Bold', fontSize=9,
+                                   leading=12, textColor=TEXT),
+                )]],
+                colWidths=[PAGE_W - 2 * MARGIN],
+                style=TableStyle([
+                    ('BACKGROUND',    (0, 0), (-1, -1), sev_color if sev in ('Critical', 'High') else ELEVATED),
+                    ('LEFTPADDING',   (0, 0), (-1, -1), 10),
+                    ('TOPPADDING',    (0, 0), (-1, -1), 6),
+                    ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+                    ('LINEABOVE',     (0, 0), (-1, 0),  1.5, sev_color),
+                ]),
+            )
+            story.append(KeepTogether([title_row, meta_t, sp(6)]))
         story.extend(_recs_block(exp_data.get('recommendations') or [
             'Block access to sensitive paths in your web server configuration.',
             'Remove backup files, debug pages, and credentials from the web root.',

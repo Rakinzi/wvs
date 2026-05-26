@@ -486,9 +486,27 @@ class ExposureScanner:
     # Stacks where a content signal is mandatory — a plain 200 is not enough
     _SIGNAL_REQUIRED_STACKS = {"php", "python", "nodejs", "ruby", "java", "dotnet", "go", "devops", "wordpress", "cms"}
 
+    # Paths whose genuine response should never be an HTML document
+    _NON_HTML_PATHS = {
+        ".env", ".yml", ".yaml", ".json", ".xml", ".sql", ".log",
+        ".zip", ".tar", ".gz", ".bak", ".key", ".pem", ".crt",
+        ".enc", ".txt", ".ini", ".cfg", ".conf", ".toml", ".lock",
+        ".pid", ".dat", ".db", ".sqlite", ".csv",
+    }
+
     def _is_real_hit(self, path: str, entry: dict, resp: httpx.Response) -> bool:
         if resp.status_code != 200:
             return False
+
+        content_type = resp.headers.get("content-type", "").lower()
+        is_html_response = "text/html" in content_type
+
+        # If the path extension implies a non-HTML file, reject HTML responses —
+        # they are soft-404 pages served by Cloudflare/CDNs/SPAs.
+        ext = "." + path.rsplit(".", 1)[-1].lower() if "." in path.split("/")[-1] else ""
+        if is_html_response and ext in self._NON_HTML_PATHS:
+            return False
+
         text = resp.text[:6000]
         pattern = CONTENT_SIGNALS.get(path)
         if pattern:

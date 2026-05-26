@@ -6,6 +6,7 @@ from urllib.parse import urlparse
 from datetime import timedelta
 
 from celery import shared_task
+from sqlalchemy import cast, String
 from app import db
 from app.models import ScanResult
 
@@ -18,7 +19,7 @@ def check_ssl_tls_updates():
     """
     # Find scan results with SSL issues from the last 30 days
     scan_results = ScanResult.query.filter(
-        ScanResult.findings['ssl']['valid'].astext == 'false'
+        cast(ScanResult.findings['ssl']['valid'], String) == 'false'
     ).all()
     
     removed_count = 0

@@ -120,7 +120,21 @@ def _sync_scan_job_status(job: ScanJob) -> ScanJob:
         db.session.commit()
         return job
 
-    if task_state in {"PENDING", "RECEIVED", "STARTED", "RETRY"}:
+    if task_state in {"PENDING", "RECEIVED", "STARTED"}:
+        return job
+
+    if task_state == "PROGRESS":
+        if job.status != "running":
+            job.status = "running"
+            db.session.commit()
+        return job
+
+    if task_state == "RETRY":
+        job.status = "failed"
+        job.completed_at = datetime.utcnow()
+        if not job.error_message:
+            job.error_message = "Scan worker restarted while task was retrying."
+        db.session.commit()
         return job
 
     if task_state == "SUCCESS":

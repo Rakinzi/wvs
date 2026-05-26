@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   AlertTriangle, Lock, Database,
   RefreshCw, CheckCircle, Search,
@@ -178,11 +178,22 @@ const ScanInput = ({ accentColor, url, setUrl, onScan, isScanning }) => (
 /* Full scan job status */
 const FullScanStatus = ({ job, navigateTo, onPoll }) => {
   const timerRef = useRef(null);
+  const activeRef = useRef(false);
+
   useEffect(() => {
-    if (!job || !['queued', 'running'].includes(job.status)) return;
-    timerRef.current = setInterval(onPoll, 3000);
-    return () => clearInterval(timerRef.current);
-  }, [job, onPoll]);
+    const shouldPoll = job && ['queued', 'running'].includes(job.status);
+    if (shouldPoll && !activeRef.current) {
+      activeRef.current = true;
+      timerRef.current = setInterval(onPoll, 3000);
+    } else if (!shouldPoll && activeRef.current) {
+      activeRef.current = false;
+      clearInterval(timerRef.current);
+    }
+    return () => {
+      activeRef.current = false;
+      clearInterval(timerRef.current);
+    };
+  }, [job?.status, onPoll]);
 
   if (!job) return null;
 
@@ -289,13 +300,13 @@ const Scanners = ({ navigateTo }) => {
   const fmt = (d) => new Date(d).toLocaleDateString() + ' ' +
     new Date(d).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-  const pollFullScanJob = async () => {
+  const pollFullScanJob = useCallback(async () => {
     if (!fullScanJob) return;
     try {
       const { data } = await apiJson(`/scan/jobs/${fullScanJob.id}`, { auth: true });
       if (data.status === 'success') setFullScanJob(data.job);
     } catch { /* ignore */ }
-  };
+  }, [fullScanJob, setFullScanJob]);
 
   const active = SCANNERS.find(s => s.id === activeId);
 
