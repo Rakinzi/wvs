@@ -1,5 +1,5 @@
 from collections import Counter
-from datetime import datetime, timedelta
+from datetime import timedelta
 from urllib.parse import urlparse
 
 from flask import Blueprint, jsonify
@@ -8,6 +8,7 @@ from flask_jwt_extended import jwt_required
 from app.auth import get_current_user
 from app.models import BlockedRequest, MaliciousSite, ScanResult
 from app.utils.scan_helpers import build_scan_summary
+from app.utils.time_utils import utc_now
 
 
 bp = Blueprint('dashboard', __name__)
@@ -31,8 +32,8 @@ def get_dashboard_stats():
             blocked_requests = BlockedRequest.query.order_by(BlockedRequest.timestamp.desc()).all()
             malicious_sites = MaliciousSite.query.order_by(MaliciousSite.date_added.desc()).all()
 
-        today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
-        seven_days_ago = datetime.utcnow() - timedelta(days=7)
+        today_start = utc_now().replace(hour=0, minute=0, second=0, microsecond=0)
+        seven_days_ago = utc_now() - timedelta(days=7)
 
         vulnerable_scans_sql = 0
         vulnerable_scans_ssl = 0
@@ -107,7 +108,7 @@ def get_dashboard_stats():
         ]
 
         date_list = [
-            (datetime.utcnow() - timedelta(days=offset)).strftime('%Y-%m-%d')
+            (utc_now() - timedelta(days=offset)).strftime('%Y-%m-%d')
             for offset in range(6, -1, -1)
         ]
         scans_by_day = [

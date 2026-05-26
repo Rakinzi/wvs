@@ -62,6 +62,27 @@ class ScanRequestPayload(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 
     url: str = Field(min_length=8, max_length=2048)
+    scan_profile: str = Field(default="security_only", max_length=50)
+    page_paths: list[str] = Field(default_factory=list)
+    page_type: str | None = Field(default=None, max_length=50)
+    enable_ai_review: bool = False
+    verified_target_id: str | None = Field(default=None, max_length=36)
+
+    @field_validator("scan_profile")
+    @classmethod
+    def validate_scan_profile(cls, value: str) -> str:
+        normalized = value.strip().lower()
+        if normalized not in {"security_only", "product_readiness", "full_launch_audit"}:
+            raise ValueError("scan_profile must be security_only, product_readiness, or full_launch_audit")
+        return normalized
+
+    @field_validator("page_paths")
+    @classmethod
+    def validate_page_paths(cls, value: list[str]) -> list[str]:
+        cleaned = [str(item).strip() for item in value if str(item).strip()]
+        if len(cleaned) > 10:
+            raise ValueError("A maximum of 10 page paths may be scanned")
+        return cleaned
 
 
 class AddMaliciousPayload(BaseModel):
@@ -78,3 +99,18 @@ class BlockedLogPayload(BaseModel):
     ip_address: str | None = Field(default=None, max_length=50)
     user_agent: str | None = Field(default=None, max_length=500)
     reason: str | None = Field(default=None, max_length=255)
+
+
+class VerifiedTargetCreatePayload(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    target_url: str = Field(min_length=8, max_length=2048)
+    verification_method: str = Field(default="meta_tag", max_length=50)
+
+    @field_validator("verification_method")
+    @classmethod
+    def validate_verification_method(cls, value: str) -> str:
+        normalized = value.strip().lower()
+        if normalized not in {"meta_tag", "well_known_file"}:
+            raise ValueError("Verification method must be meta_tag or well_known_file")
+        return normalized

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Shield, Lock, User, Mail, AlertTriangle, Eye, EyeOff, CheckCircle, ArrowLeft, ArrowRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { apiJson, ApiError } from '../lib/api';
+import Spinner from './Spinner';
 
 const Field = ({ id, name, label, type = 'text', icon: Icon, value, onChange, error, placeholder, extra }) => (
   <div className="flex flex-col gap-1.5">
@@ -199,7 +200,7 @@ const Register = () => {
                   style={{ background: isLoading ? 'var(--color-primary-dim)' : 'var(--color-primary)', opacity: isLoading ? 0.7 : 1 }}
                 >
                   {isLoading ? (
-                    <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Creating account…</>
+                    <><Spinner size="sm" /> Creating account…</>
                   ) : (
                     <>Create Account <ArrowRight size={15} /></>
                   )}

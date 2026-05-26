@@ -6,6 +6,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 from app.settings import settings
+from app.utils.finding_normalizer import to_report_finding
 
 
 def _resolve_target_ips(hostname: str, port: int | None) -> set[ipaddress.IPv4Address | ipaddress.IPv6Address]:
@@ -70,6 +71,29 @@ def normalize_target_url(raw_url: str | None) -> str:
     return parsed.geturl()
 
 
+def extract_target_origin(raw_url: str | None) -> str:
+    normalized = normalize_target_url(raw_url)
+    parsed = urlparse(normalized)
+    return f"{parsed.scheme}://{parsed.netloc}"
+
+
+def extract_target_hostname(raw_url: str | None) -> str:
+    normalized = normalize_target_url(raw_url)
+    parsed = urlparse(normalized)
+    if not parsed.hostname:
+        raise ValueError("Invalid URL")
+    return parsed.hostname.lower()
+
+
+def validate_target_redirect(url: str, expected_hostname: str) -> str:
+    normalized = normalize_target_url(url)
+    parsed = urlparse(normalized)
+    hostname = (parsed.hostname or "").lower()
+    if hostname != expected_hostname.lower():
+        raise ValueError("Redirect target hostname is not allowed")
+    return normalized
+
+
 def build_scan_summary(findings: dict[str, Any]) -> dict[str, Any]:
     sqli_findings = findings.get("sqli", []) or []
     ssl_findings = findings.get("ssl", {}) or {}
@@ -83,6 +107,11 @@ def build_scan_summary(findings: dict[str, Any]) -> dict[str, Any]:
     dns_findings = findings.get("dns", {}) or {}
     redirect_findings = findings.get("redirect", {}) or {}
     takeover_findings = findings.get("takeover", {}) or {}
+    accessibility_findings = findings.get("accessibility", {}) or {}
+    responsive_findings = findings.get("responsive_ux", {}) or {}
+    performance_findings = findings.get("performance_ux", {}) or {}
+    form_findings = findings.get("form_usability", {}) or {}
+    visual_findings = findings.get("visual_ai", {}) or {}
     header_issues = header_findings.get("issues", []) or []
     wordpress_issues = wordpress_findings.get("issues", []) or []
     zap_issues = zap_findings.get("issues", []) or []
@@ -95,6 +124,16 @@ def build_scan_summary(findings: dict[str, Any]) -> dict[str, Any]:
     dns_issues = dns_findings.get("issues", []) or []
     redirect_issues = redirect_findings.get("issues", []) or []
     takeover_issues = takeover_findings.get("issues", []) or []
+    accessibility_issues = accessibility_findings.get("issues", []) or []
+    responsive_issues = responsive_findings.get("issues", []) or []
+    performance_issues = performance_findings.get("issues", []) or []
+    form_issues = form_findings.get("issues", []) or []
+    visual_issues = visual_findings.get("issues", []) or []
+    launch_blockers = [
+        issue
+        for issue in accessibility_issues + responsive_issues + performance_issues + form_issues
+        if str(issue.get("severity") or "").lower() in {"critical", "high"}
+    ]
 
     vulnerable = (
         bool(sqli_findings)
@@ -110,21 +149,27 @@ def build_scan_summary(findings: dict[str, Any]) -> dict[str, Any]:
         or bool([i for i in dns_issues if i.get("severity") in ("High", "Critical")])
         or bool(redirect_issues)
         or bool(takeover_issues)
+        or bool(launch_blockers)
     )
 
     total_issues = (
         len(sqli_findings) + len(header_issues) + len(wordpress_issues) +
         len(zap_issues) + len(xss_issues) + len(actionable_tech_issues) + len(tech_advisories) +
-        len(exposure_issues) + len(dns_issues) + len(redirect_issues) + len(takeover_issues)
+        len(exposure_issues) + len(dns_issues) + len(redirect_issues) + len(takeover_issues) +
+        len(accessibility_issues) + len(responsive_issues) + len(performance_issues) + len(form_issues)
     )
     if ssl_findings.get("valid") is False:
         total_issues += 1
     if malicious_findings.get("is_malicious", False):
         total_issues += 1
 
+    security_score = 100 if total_issues == 0 else max(0, 100 - (total_issues * 20))
+
     return {
         "vulnerable": vulnerable,
         "total_issues": total_issues,
+        "score": security_score,
+        "security_score": security_score,
         "sqli_count": len(sqli_findings),
         "ssl_issue": ssl_findings.get("valid") is False,
         "malicious": malicious_findings.get("is_malicious", False),
@@ -139,6 +184,17 @@ def build_scan_summary(findings: dict[str, Any]) -> dict[str, Any]:
         "dns_issue_count": len(dns_issues),
         "redirect_count": len(redirect_issues),
         "takeover_count": len(takeover_issues),
+        "accessibility_issue_count": len(accessibility_issues),
+        "responsive_issue_count": len(responsive_issues),
+        "performance_issue_count": len(performance_issues),
+        "form_issue_count": len(form_issues),
+        "visual_ai_issue_count": len(visual_issues),
+        "launch_blocker_count": len(launch_blockers),
+        "accessibility_score": accessibility_findings.get("score"),
+        "responsive_score": responsive_findings.get("score"),
+        "performance_score": performance_findings.get("score"),
+        "usability_score": form_findings.get("score"),
+        "launch_readiness_score": findings.get("launch_readiness", {}).get("score"),
     }
 
 
@@ -193,6 +249,11 @@ def build_scan_sections(findings: dict[str, Any]) -> dict[str, dict[str, Any]]:
     dns_findings = findings.get("dns", {}) or {}
     redirect_findings = findings.get("redirect", {}) or {}
     takeover_findings = findings.get("takeover", {}) or {}
+    accessibility_findings = findings.get("accessibility", {}) or {}
+    responsive_findings = findings.get("responsive_ux", {}) or {}
+    performance_findings = findings.get("performance_ux", {}) or {}
+    form_findings = findings.get("form_usability", {}) or {}
+    visual_findings = findings.get("visual_ai", {}) or {}
 
     sections = {
         "sql": {
@@ -307,6 +368,46 @@ def build_scan_sections(findings: dict[str, Any]) -> dict[str, dict[str, Any]]:
             "top_findings": (takeover_findings.get("issues", []) or [])[:5],
             "recommendations": takeover_findings.get("recommendations", []) or [],
         },
+        "accessibility": {
+            "label": "Accessibility",
+            "status": accessibility_findings.get("status", "not_run"),
+            "issue_count": len(accessibility_findings.get("issues", []) or []),
+            "severity_counts": _severity_counts(accessibility_findings.get("issues", []) or []),
+            "top_findings": [to_report_finding(item) for item in (accessibility_findings.get("issues", []) or [])[:5]],
+            "recommendations": accessibility_findings.get("recommendations", []) or [],
+        },
+        "responsive_ux": {
+            "label": "Mobile and Responsive UX",
+            "status": responsive_findings.get("status", "not_run"),
+            "issue_count": len(responsive_findings.get("issues", []) or []),
+            "severity_counts": _severity_counts(responsive_findings.get("issues", []) or []),
+            "top_findings": [to_report_finding(item) for item in (responsive_findings.get("issues", []) or [])[:5]],
+            "recommendations": responsive_findings.get("recommendations", []) or [],
+        },
+        "performance_ux": {
+            "label": "Performance UX",
+            "status": performance_findings.get("status", "not_run"),
+            "issue_count": len(performance_findings.get("issues", []) or []),
+            "severity_counts": _severity_counts(performance_findings.get("issues", []) or []),
+            "top_findings": [to_report_finding(item) for item in (performance_findings.get("issues", []) or [])[:5]],
+            "recommendations": performance_findings.get("recommendations", []) or [],
+        },
+        "form_usability": {
+            "label": "Form and Interaction Usability",
+            "status": form_findings.get("status", "not_run"),
+            "issue_count": len(form_findings.get("issues", []) or []),
+            "severity_counts": _severity_counts(form_findings.get("issues", []) or []),
+            "top_findings": [to_report_finding(item) for item in (form_findings.get("issues", []) or [])[:5]],
+            "recommendations": form_findings.get("recommendations", []) or [],
+        },
+        "visual_ai": {
+            "label": "Visual UX Recommendations",
+            "status": visual_findings.get("status", "not_run"),
+            "issue_count": len(visual_findings.get("issues", []) or []),
+            "severity_counts": _severity_counts(visual_findings.get("issues", []) or []),
+            "top_findings": [to_report_finding(item) for item in (visual_findings.get("issues", []) or [])[:5]],
+            "recommendations": visual_findings.get("recommendations", []) or [],
+        },
     }
 
     return sections
@@ -342,6 +443,12 @@ def build_best_practices(findings: dict[str, Any]) -> list[str]:
 
     if (exposure_findings.get("issues") or []):
         practices.append("Keep source, backup, env, and debug artifacts out of the web root, and validate deployment bundles before publish.")
+    if (findings.get("accessibility", {}) or {}).get("issues"):
+        practices.append("Run mobile accessibility checks on every release candidate and treat missing labels and inaccessible controls as launch blockers.")
+    if (findings.get("responsive_ux", {}) or {}).get("issues"):
+        practices.append("Review primary pages on narrow mobile viewports before release and block launches with horizontal overflow or clipped forms.")
+    if (findings.get("performance_ux", {}) or {}).get("issues"):
+        practices.append("Track mobile performance budgets for key landing and signup pages so regressions are caught before launch.")
 
     if malicious_findings.get("is_malicious"):
         practices.append("Separate reputation signals from blocking decisions and require corroborating evidence before auto-blocking production traffic.")
@@ -380,4 +487,9 @@ def build_report_meta(scan_id: int, url: str, timestamp: str, summary: dict[str,
         "timestamp": timestamp,
         "risk_rating": build_risk_rating(summary),
         "security_score": build_security_score(summary),
+        "accessibility_score": summary.get("accessibility_score"),
+        "responsive_score": summary.get("responsive_score"),
+        "performance_score": summary.get("performance_score"),
+        "usability_score": summary.get("usability_score"),
+        "launch_readiness_score": summary.get("launch_readiness_score"),
     }

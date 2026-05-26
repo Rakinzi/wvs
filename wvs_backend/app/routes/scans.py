@@ -1,11 +1,12 @@
 import os
+import copy
 
-from flask import Blueprint, jsonify, request, send_file
+from flask import Blueprint, current_app, jsonify, request, send_file
 from flask_jwt_extended import jwt_required
 from celery.exceptions import TimeoutError as CeleryTimeoutError
 from app.auth import get_current_user
 from app.scanners import SecurityScanner
-from app.models import ScanJob, ScanResult
+from app.models import ScanJob, ScanResult, VerifiedTarget
 from app.schemas import ScanRequestPayload
 from app.utils.db_manager import DBManager
 from app.utils.scan_helpers import (
@@ -15,18 +16,37 @@ from app.utils.scan_helpers import (
     build_scan_summary,
     normalize_target_url,
 )
+from app.utils.scan_comparison import build_scan_comparison
 from app.utils.scan_pipeline import persist_scan_result
 from app.utils.reports import generate_report
+from app.utils.ux_screenshot_manager import collect_screenshot_paths
 from app.tasks.scan_jobs import run_full_scan_job
 from app import celery, db, limiter
-from datetime import datetime
 from pydantic import ValidationError
+from app.utils.time_utils import utc_now, utc_now_isoformat
 
 bp = Blueprint('scans', __name__)
 
 
 def persist_scan(current_user, findings, prefix="scan"):
     return persist_scan_result(findings["url"], findings, current_user.id, prefix=prefix)
+
+
+def _ensure_verified_target(current_user, url: str, verified_target_id: str | None):
+    if not current_app.config.get("REQUIRE_VERIFIED_TARGETS", False):
+        return None
+
+    normalized = normalize_target_url(url)
+    hostname = normalized.split("://", 1)[1].split("/", 1)[0].split(":", 1)[0].lower()
+    query = VerifiedTarget.query.filter_by(user_id=current_user.id, verification_status="verified")
+    if verified_target_id:
+        query = query.filter_by(public_id=verified_target_id)
+
+    for candidate in query.all():
+        if candidate.normalized_domain.lower() == hostname:
+            return candidate
+
+    raise ValueError("A verified target is required for this scan profile")
 
 
 def _resolve_job_failure_message(task_result) -> str:
@@ -113,7 +133,7 @@ def _sync_scan_job_status(job: ScanJob) -> ScanJob:
         task_state = task_result.state
     except Exception:
         job.status = "failed"
-        job.completed_at = datetime.utcnow()
+        job.completed_at = utc_now()
         if not job.error_message:
             progress = _serialize_task_progress(job) or {}
             job.error_message = progress.get("message") or "Scan job failed in Celery worker."
@@ -131,7 +151,7 @@ def _sync_scan_job_status(job: ScanJob) -> ScanJob:
 
     if task_state == "RETRY":
         job.status = "failed"
-        job.completed_at = datetime.utcnow()
+        job.completed_at = utc_now()
         if not job.error_message:
             job.error_message = "Scan worker restarted while task was retrying."
         db.session.commit()
@@ -141,13 +161,13 @@ def _sync_scan_job_status(job: ScanJob) -> ScanJob:
         if job.status != "completed":
             job.status = "completed"
             if not job.completed_at:
-                job.completed_at = datetime.utcnow()
+                job.completed_at = utc_now()
             db.session.commit()
         return job
 
     if task_state in {"FAILURE", "REVOKED"}:
         job.status = "failed"
-        job.completed_at = datetime.utcnow()
+        job.completed_at = utc_now()
         if not job.error_message:
             job.error_message = _resolve_job_failure_message(task_result)
         db.session.commit()
@@ -159,12 +179,56 @@ def _sync_scan_job_status(job: ScanJob) -> ScanJob:
         return job
     except Exception:
         job.status = "failed"
-        job.completed_at = datetime.utcnow()
+        job.completed_at = utc_now()
         if not job.error_message:
             job.error_message = _resolve_job_failure_message(task_result)
         db.session.commit()
 
     return job
+
+
+def _asset_url(scan_id: str, filename: str) -> str:
+    return f"/report/{scan_id}/assets/{filename}"
+
+
+def _publicize_scan_assets(scan_id: str, payload):
+    if isinstance(payload, dict):
+        cloned = {}
+        for key, value in payload.items():
+            if key == "evidence" and isinstance(value, dict):
+                evidence = dict(value)
+                screenshot_path = evidence.pop("screenshot_path", None)
+                if isinstance(screenshot_path, str) and screenshot_path:
+                    evidence["screenshot_url"] = _asset_url(scan_id, os.path.basename(screenshot_path))
+                cloned[key] = _publicize_scan_assets(scan_id, evidence)
+            else:
+                cloned[key] = _publicize_scan_assets(scan_id, value)
+        return cloned
+    if isinstance(payload, list):
+        return [_publicize_scan_assets(scan_id, item) for item in payload]
+    return payload
+
+
+def _infer_scan_profile(findings: dict) -> str:
+    return str((findings or {}).get("scan_profile") or "security_only")
+
+
+def _find_previous_scan_for_comparison(scan: ScanResult) -> ScanResult | None:
+    current_profile = _infer_scan_profile(scan.findings or {})
+    candidates = (
+        ScanResult.query.filter(
+            ScanResult.user_id == scan.user_id,
+            ScanResult.url == scan.url,
+            ScanResult.timestamp < scan.timestamp,
+        )
+        .order_by(ScanResult.timestamp.desc())
+        .limit(25)
+        .all()
+    )
+    for candidate in candidates:
+        if _infer_scan_profile(candidate.findings or {}) == current_profile:
+            return candidate
+    return candidates[0] if candidates else None
 
 @bp.route('/scan', methods=['POST'])
 @jwt_required()
@@ -176,6 +240,10 @@ def start_scan():
             return jsonify({'error': 'User not found'}), 404
         payload = ScanRequestPayload.model_validate(request.get_json(silent=True) or {})
         url = normalize_target_url(payload.url)
+        scan_profile = payload.scan_profile or 'security_only'
+
+        if scan_profile in {'product_readiness', 'full_launch_audit'}:
+            _ensure_verified_target(current_user, url, payload.verified_target_id)
         
         # Check if URL is known to be malicious first
         is_malicious, reason = DBManager.check_malicious_url(url)
@@ -188,21 +256,30 @@ def start_scan():
         
         job = ScanJob(
             url=url,
-            scan_type='full',
+            scan_type=scan_profile,
             status='queued',
             user_id=current_user.id,
+            findings={
+                '_config': {
+                    'page_paths': payload.page_paths,
+                    'page_type': payload.page_type,
+                    'enable_ai_review': payload.enable_ai_review,
+                    'verified_target_id': payload.verified_target_id,
+                }
+            },
         )
         db.session.add(job)
         db.session.commit()
 
         try:
-            task = run_full_scan_job.delay(job.id)
+            queue_name = current_app.config["UX_SCAN_QUEUE"] if scan_profile in {"product_readiness", "full_launch_audit"} else current_app.config["SECURITY_SCAN_QUEUE"]
+            task = run_full_scan_job.apply_async(args=[job.id], queue=queue_name)
             job.task_id = task.id
             db.session.commit()
         except Exception as exc:
             job.status = 'failed'
             job.error_message = f'Failed to queue scan job: {exc}'
-            job.completed_at = datetime.utcnow()
+            job.completed_at = utc_now()
             db.session.commit()
             return jsonify({
                 'status': 'error',
@@ -214,6 +291,7 @@ def start_scan():
             'job_id': job.public_id,
             'task_id': task.id,
             'url': url,
+            'scan_profile': scan_profile,
             'message': 'Scan queued successfully',
             'timestamp': job.created_at.isoformat()
         }), 202
@@ -259,7 +337,7 @@ def check_sql_injection():
             'wordpress': {'status': 'not_run', 'is_wordpress': False, 'issues': []},
             'zap': {'enabled': False, 'status': 'not_run', 'issues': []},
             'malicious': {'is_malicious': False},
-            'timestamp': datetime.utcnow().isoformat()
+            'timestamp': utc_now_isoformat()
         }
         findings['summary'] = build_scan_summary(findings)
         findings['sections'] = build_scan_sections(findings)
@@ -316,7 +394,7 @@ def check_ssl():
             'wordpress': scanner.check_wordpress(url),
             'zap': scanner.check_zap(url),
             'malicious': {'is_malicious': False},
-            'timestamp': datetime.utcnow().isoformat()
+            'timestamp': utc_now_isoformat()
         }
         findings['summary'] = build_scan_summary(findings)
         findings['sections'] = build_scan_sections(findings)
@@ -369,7 +447,7 @@ def check_wordpress():
             'wordpress': results,
             'zap': {'enabled': False, 'status': 'not_run', 'issues': []},
             'malicious': {'is_malicious': False},
-            'timestamp': datetime.utcnow().isoformat()
+            'timestamp': utc_now_isoformat()
         }
         findings['summary'] = build_scan_summary(findings)
         findings['sections'] = build_scan_sections(findings)
@@ -464,17 +542,29 @@ def get_report(scan_id):
             findings['sections'] = build_scan_sections(findings)
 
         if report_format == 'json':
-            summary = findings.get('summary', {})
+            public_findings = _publicize_scan_assets(scan.public_id, copy.deepcopy(findings))
+            public_findings['summary'] = build_scan_summary(public_findings)
+            public_findings['sections'] = build_scan_sections(public_findings)
+            summary = public_findings.get('summary', {})
+            comparison = None
+            previous_scan = _find_previous_scan_for_comparison(scan)
+            if previous_scan is not None:
+                previous_findings = previous_scan.findings or {}
+                comparison = build_scan_comparison(public_findings, _publicize_scan_assets(previous_scan.public_id, copy.deepcopy(previous_findings)))
+                comparison["previous_scan_id"] = previous_scan.public_id
+                comparison["previous_timestamp"] = previous_scan.timestamp.isoformat()
             return jsonify({
                 'status': 'success',
                 'scan_id': scan.public_id,
                 'url': scan.url,
                 'timestamp': scan.timestamp.isoformat(),
+                'scan_profile': _infer_scan_profile(public_findings),
                 'meta': build_report_meta(scan.public_id, scan.url, scan.timestamp.isoformat(), summary),
                 'summary': summary,
-                'sections': findings.get('sections', {}),
-                'best_practices': build_best_practices(findings),
-                'findings': findings,
+                'sections': public_findings.get('sections', {}),
+                'best_practices': build_best_practices(public_findings),
+                'findings': public_findings,
+                'comparison': comparison,
             }), 200
 
         if report_format == 'sbom':
@@ -539,6 +629,26 @@ def get_report(scan_id):
             'message': str(e)
         }), 500
 
+
+@bp.route('/report/<string:scan_id>/assets/<path:asset_name>', methods=['GET'])
+@jwt_required()
+def get_report_asset(scan_id: str, asset_name: str):
+    current_user = get_current_user()
+    if not current_user:
+        return jsonify({'error': 'User not found'}), 404
+
+    scan = ScanResult.query.filter_by(public_id=scan_id).first_or_404()
+    if scan.user_id != current_user.id and not current_user.is_admin:
+        return jsonify({'error': 'Unauthorized access to report assets'}), 403
+
+    screenshot_paths = collect_screenshot_paths(scan.findings or {})
+    allowed = {os.path.basename(path): path for path in screenshot_paths}
+    target_path = allowed.get(asset_name)
+    if not target_path or not os.path.exists(target_path):
+        return jsonify({'error': 'Asset not found'}), 404
+
+    return send_file(target_path, mimetype='image/png')
+
 @bp.route('/scans/history', methods=['GET'])
 @jwt_required()
 def get_scan_history():
@@ -557,6 +667,7 @@ def get_scan_history():
                 'id': scan.public_id,
                 'url': scan.url,
                 'timestamp': scan.timestamp.isoformat(),
+                'scan_profile': _infer_scan_profile(scan.findings or {}),
                 'has_vulnerabilities': summary['vulnerable'],
                 'issue_count': summary['total_issues'],
             })
@@ -603,7 +714,7 @@ def check_xss():
             'zap': {'enabled': False, 'status': 'not_run', 'issues': []},
             'malicious': {'is_malicious': False},
             'xss': results,
-            'timestamp': datetime.utcnow().isoformat()
+            'timestamp': utc_now_isoformat()
         }
         findings['summary'] = build_scan_summary(findings)
         findings['sections'] = build_scan_sections(findings)
@@ -649,7 +760,7 @@ def check_tech():
             'zap': {'enabled': False, 'status': 'not_run', 'issues': []},
             'malicious': {'is_malicious': False},
             'tech': results,
-            'timestamp': datetime.utcnow().isoformat()
+            'timestamp': utc_now_isoformat()
         }
         findings['summary'] = build_scan_summary(findings)
         findings['sections'] = build_scan_sections(findings)
@@ -695,7 +806,7 @@ def check_exposure():
             'zap': {'enabled': False, 'status': 'not_run', 'issues': []},
             'malicious': {'is_malicious': False},
             'exposure': results,
-            'timestamp': datetime.utcnow().isoformat()
+            'timestamp': utc_now_isoformat()
         }
         findings['summary'] = build_scan_summary(findings)
         findings['sections'] = build_scan_sections(findings)
@@ -734,6 +845,7 @@ def delete_scan(scan_id):
 
     try:
         report_path = scan.report_path
+        screenshot_paths = collect_screenshot_paths(scan.findings or {})
         linked_jobs = ScanJob.query.filter_by(result_id=scan.id).all()
         for job in linked_jobs:
             job.result_id = None
@@ -746,6 +858,12 @@ def delete_scan(scan_id):
                 os.remove(report_path)
             except OSError:
                 pass
+        for path in screenshot_paths:
+            if path and os.path.exists(path):
+                try:
+                    os.remove(path)
+                except OSError:
+                    pass
 
         return jsonify({'status': 'success', 'message': 'Scan deleted'}), 200
     except Exception as e:
@@ -776,7 +894,7 @@ def check_dns():
             'zap': {'enabled': False, 'status': 'not_run', 'issues': []},
             'malicious': {'is_malicious': False},
             'dns': results,
-            'timestamp': datetime.utcnow().isoformat(),
+            'timestamp': utc_now_isoformat(),
         }
         findings['summary'] = build_scan_summary(findings)
         findings['sections'] = build_scan_sections(findings)
@@ -822,7 +940,7 @@ def check_redirect():
             'zap': {'enabled': False, 'status': 'not_run', 'issues': []},
             'malicious': {'is_malicious': False},
             'redirect': results,
-            'timestamp': datetime.utcnow().isoformat(),
+            'timestamp': utc_now_isoformat(),
         }
         findings['summary'] = build_scan_summary(findings)
         findings['sections'] = build_scan_sections(findings)
@@ -868,7 +986,7 @@ def check_takeover():
             'zap': {'enabled': False, 'status': 'not_run', 'issues': []},
             'malicious': {'is_malicious': False},
             'takeover': results,
-            'timestamp': datetime.utcnow().isoformat(),
+            'timestamp': utc_now_isoformat(),
         }
         findings['summary'] = build_scan_summary(findings)
         findings['sections'] = build_scan_sections(findings)

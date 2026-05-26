@@ -5,6 +5,7 @@ import {
   ExternalLink, Trash2, CheckCircle, X, Globe, Calendar, ShieldOff
 } from 'lucide-react';
 import { useBlockedSitesData } from '../hooks/useBlockedSitesData';
+import Spinner from './Spinner';
 
 const T = {
   bg:          'var(--color-bg)',
@@ -174,9 +175,8 @@ const BlockedSites = ({ navigateTo }) => {
 
           {/* Body */}
           {loading ? (
-            <div className="flex items-center justify-center gap-3 py-20">
-              <RefreshCw size={16} className="animate-spin" style={{ color: T.primary }} />
-              <p className="text-sm" style={{ color: T.muted }}>Loading blocked sites…</p>
+            <div className="flex items-center justify-center py-20">
+              <Spinner size="md" label="Loading blocked sites…" />
             </div>
           ) : error ? (
             <div className="flex flex-col items-center gap-3 py-16">
@@ -285,7 +285,7 @@ const BlockedSites = ({ navigateTo }) => {
                 <button type="submit" disabled={addingUrl}
                   className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-semibold text-white cursor-pointer"
                   style={{ background: T.danger, opacity: addingUrl ? 0.7 : 1 }}>
-                  {addingUrl ? <RefreshCw size={12} className="animate-spin" /> : <Plus size={12} />}
+                  {addingUrl ? <Spinner size="sm" /> : <Plus size={12} />}
                   {addingUrl ? 'Adding…' : 'Block Site'}
                 </button>
               </div>

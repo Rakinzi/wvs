@@ -10,6 +10,10 @@ const normalizeUrl = (value) => {
 
 export const useScansData = ({ onScanComplete } = {}) => {
   const [fullScanUrl, setFullScanUrl] = useState('');
+  const [fullScanProfile, setFullScanProfile] = useState('security_only');
+  const [fullScanPagePaths, setFullScanPagePaths] = useState('');
+  const [fullScanVerifiedTargetId, setFullScanVerifiedTargetId] = useState('');
+  const [fullScanEnableAiReview, setFullScanEnableAiReview] = useState(false);
   const [sqlScanUrl, setSqlScanUrl] = useState('');
   const [sslScanUrl, setSslScanUrl] = useState('');
   const [wordpressScanUrl, setWordpressScanUrl] = useState('');
@@ -48,12 +52,21 @@ export const useScansData = ({ onScanComplete } = {}) => {
       setFullScanError(null);
       const { data } = await apiJson('/scan', {
         method: 'POST', auth: true, json: true,
-        body: { url: normalizeUrl(fullScanUrl) }
+        body: {
+          url: normalizeUrl(fullScanUrl),
+          scan_profile: fullScanProfile,
+          page_paths: fullScanPagePaths
+            .split('\n')
+            .map((item) => item.trim())
+            .filter(Boolean),
+          verified_target_id: fullScanVerifiedTargetId || undefined,
+          enable_ai_review: fullScanEnableAiReview,
+        }
       });
       if (data.status === 'accepted') {
         setFullScanJob({
           id: data.job_id, task_id: data.task_id, url: data.url,
-          status: 'queued', created_at: data.timestamp, result_id: null, progress: null
+          status: 'queued', created_at: data.timestamp, result_id: null, progress: null, scan_type: data.scan_profile
         });
         onScanComplete?.();
       } else {
@@ -64,7 +77,7 @@ export const useScansData = ({ onScanComplete } = {}) => {
     } finally {
       setIsFullScanSubmitting(false);
     }
-  }, [fullScanUrl, onScanComplete]);
+  }, [fullScanEnableAiReview, fullScanPagePaths, fullScanProfile, fullScanUrl, fullScanVerifiedTargetId, onScanComplete]);
 
   const handleSqlScan = useCallback(async () => {
     if (!sqlScanUrl) { setSqlError('Please enter a URL to scan'); return; }
@@ -240,7 +253,9 @@ export const useScansData = ({ onScanComplete } = {}) => {
   }, [exposureScanUrl, onScanComplete]);
 
   return {
-    fullScanUrl, setFullScanUrl, sqlScanUrl, setSqlScanUrl,
+    fullScanUrl, setFullScanUrl, fullScanProfile, setFullScanProfile,
+    fullScanPagePaths, setFullScanPagePaths, fullScanVerifiedTargetId, setFullScanVerifiedTargetId,
+    fullScanEnableAiReview, setFullScanEnableAiReview, sqlScanUrl, setSqlScanUrl,
     sslScanUrl, setSslScanUrl, wordpressScanUrl, setWordpressScanUrl,
     xssScanUrl, setXssScanUrl, techScanUrl, setTechScanUrl,
     exposureScanUrl, setExposureScanUrl,

@@ -1,0 +1,88 @@
+from __future__ import annotations
+
+from app.utils.finding_normalizer import (
+    ALLOWED_CONFIDENCE,
+    ALLOWED_SEVERITY,
+    count_findings_by_scanner,
+    normalize_ux_finding,
+    to_report_finding,
+)
+
+
+def test_normalize_ux_finding_applies_defaults_and_normalizes_values():
+    finding = normalize_ux_finding(
+        {
+            "scanner": "accessibility",
+            "title": "Form input has no accessible label",
+            "severity": "HIGH",
+            "confidence": "MEASURED",
+            "page_url": "https://example.com/signup",
+            "viewport": "mobile",
+            "selector": "#email",
+            "evidence": {"rule_id": "label"},
+        }
+    )
+
+    assert finding["scanner"] == "accessibility"
+    assert finding["category"] == "Accessibility"
+    assert finding["severity"] == "high"
+    assert finding["confidence"] == "measured"
+    assert finding["status"] == "open"
+    assert finding["id"]
+    assert finding["evidence"]["rule_id"] == "label"
+    assert finding["evidence"]["description"] == ""
+
+
+def test_normalize_ux_finding_rejects_unknown_labels_with_safe_fallbacks():
+    finding = normalize_ux_finding(
+        {
+            "title": "Unknown severity and confidence values",
+            "severity": "urgent",
+            "confidence": "llm",
+        },
+        default_scanner="visual_ai",
+        default_category="Visual UX",
+    )
+
+    assert finding["scanner"] == "visual_ai"
+    assert finding["category"] == "Visual UX"
+    assert finding["severity"] == "informational"
+    assert finding["confidence"] == "heuristic"
+
+
+def test_to_report_finding_supplies_pdf_safe_fields():
+    normalized = normalize_ux_finding(
+        {
+            "scanner": "responsive_ux",
+            "title": "Horizontal overflow on mobile",
+            "severity": "medium",
+            "page_url": "https://example.com",
+            "viewport": "mobile",
+            "evidence": {
+                "description": "Document width exceeds viewport width.",
+                "value": 430,
+                "threshold": 390,
+            },
+        }
+    )
+
+    report_finding = to_report_finding(normalized)
+
+    assert report_finding["name"] == "Horizontal overflow on mobile"
+    assert report_finding["severity"] == "Medium"
+    assert "Document width exceeds viewport width." in report_finding["evidence"]
+    assert report_finding["confidence"] == "measured"
+
+
+def test_count_findings_by_scanner_aggregates_normalized_findings():
+    findings = [
+        normalize_ux_finding({"scanner": "accessibility", "title": "A"}),
+        normalize_ux_finding({"scanner": "accessibility", "title": "B"}),
+        normalize_ux_finding({"scanner": "responsive_ux", "title": "C"}),
+    ]
+
+    counts = count_findings_by_scanner(findings)
+
+    assert counts == {"accessibility": 2, "responsive_ux": 1}
+    assert "measured" in ALLOWED_CONFIDENCE
+    assert "high" in ALLOWED_SEVERITY

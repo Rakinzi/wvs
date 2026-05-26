@@ -16,6 +16,7 @@ from app.schemas import (
 )
 from app import db, limiter
 from pydantic import ValidationError
+from app.utils.time_utils import utc_now
 
 bp = Blueprint('users', __name__)
 
@@ -293,6 +294,7 @@ def login():
         response = jsonify({
             'username': user.username,
             'user_id': user.id,
+            'is_admin': user.is_admin,
             'expires_in': expires_in,
         })
         set_access_cookies(response, access_token)
@@ -322,7 +324,7 @@ def forgot_password():
         if user:
             token = secrets.token_urlsafe(32)
             user.reset_token_hash = _hash_reset_token(token)
-            user.reset_requested_at = datetime.utcnow()
+            user.reset_requested_at = utc_now()
             user.reset_token_expires_at = user.reset_requested_at + timedelta(
                 minutes=current_app.config["RESET_PASSWORD_TOKEN_TTL_MINUTES"]
             )
@@ -353,7 +355,7 @@ def reset_password():
         if (
             not user
             or not user.reset_token_expires_at
-            or user.reset_token_expires_at < datetime.utcnow()
+            or user.reset_token_expires_at < utc_now()
         ):
             return jsonify({'error': 'This password reset link is invalid or has expired'}), 400
 
@@ -383,6 +385,7 @@ def get_profile():
         'email': user.email,
         'created_on': user.created_on.isoformat(),
         'email_verified': user.email_verified,
+        'is_admin': user.is_admin,
     }), 200
 
 @bp.route('/profile', methods=['PATCH'])

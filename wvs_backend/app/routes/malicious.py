@@ -9,6 +9,7 @@ from app.utils.scan_helpers import normalize_target_url
 from app import db, limiter
 from datetime import datetime
 from pydantic import ValidationError
+from app.utils.time_utils import utc_now
 
 bp = Blueprint('malicious', __name__)
 
@@ -159,14 +160,14 @@ def blocked_stats():
     
     if period == 'hour':
         # Last hour
-        since = datetime.utcnow().replace(minute=0, second=0, microsecond=0)
+        since = utc_now().replace(minute=0, second=0, microsecond=0)
         data = db.session.query(
             db.func.count(BlockedRequest.id)
         ).filter(BlockedRequest.timestamp >= since).scalar()
         
     elif period == 'day':
         # Last 24 hours
-        since = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+        since = utc_now().replace(hour=0, minute=0, second=0, microsecond=0)
         data = db.session.query(
             db.func.count(BlockedRequest.id)
         ).filter(BlockedRequest.timestamp >= since).scalar()
@@ -177,7 +178,7 @@ def blocked_stats():
             db.func.date(BlockedRequest.timestamp).label('date'),
             db.func.count(BlockedRequest.id).label('count')
         ).filter(
-            BlockedRequest.timestamp >= datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0) - db.text("interval '7 days'")
+            BlockedRequest.timestamp >= utc_now().replace(hour=0, minute=0, second=0, microsecond=0) - db.text("interval '7 days'")
         ).group_by('date').all()
         
         data = {str(d[0]): d[1] for d in data}

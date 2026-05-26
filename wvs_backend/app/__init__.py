@@ -29,6 +29,10 @@ def init_celery(app: Flask) -> None:
         broker_connection_retry_on_startup=app.config["BROKER_CONNECTION_RETRY_ON_STARTUP"],
         imports=app.config["CELERY_IMPORTS"],
         beat_schedule=app.config["CELERY_BEAT_SCHEDULE"],
+        task_default_queue=app.config["SECURITY_SCAN_QUEUE"],
+        task_annotations={
+            "app.tasks.run_full_scan_job": {"rate_limit": app.config["UX_SCAN_RATE_LIMIT"]},
+        },
     )
 
     class FlaskTask(celery.Task):
@@ -44,6 +48,7 @@ def register_blueprints(app: Flask) -> None:
     from app.routes.dashboard import bp as dashboard_bp
     from app.routes.malicious import bp as malicious_bp
     from app.routes.scans import bp as scans_bp
+    from app.routes.targets import bp as targets_bp
     from app.routes.users import bp as users_bp
 
     app.register_blueprint(blocked_access_bp)
@@ -51,6 +56,7 @@ def register_blueprints(app: Flask) -> None:
     app.register_blueprint(scans_bp)
     app.register_blueprint(users_bp)
     app.register_blueprint(malicious_bp)
+    app.register_blueprint(targets_bp)
 
 
 def create_app(config_class=None):

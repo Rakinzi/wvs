@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   Shield, BarChart2, Clock, Settings, LogOut,
-  AlertTriangle, Globe, User, Bell, X, Menu, ChevronDown, Zap, Sun, Moon,
+  AlertTriangle, Globe, User, Bell, X, Menu, ChevronDown, Zap, Sun, Moon, BadgeCheck,
 } from 'lucide-react';
 import { useTheme } from '../hooks/useTheme';
 import { getSessionUsername } from '../lib/auth';
@@ -9,9 +9,10 @@ import { getSessionUsername } from '../lib/auth';
 const NAV_ITEMS = [
   { key: 'dashboard',     label: 'Dashboard',      icon: BarChart2 },
   { key: 'scanners',      label: 'Scanners',        icon: Zap },
+  { key: 'targets',       label: 'Verified Targets', icon: BadgeCheck },
   { key: 'history',       label: 'Scan History',   icon: Clock },
   { key: 'blockedSites',  label: 'Blocked Sites',  icon: AlertTriangle },
-  { key: 'blockedAccess', label: 'Access Attempts',icon: Globe },
+  { key: 'blockedAccess', label: 'Access Attempts',icon: Globe, adminOnly: true },
 ];
 
 const NOTIFICATIONS = [
@@ -19,7 +20,7 @@ const NOTIFICATIONS = [
   { id: 2, type: 'info',  message: 'System updated successfully', time: '1 hour ago' },
 ];
 
-const Sidebar = ({ isAuthenticated, onLogout, navigateTo, currentPage }) => {
+const Sidebar = ({ isAuthenticated, onLogout, navigateTo, currentPage, isAdmin = false }) => {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [notifOpen, setNotifOpen]   = useState(false);
   const [userOpen, setUserOpen]     = useState(false);
@@ -87,7 +88,7 @@ const Sidebar = ({ isAuthenticated, onLogout, navigateTo, currentPage }) => {
       {/* Nav items */}
       {isAuthenticated && (
         <nav className="flex flex-col gap-0.5 p-3 flex-1 overflow-y-auto">
-          {NAV_ITEMS.map(({ key, label, icon: Icon }) => {
+          {NAV_ITEMS.filter((item) => !item.adminOnly || isAdmin).map(({ key, label, icon: Icon }) => {
             const active = currentPage === key;
             return (
               <button

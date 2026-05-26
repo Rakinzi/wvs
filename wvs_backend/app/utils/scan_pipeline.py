@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 import os
-from datetime import datetime
 
 from app.scanners import SecurityScanner
 from app.utils.db_manager import DBManager
 from app.utils.reports import generate_report
 from app.utils.scan_helpers import build_scan_sections, build_scan_summary
+from app.utils.time_utils import utc_now, utc_now_isoformat
 
 
 def ensure_reports_dir() -> str:
@@ -46,7 +46,7 @@ def build_full_scan(url: str, progress_callback=None) -> dict:
     scanner = SecurityScanner()
     findings = {
         'url': url,
-        'timestamp': datetime.utcnow().isoformat()
+        'timestamp': utc_now_isoformat()
     }
     steps = [
         ('sqli', 'SQL injection', scanner.check_sql_injection),
@@ -90,6 +90,100 @@ def build_full_scan(url: str, progress_callback=None) -> dict:
     return findings
 
 
+def build_product_readiness_scan(
+    url: str,
+    *,
+    page_paths: list[str] | None = None,
+    enable_ai_review: bool = False,
+    page_type: str | None = None,
+    progress_callback=None,
+) -> dict:
+    scanner = SecurityScanner()
+    findings = {
+        'url': url,
+        'timestamp': utc_now_isoformat(),
+        'scan_profile': 'product_readiness',
+        'scan_config': {
+            'page_paths': page_paths or [],
+            'enable_ai_review': enable_ai_review,
+            'page_type': page_type,
+        },
+    }
+    steps = [
+        ('accessibility', 'accessibility', lambda target: scanner.check_accessibility(target, page_paths=page_paths)),
+        ('responsive_ux', 'responsive layout', lambda target: scanner.check_responsive_ux(target, page_paths=page_paths)),
+        ('performance_ux', 'performance experience', lambda target: scanner.check_performance_ux(target, page_paths=page_paths)),
+        ('form_usability', 'form usability', lambda target: scanner.check_form_usability(target, page_paths=page_paths)),
+        ('visual_ai', 'ai visual review', lambda target: scanner.check_visual_ai(target, page_paths=page_paths, enabled=enable_ai_review, page_type=page_type)),
+    ]
+    total_steps = len(steps)
+
+    for step_index, (step_key, step_label, step_func) in enumerate(steps, start=1):
+        _emit_progress(
+            progress_callback,
+            stage='running',
+            step_key=step_key,
+            step_label=step_label.title(),
+            step_index=step_index,
+            total_steps=total_steps,
+            message=f'Checking {step_label}',
+        )
+        findings[step_key] = step_func(url)
+        _emit_progress(
+            progress_callback,
+            stage='completed_step',
+            step_key=step_key,
+            step_label=step_label.title(),
+            step_index=step_index,
+            total_steps=total_steps,
+            message=f'Completed {step_label}',
+        )
+
+    launch_blockers = []
+    for section_key in ('accessibility', 'responsive_ux', 'performance_ux', 'form_usability'):
+        for issue in (findings.get(section_key, {}) or {}).get('issues', []):
+            if str(issue.get('severity') or '').lower() in {'critical', 'high'}:
+                launch_blockers.append(issue)
+
+    issue_total = sum(
+        len((findings.get(key, {}) or {}).get('issues', []))
+        for key in ('accessibility', 'responsive_ux', 'performance_ux', 'form_usability')
+    )
+    findings['launch_readiness'] = {
+        'status': 'blocked' if launch_blockers else ('attention_required' if issue_total else 'ready'),
+        'score': max(0, 100 - (len(launch_blockers) * 20) - max(0, issue_total - len(launch_blockers)) * 6),
+        'blockers': launch_blockers[:10],
+        'summary': 'Critical product-readiness issues detected before launch.' if launch_blockers else ('Some improvements are recommended before launch.' if issue_total else 'No measured product-readiness issues detected.'),
+    }
+    findings['summary'] = build_scan_summary(findings)
+    findings['sections'] = build_scan_sections(findings)
+    return findings
+
+
+def build_full_launch_audit(
+    url: str,
+    *,
+    page_paths: list[str] | None = None,
+    enable_ai_review: bool = False,
+    page_type: str | None = None,
+    progress_callback=None,
+) -> dict:
+    findings = build_full_scan(url, progress_callback=progress_callback)
+    ux_findings = build_product_readiness_scan(
+        url,
+        page_paths=page_paths,
+        enable_ai_review=enable_ai_review,
+        page_type=page_type,
+        progress_callback=progress_callback,
+    )
+    for key in ('accessibility', 'responsive_ux', 'performance_ux', 'form_usability', 'visual_ai', 'launch_readiness', 'scan_config'):
+        findings[key] = ux_findings.get(key)
+    findings['scan_profile'] = 'full_launch_audit'
+    findings['summary'] = build_scan_summary(findings)
+    findings['sections'] = build_scan_sections(findings)
+    return findings
+
+
 def tag_malicious_result(url: str, findings: dict) -> None:
     malicious = findings.get('malicious', {})
     dnsbl = malicious.get('dnsbl', {}) or {}
@@ -114,7 +208,7 @@ def tag_malicious_result(url: str, findings: dict) -> None:
 
 def persist_scan_result(url: str, findings: dict, user_id: int, prefix: str = "scan") -> int:
     reports_dir = ensure_reports_dir()
-    timestamp = datetime.utcnow().timestamp()
+    timestamp = utc_now().timestamp()
     report_filename = f"{prefix}_{timestamp}.pdf"
     report_path = os.path.join(reports_dir, report_filename)
     os.makedirs(os.path.dirname(report_path), exist_ok=True)

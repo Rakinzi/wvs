@@ -5,6 +5,7 @@ import {
   Bell, Check, AlertTriangle, Key, Info
 } from 'lucide-react';
 import { apiJson, ApiError } from '../lib/api';
+import Spinner from './Spinner';
 
 const T = {
   bg:          'var(--color-bg)',
@@ -293,7 +294,7 @@ const Settings = ({ navigateTo, userData }) => {
                   className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold text-white transition-all cursor-pointer"
                   style={{ background: loading ? T.dim : T.primary, opacity: loading ? 0.7 : 1 }}>
                   {loading
-                    ? <><RefreshCw size={13} className="animate-spin" /> Saving…</>
+                    ? <><Spinner size="sm" /> Saving…</>
                     : <><Save size={13} /> Save Settings</>}
                 </button>
               </div>

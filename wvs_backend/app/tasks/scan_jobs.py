@@ -1,12 +1,18 @@
 from __future__ import annotations
 
-from datetime import datetime
 from typing import Any
 
 from app import celery, db
 from app.models import ScanJob
 from app.settings import settings
-from app.utils.scan_pipeline import build_full_scan, persist_scan_result, tag_malicious_result
+from app.utils.time_utils import utc_now, utc_now_isoformat
+from app.utils.scan_pipeline import (
+    build_full_launch_audit,
+    build_full_scan,
+    build_product_readiness_scan,
+    persist_scan_result,
+    tag_malicious_result,
+)
 
 _TIMEOUT = max(settings.max_scan_time, 60)
 
@@ -16,6 +22,7 @@ _TIMEOUT = max(settings.max_scan_time, 60)
     name='app.tasks.run_full_scan_job',
     soft_time_limit=_TIMEOUT,
     time_limit=_TIMEOUT + 30,
+    rate_limit=settings.ux_scan_rate_limit,
 )
 def run_full_scan_job(self, job_id: int) -> dict:
     from celery.exceptions import SoftTimeLimitExceeded
@@ -24,7 +31,7 @@ def run_full_scan_job(self, job_id: int) -> dict:
     total_steps = 12
 
     def store_progress_snapshot(snapshot: dict[str, Any]) -> None:
-        progress_job = ScanJob.query.get(job_id)
+        progress_job = db.session.get(ScanJob, job_id)
         if not progress_job:
             return
 
@@ -37,7 +44,7 @@ def run_full_scan_job(self, job_id: int) -> dict:
 
     def push_progress(update: dict[str, Any]) -> None:
         entry = {
-            'timestamp': datetime.utcnow().isoformat(),
+            'timestamp': utc_now_isoformat(),
             'stage': update['stage'],
             'step_key': update['step_key'],
             'step_label': update['step_label'],
@@ -63,13 +70,13 @@ def run_full_scan_job(self, job_id: int) -> dict:
             meta=snapshot,
         )
 
-    job = ScanJob.query.get(job_id)
+    job = db.session.get(ScanJob, job_id)
     if not job:
         raise ValueError(f"Scan job {job_id} not found")
 
     try:
         job.status = 'running'
-        job.started_at = datetime.utcnow()
+        job.started_at = utc_now()
         db.session.commit()
 
         push_progress(
@@ -84,8 +91,29 @@ def run_full_scan_job(self, job_id: int) -> dict:
             }
         )
 
-        findings = build_full_scan(job.url, progress_callback=push_progress)
-        tag_malicious_result(job.url, findings)
+        config = {}
+        if isinstance(job.findings, dict):
+            config = job.findings.get('_config', {}) or {}
+
+        if job.scan_type == 'product_readiness':
+            findings = build_product_readiness_scan(
+                job.url,
+                page_paths=config.get('page_paths') or [],
+                enable_ai_review=bool(config.get('enable_ai_review')),
+                page_type=config.get('page_type'),
+                progress_callback=push_progress,
+            )
+        elif job.scan_type == 'full_launch_audit':
+            findings = build_full_launch_audit(
+                job.url,
+                page_paths=config.get('page_paths') or [],
+                enable_ai_review=bool(config.get('enable_ai_review')),
+                page_type=config.get('page_type'),
+                progress_callback=push_progress,
+            )
+        else:
+            findings = build_full_scan(job.url, progress_callback=push_progress)
+            tag_malicious_result(job.url, findings)
         push_progress(
             {
                 'stage': 'running',
@@ -102,7 +130,7 @@ def run_full_scan_job(self, job_id: int) -> dict:
         job.findings = findings
         job.result_id = result.id
         job.status = 'completed'
-        job.completed_at = datetime.utcnow()
+        job.completed_at = utc_now()
         job.error_message = None
         db.session.commit()
 
@@ -122,11 +150,11 @@ def run_full_scan_job(self, job_id: int) -> dict:
 
     except SoftTimeLimitExceeded:
         db.session.rollback()
-        job = ScanJob.query.get(job_id)
+        job = db.session.get(ScanJob, job_id)
         if job:
             job.status = 'failed'
             job.error_message = f'Scan timed out after {_TIMEOUT}s'
-            job.completed_at = datetime.utcnow()
+            job.completed_at = utc_now()
             current_findings = job.findings if isinstance(job.findings, dict) else {}
             job.findings = {
                 **current_findings,
@@ -146,11 +174,11 @@ def run_full_scan_job(self, job_id: int) -> dict:
 
     except Exception as exc:
         db.session.rollback()
-        job = ScanJob.query.get(job_id)
+        job = db.session.get(ScanJob, job_id)
         if job:
             job.status = 'failed'
             job.error_message = str(exc)
-            job.completed_at = datetime.utcnow()
+            job.completed_at = utc_now()
             current_findings = job.findings if isinstance(job.findings, dict) else {}
             job.findings = {
                 **current_findings,

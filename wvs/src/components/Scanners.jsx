@@ -3,10 +3,12 @@ import {
   AlertTriangle, Lock, Database,
   RefreshCw, CheckCircle, Search,
   Globe, ArrowRight, Zap, ChevronRight,
-  Code2, Layers, FolderSearch
+  Code2, Layers, FolderSearch, Shield, Trash2, RotateCcw, KeyRound
 } from 'lucide-react';
 import { useScansData } from '../hooks/useScansData';
+import { useVerifiedTargetsData } from '../hooks/useVerifiedTargetsData';
 import { apiJson } from '../lib/api';
+import Spinner from './Spinner';
 
 const T = {
   bg:          'var(--color-bg)',
@@ -136,6 +138,21 @@ const ProgressBar = ({ value, color }) => (
   </div>
 );
 
+const StatusBadge = ({ status }) => {
+  const styles = {
+    verified: { background: '#10B98115', color: T.secure, border: '1px solid #10B98130' },
+    pending: { background: '#F59E0B15', color: T.warn, border: '1px solid #F59E0B30' },
+    failed: { background: '#F43F5E15', color: T.danger, border: '1px solid #F43F5E30' },
+    expired: { background: '#F43F5E15', color: T.danger, border: '1px solid #F43F5E30' },
+  };
+  const style = styles[status] || { background: `${T.info}15`, color: T.info, border: `1px solid ${T.info}30` };
+  return (
+    <span className="px-2 py-0.5 rounded text-xs font-semibold" style={style}>
+      {status}
+    </span>
+  );
+};
+
 /* Scan URL input + button */
 const ScanInput = ({ accentColor, url, setUrl, onScan, isScanning }) => (
   <div className="flex gap-2">
@@ -170,7 +187,7 @@ const ScanInput = ({ accentColor, url, setUrl, onScan, isScanning }) => (
         opacity: isScanning ? 0.7 : 1,
       }}
     >
-      {isScanning ? <><RefreshCw size={13} className="animate-spin" /> Scanning…</> : <><Search size={13} /> Scan</>}
+      {isScanning ? <><Spinner size="sm" /> Scanning…</> : <><Search size={13} /> Scan</>}
     </button>
   </div>
 );
@@ -212,7 +229,7 @@ const FullScanStatus = ({ job, navigateTo, onPoll }) => {
         <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: T.muted, fontFamily: 'IBM Plex Mono, monospace' }}>Job Status</p>
         <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-semibold"
           style={{ background: `${statusColor}15`, color: statusColor }}>
-          {['queued','running'].includes(job.status) && <RefreshCw size={10} className="animate-spin" />}
+          {['queued','running'].includes(job.status) && <Spinner size="sm" style={{ width: 10, height: 10 }} />}
           {job.status}
         </span>
       </div>
@@ -280,9 +297,16 @@ const FullScanStatus = ({ job, navigateTo, onPoll }) => {
 /* ════════════════════════════════════════════════ */
 const Scanners = ({ navigateTo }) => {
   const [activeId, setActiveId] = useState('full');
+  const [newTargetUrl, setNewTargetUrl] = useState('');
+  const [newTargetMethod, setNewTargetMethod] = useState('meta_tag');
+  const [verificationToken, setVerificationToken] = useState('');
+  const [verificationInstructions, setVerificationInstructions] = useState(null);
+  const [targetActionError, setTargetActionError] = useState(null);
 
   const {
-    fullScanUrl, setFullScanUrl, sqlScanUrl, setSqlScanUrl,
+    fullScanUrl, setFullScanUrl, fullScanProfile, setFullScanProfile,
+    fullScanPagePaths, setFullScanPagePaths, fullScanVerifiedTargetId, setFullScanVerifiedTargetId,
+    fullScanEnableAiReview, setFullScanEnableAiReview, sqlScanUrl, setSqlScanUrl,
     sslScanUrl, setSslScanUrl, wordpressScanUrl, setWordpressScanUrl,
     xssScanUrl, setXssScanUrl, techScanUrl, setTechScanUrl,
     exposureScanUrl, setExposureScanUrl,
@@ -294,6 +318,15 @@ const Scanners = ({ navigateTo }) => {
     handleFullScan, handleSqlScan, handleSslScan, handleWordpressScan,
     handleXssScan, handleTechScan, handleExposureScan,
   } = useScansData();
+  const {
+    targets,
+    loading: targetsLoading,
+    error: targetsError,
+    createTarget,
+    verifyTarget,
+    regenerateToken,
+    deleteTarget,
+  } = useVerifiedTargetsData();
 
   useEffect(() => { document.title = 'Scanners — LaunchGuard'; }, []);
 
@@ -309,6 +342,41 @@ const Scanners = ({ navigateTo }) => {
   }, [fullScanJob, setFullScanJob]);
 
   const active = SCANNERS.find(s => s.id === activeId);
+
+  const handleCreateTarget = async () => {
+    if (!newTargetUrl) return;
+    try {
+      setTargetActionError(null);
+      const data = await createTarget({ target_url: newTargetUrl, verification_method: newTargetMethod });
+      setVerificationToken(data.verification_token || '');
+      setVerificationInstructions(data.instructions || null);
+      setFullScanVerifiedTargetId(data.target?.id || '');
+    } catch (error) {
+      setTargetActionError(error.message || 'Failed to create target');
+    }
+  };
+
+  const handleVerifyTarget = async () => {
+    if (!fullScanVerifiedTargetId || !verificationToken) return;
+    try {
+      setTargetActionError(null);
+      await verifyTarget(fullScanVerifiedTargetId, verificationToken);
+    } catch (error) {
+      setTargetActionError(error.message || 'Failed to verify target');
+    }
+  };
+
+  const handleRegenerate = async () => {
+    if (!fullScanVerifiedTargetId) return;
+    try {
+      setTargetActionError(null);
+      const data = await regenerateToken(fullScanVerifiedTargetId);
+      setVerificationToken(data.verification_token || '');
+      setVerificationInstructions(data.instructions || null);
+    } catch (error) {
+      setTargetActionError(error.message || 'Failed to regenerate token');
+    }
+  };
 
   return (
     <div className="min-h-screen" style={{ background: T.bg }}>
@@ -398,6 +466,144 @@ const Scanners = ({ navigateTo }) => {
                 <div className="px-5 py-4" style={{ borderBottom: `1px solid ${T.border}` }}>
                   <p className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: T.muted, fontFamily: 'IBM Plex Mono, monospace' }}>Target URL</p>
                   <ScanInput accentColor={T.primary} url={fullScanUrl} setUrl={setFullScanUrl} onScan={handleFullScan} isScanning={isFullScanSubmitting} />
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
+                    <label className="flex flex-col gap-1">
+                      <span className="text-xs" style={{ color: T.dim }}>Scan Profile</span>
+                      <select
+                        value={fullScanProfile}
+                        onChange={(e) => setFullScanProfile(e.target.value)}
+                        className="px-3 py-2 rounded-lg text-sm"
+                        style={{ background: T.surface, border: `1px solid ${T.border}`, color: T.text }}
+                      >
+                        <option value="security_only">Security Scan</option>
+                        <option value="product_readiness">Product Readiness Scan</option>
+                        <option value="full_launch_audit">Full Launch Audit</option>
+                      </select>
+                    </label>
+                    <label className="flex flex-col gap-1">
+                      <span className="text-xs" style={{ color: T.dim }}>Verified Target ID</span>
+                      <input
+                        value={fullScanVerifiedTargetId}
+                        onChange={(e) => setFullScanVerifiedTargetId(e.target.value)}
+                        placeholder="Required when verified targets are enforced"
+                        className="px-3 py-2 rounded-lg text-sm"
+                        style={{ background: T.surface, border: `1px solid ${T.border}`, color: T.text, fontFamily: 'IBM Plex Mono, monospace' }}
+                      />
+                    </label>
+                  </div>
+                  {fullScanProfile !== 'security_only' && (
+                    <div className="mt-3 flex flex-col gap-3">
+                      <label className="flex flex-col gap-1">
+                        <span className="text-xs" style={{ color: T.dim }}>Page Paths</span>
+                        <textarea
+                          value={fullScanPagePaths}
+                          onChange={(e) => setFullScanPagePaths(e.target.value)}
+                          rows={4}
+                          placeholder={"/\n/signup\n/pricing"}
+                          className="px-3 py-2 rounded-lg text-sm"
+                          style={{ background: T.surface, border: `1px solid ${T.border}`, color: T.text, fontFamily: 'IBM Plex Mono, monospace' }}
+                        />
+                      </label>
+                      <label className="flex items-center gap-2 text-xs" style={{ color: T.muted }}>
+                        <input
+                          type="checkbox"
+                          checked={fullScanEnableAiReview}
+                          onChange={(e) => setFullScanEnableAiReview(e.target.checked)}
+                        />
+                        Enable AI visual review when configured
+                      </label>
+                      <div className="rounded-lg p-3" style={{ background: T.surface, border: `1px solid ${T.border}` }}>
+                        <div className="flex items-center gap-2 mb-3">
+                          <Shield size={14} style={{ color: T.primary }} />
+                          <p className="text-xs font-semibold" style={{ color: T.text }}>Verified Target</p>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          <input
+                            value={newTargetUrl}
+                            onChange={(e) => setNewTargetUrl(e.target.value)}
+                            placeholder="https://example.com"
+                            className="px-3 py-2 rounded-lg text-sm"
+                            style={{ background: T.card, border: `1px solid ${T.border}`, color: T.text }}
+                          />
+                          <select
+                            value={newTargetMethod}
+                            onChange={(e) => setNewTargetMethod(e.target.value)}
+                            className="px-3 py-2 rounded-lg text-sm"
+                            style={{ background: T.card, border: `1px solid ${T.border}`, color: T.text }}
+                          >
+                            <option value="meta_tag">Meta Tag</option>
+                            <option value="well_known_file">Well-Known File</option>
+                          </select>
+                        </div>
+                        <div className="flex flex-wrap gap-2 mt-3">
+                          <button onClick={handleCreateTarget} className="px-3 py-2 rounded-lg text-xs font-semibold cursor-pointer" style={{ background: T.primary, color: '#fff' }}>
+                            Create Verification Token
+                          </button>
+                          <button onClick={handleVerifyTarget} disabled={!fullScanVerifiedTargetId || !verificationToken} className="px-3 py-2 rounded-lg text-xs font-semibold cursor-pointer disabled:opacity-60" style={{ background: T.secure, color: '#fff' }}>
+                            Verify Ownership
+                          </button>
+                          <button onClick={handleRegenerate} disabled={!fullScanVerifiedTargetId} className="px-3 py-2 rounded-lg text-xs font-semibold cursor-pointer disabled:opacity-60" style={{ background: T.warn, color: '#fff' }}>
+                            <RotateCcw size={11} className="inline mr-1" /> Regenerate
+                          </button>
+                        </div>
+                        {verificationToken && (
+                          <div className="mt-3 rounded-lg p-3" style={{ background: T.card, border: `1px solid ${T.border}` }}>
+                            <p className="text-xs mb-1" style={{ color: T.dim }}>Verification Token</p>
+                            <p className="text-xs font-mono break-all" style={{ color: T.text }}>{verificationToken}</p>
+                            {verificationInstructions?.tag && (
+                              <pre className="mt-2 text-xs whitespace-pre-wrap break-words" style={{ color: T.info }}>{verificationInstructions.tag}</pre>
+                            )}
+                            {verificationInstructions?.path && (
+                              <p className="mt-2 text-xs" style={{ color: T.muted }}>
+                                Upload a file to <span style={{ color: T.text, fontFamily: 'IBM Plex Mono, monospace' }}>{verificationInstructions.path}</span> containing the token above.
+                              </p>
+                            )}
+                          </div>
+                        )}
+                        <div className="mt-3">
+                          <label className="text-xs" style={{ color: T.dim }}>Select Existing Verified Target</label>
+                          <select
+                            value={fullScanVerifiedTargetId}
+                            onChange={(e) => setFullScanVerifiedTargetId(e.target.value)}
+                            className="mt-1 w-full px-3 py-2 rounded-lg text-sm"
+                            style={{ background: T.card, border: `1px solid ${T.border}`, color: T.text }}
+                          >
+                            <option value="">None selected</option>
+                            {targets.map((target) => (
+                              <option key={target.id} value={target.id}>
+                                {target.normalized_domain} · {target.verification_status}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        {targetsLoading ? (
+                          <p className="text-xs mt-3" style={{ color: T.dim }}>Loading targets…</p>
+                        ) : targets.length > 0 && (
+                          <div className="mt-3 flex flex-col gap-2">
+                            {targets.slice(0, 5).map((target) => (
+                              <div key={target.id} className="flex items-center justify-between gap-3 p-2 rounded-lg" style={{ background: T.card, border: `1px solid ${T.border}` }}>
+                                <div className="min-w-0">
+                                  <p className="text-xs font-mono truncate" style={{ color: T.text }}>{target.normalized_domain}</p>
+                                  <p className="text-xs truncate" style={{ color: T.dim }}>{target.verification_method}</p>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <StatusBadge status={target.verification_status} />
+                                  <button onClick={() => deleteTarget(target.id)} className="cursor-pointer" style={{ color: T.danger }}>
+                                    <Trash2 size={12} />
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {(targetActionError || targetsError) && (
+                          <p className="text-xs mt-3" style={{ color: T.danger }}>
+                            {targetActionError || targetsError}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  )}
                   {fullScanError && (
                     <p className="mt-2 text-xs flex items-center gap-1.5" style={{ color: T.danger }}>
                       <AlertTriangle size={11} /> {fullScanError}
@@ -409,7 +615,7 @@ const Scanners = ({ navigateTo }) => {
                     <FullScanStatus job={fullScanJob} navigateTo={navigateTo} onPoll={pollFullScanJob} />
                   ) : (
                     <p className="text-xs text-center py-6" style={{ color: T.dim }}>
-                      Submit a URL above to queue a full async scan
+                      Submit a URL above to queue a security scan, product-readiness scan, or full launch audit
                     </p>
                   )}
                 </div>
@@ -466,7 +672,7 @@ const Scanners = ({ navigateTo }) => {
                 )}
                 {isSqlScanning && (
                   <div className="flex items-center gap-3 px-5 py-4">
-                    <div className="w-4 h-4 border-2 rounded-full animate-spin" style={{ borderColor: `${T.danger}30`, borderTopColor: T.danger }} />
+                    <Spinner size="sm" color={T.danger} />
                     <p className="text-sm" style={{ color: T.muted }}>Testing injection vectors…</p>
                   </div>
                 )}
@@ -529,7 +735,7 @@ const Scanners = ({ navigateTo }) => {
                 )}
                 {isSslScanning && (
                   <div className="flex items-center gap-3 px-5 py-4">
-                    <div className="w-4 h-4 border-2 rounded-full animate-spin" style={{ borderColor: `${T.secure}30`, borderTopColor: T.secure }} />
+                    <Spinner size="sm" color={T.secure} />
                     <p className="text-sm" style={{ color: T.muted }}>Verifying certificate chain…</p>
                   </div>
                 )}
@@ -621,7 +827,7 @@ const Scanners = ({ navigateTo }) => {
                 )}
                 {isWordpressScanning && (
                   <div className="flex items-center gap-3 px-5 py-4">
-                    <div className="w-4 h-4 border-2 rounded-full animate-spin" style={{ borderColor: `${T.warn}30`, borderTopColor: T.warn }} />
+                    <Spinner size="sm" color={T.warn} />
                     <p className="text-sm" style={{ color: T.muted }}>Probing WordPress installation…</p>
                   </div>
                 )}
@@ -688,7 +894,7 @@ const Scanners = ({ navigateTo }) => {
                 )}
                 {isXssScanning && (
                   <div className="flex items-center gap-3 px-5 py-4">
-                    <div className="w-4 h-4 border-2 rounded-full animate-spin" style={{ borderColor: `${T.purple}30`, borderTopColor: T.purple }} />
+                    <Spinner size="sm" color={T.purple} />
                     <p className="text-sm" style={{ color: T.muted }}>Injecting XSS payloads into parameters and forms…</p>
                   </div>
                 )}
@@ -813,7 +1019,7 @@ const Scanners = ({ navigateTo }) => {
                 )}
                 {isTechScanning && (
                   <div className="flex items-center gap-3 px-5 py-4">
-                    <div className="w-4 h-4 border-2 rounded-full animate-spin" style={{ borderColor: `${T.info}30`, borderTopColor: T.info }} />
+                    <Spinner size="sm" color={T.info} />
                     <p className="text-sm" style={{ color: T.muted }}>Fingerprinting technology stack…</p>
                   </div>
                 )}
@@ -893,7 +1099,7 @@ const Scanners = ({ navigateTo }) => {
                 )}
                 {isExposureScanning && (
                   <div className="flex items-center gap-3 px-5 py-4">
-                    <div className="w-4 h-4 border-2 rounded-full animate-spin" style={{ borderColor: '#F9731630', borderTopColor: '#F97316' }} />
+                    <Spinner size="sm" color="#F97316" />
                     <p className="text-sm" style={{ color: T.muted }}>Probing sensitive file paths across all stacks…</p>
                   </div>
                 )}

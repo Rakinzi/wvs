@@ -1,0 +1,1215 @@
+I’ve got the actual system shape now. You already have a React SPA + Flask API + Celery scanning pipeline + PDF reporting + cookie JWT auth + security scanners. The correct Claude Code instruction is to extend the existing WVS product with UX/product-readiness auditing, while preserving your current architecture and report contracts.
+
+Paste the following into Claude Code at the root of your existing repository.
+
+# TASK: Extend the Existing WVS Platform into a Security + UX/Product Readiness Scanner
+
+Act as a senior full-stack engineer, application security engineer and UX audit systems architect.
+
+You are working inside an EXISTING full-stack web vulnerability scanning platform. Do not redesign it from scratch, do not migrate frameworks, and do not introduce a parallel application architecture unless absolutely necessary.
+
+The current system already contains:
+
+- `wvs/`: React SPA frontend.
+- `wvs_backend/`: Flask API backend.
+- Celery background jobs for asynchronous full scans.
+- SQLAlchemy persistence.
+- JWT authentication stored in cookies.
+- CSRF protection through `X-CSRF-TOKEN`.
+- Existing PDF report generation using ReportLab.
+- Existing scan history, dashboard statistics, progress tracking and report JSON APIs.
+- Existing scanners for SQL injection, SSL, headers, WordPress, OWASP ZAP, malicious URL detection, XSS, technology fingerprinting, file exposure, DNS, open redirect and subdomain takeover.
+
+The goal is to extend the existing product so that verified website owners can also scan their deployed web applications for:
+
+1. Accessibility failures.
+2. Responsive/mobile layout failures.
+3. Performance-related UX problems.
+4. Form and interaction usability issues.
+5. Visual design quality risks.
+6. AI-assisted product improvement recommendations.
+7. AI-builder-ready remediation prompts for applications created using tools such as Lovable, Bolt, Replit, Cursor or Claude Code.
+
+The product should evolve from only a web vulnerability scanner into:
+
+> A website security and product-readiness platform that identifies security weaknesses, UX failures, accessibility problems, mobile defects and launch blockers in AI-built or rapidly developed web applications.
+
+---
+
+# CRITICAL RULES
+
+## Preserve Existing Architecture
+
+Do not:
+
+- replace Flask with Node, Express, FastAPI or another backend;
+- replace React with another frontend framework;
+- rewrite the authentication system;
+- break existing scanner routes;
+- break existing report JSON contracts;
+- break existing PDF report generation;
+- break Celery scan jobs or progress tracking;
+- replace existing database models without a migration plan;
+- rename product branding globally without explicit instruction.
+
+Extend what already exists.
+
+## Inspect Before Modifying
+
+Before implementation:
+
+1. Inspect the repository structure and confirm the files referenced below exist.
+2. Read the existing implementation of:
+   - `wvs_backend/app/__init__.py`
+   - `wvs_backend/app/settings.py`
+   - `wvs_backend/app/config.py`
+   - `wvs_backend/app/models.py`
+   - `wvs_backend/app/schemas.py`
+   - `wvs_backend/app/utils/scan_helpers.py`
+   - `wvs_backend/app/utils/scan_pipeline.py`
+   - `wvs_backend/app/utils/reports.py`
+   - `wvs_backend/app/tasks/scan_jobs.py`
+   - `wvs_backend/app/routes/scans.py`
+   - `wvs/src/App.jsx`
+   - `wvs/src/lib/api.js`
+   - `wvs/src/lib/auth.js`
+   - `wvs/src/hooks/useScansData.js`, if present
+   - `wvs/src/hooks/useScanReportData.js`, if present
+   - `wvs/src/components/Scanners.jsx`
+   - existing report/dashboard components.
+3. Identify the precise current result schema produced by each scanner and the current structure expected by:
+   - `build_scan_summary()`
+   - `build_scan_sections()`
+   - PDF reports
+   - report JSON API
+   - React report pages.
+4. Produce a concise implementation plan before changing code.
+5. Add tests around existing scan summary/section logic before modifying the full scan pipeline.
+
+---
+
+# EXISTING ARCHITECTURE TO RESPECT
+
+The backend currently works approximately as follows:
+
+```txt
+React frontend
+    ↓
+Flask API
+    ↓
+Routes in app/routes/scans.py
+    ↓
+Synchronous scanner endpoints or Celery full-scan task
+    ↓
+Scanner modules in app/scanners/
+    ↓
+scan_pipeline.py builds full scan results
+    ↓
+summary + sections generation
+    ↓
+ScanResult persisted
+    ↓
+PDF report generated
+    ↓
+React dashboard/report/history pages render result JSON
+
+Existing backend conventions:
+
+Application bootstrap: wvs_backend/app/__init__.py
+Entry point: wvs_backend/manage.py
+Persistence models: wvs_backend/app/models.py
+Request schemas: wvs_backend/app/schemas.py
+Target URL validation: wvs_backend/app/utils/scan_helpers.py
+Full scan orchestration: wvs_backend/app/utils/scan_pipeline.py
+Celery full scan job: wvs_backend/app/tasks/scan_jobs.py
+Report generation: wvs_backend/app/utils/reports.py
+Main scan API: wvs_backend/app/routes/scans.py
+
+Existing frontend conventions:
+
+React SPA entry/routing: wvs/src/App.jsx
+Fetch wrapper and CSRF handling: wvs/src/lib/api.js
+Lightweight session metadata: wvs/src/lib/auth.js
+Dashboard hooks: wvs/src/hooks/useDashboardData.js
+Scan/report hooks: inspect current implementation before extending.
+Scanner list UI: wvs/src/components/Scanners.jsx
+HIGH-LEVEL IMPLEMENTATION STRATEGY
+
+Implement this extension in controlled phases.
+
+Phase 0: Stabilise Existing Extension Points
+
+Before adding UX scanners:
+
+Add or improve tests for:
+build_scan_summary()
+build_scan_sections()
+scan result persistence
+report JSON response shape
+Celery scan progress state transitions.
+Introduce a normalised finding schema without breaking existing results.
+
+Each new UX scanner finding should follow a common contract similar to:
+
+{
+    "id": "generated-or-rule-based-id",
+    "scanner": "accessibility",
+    "category": "Accessibility",
+    "title": "Form input has no accessible label",
+    "severity": "high",
+    "confidence": "measured",
+    "page_url": "https://example.com/signup",
+    "viewport": "mobile",
+    "selector": "#email",
+    "evidence": {
+        "rule_id": "label",
+        "description": "Form elements must have labels",
+        "screenshot_path": None,
+        "metric": None,
+        "value": None,
+        "threshold": None
+    },
+    "user_impact": "Screen reader users may not know what information is required.",
+    "technical_remediation": "Associate an explicit label with the email field.",
+    "builder_prompt": "Update the signup form so that the email input has a visible label linked using htmlFor/id and preserve the existing visual design.",
+    "references": [],
+    "status": "open"
+}
+
+The existing scanner output formats do not need to be rewritten immediately. Instead:
+
+create adapter/normalisation helpers for new UX findings;
+preserve current security scanner output behaviour;
+allow summary, sections, PDF reports and React UI to consume the new UX findings safely.
+
+Recommended new utility module:
+
+wvs_backend/app/utils/finding_normalizer.py
+
+Recommended responsibilities:
+
+standardise new UX/product findings;
+validate severity values;
+validate confidence labels;
+calculate scanner issue counts;
+supply safe fallback values for reports.
+
+Allowed confidence values:
+
+measured
+heuristic
+ai_assisted
+
+Allowed severity values:
+
+critical
+high
+medium
+low
+recommendation
+informational
+PHASE 1: ADD TARGET OWNERSHIP VERIFICATION
+
+The current system validates URLs and blocks localhost/private targets. Preserve that logic and extend it.
+
+Because this application may eventually scan customer websites more deeply, users must verify ownership before running UX interaction scans, screenshot scans, AI visual reviews or full production security scans.
+
+Add New Persistence Model
+
+Extend wvs_backend/app/models.py using the existing model conventions.
+
+Create a model similar to:
+
+class VerifiedTarget(db.Model):
+    id
+    user_id
+    target_url
+    normalized_domain
+    verification_method
+    verification_token_hash
+    verification_status
+    verified_at
+    token_expires_at
+    created_at
+    updated_at
+
+Possible status values:
+
+pending
+verified
+expired
+revoked
+failed
+
+Possible verification methods for the MVP:
+
+meta_tag
+well_known_file
+Verification Methods
+HTML Meta Tag
+
+The customer adds:
+
+<meta name="wvs-site-verification" content="GENERATED_TOKEN" />
+Well-Known Verification File
+
+The customer uploads a file at:
+
+/.well-known/wvs-site-verification.txt
+
+Containing:
+
+GENERATED_TOKEN
+Verification Routes
+
+Create a dedicated route module rather than overloading the existing scans.py route file:
+
+wvs_backend/app/routes/targets.py
+
+Add endpoints following existing authentication and CSRF patterns:
+
+POST /targets
+GET /targets
+GET /targets/<target_id>
+POST /targets/<target_id>/verification-token
+POST /targets/<target_id>/verify
+DELETE /targets/<target_id>
+
+Do not expose raw verification tokens after initial generation unless a new token is explicitly requested.
+
+Verification Safety Requirements
+
+Reuse and strengthen existing URL safety validation in:
+
+wvs_backend/app/utils/scan_helpers.py
+
+Verification requests must:
+
+allow only HTTP and HTTPS;
+reject embedded credentials;
+reject localhost;
+reject .local targets;
+reject loopback, private, reserved and link-local IPs;
+reject cloud metadata targets;
+validate each redirect destination;
+cap response size;
+use strict timeouts;
+restrict validation to the submitted hostname.
+
+Create tests for:
+
+accepted public HTTPS target;
+localhost rejection;
+private IP rejection;
+redirect to private IP rejection;
+embedded credentials rejection;
+successful meta verification;
+successful well-known-file verification;
+invalid token;
+expired token.
+Development Compatibility
+
+If existing development workflows currently scan local targets, preserve local testing only through existing controlled configuration such as:
+
+ALLOW_PRIVATE_SCAN_TARGETS=true
+
+Do not weaken production defaults.
+
+Add a new production configuration option similar to:
+
+REQUIRE_VERIFIED_TARGETS=true
+
+Expected behaviour:
+
+Development may explicitly disable verification for local testing.
+Production should require verified targets for new UX/product scans and full scans.
+PHASE 2: ADD A BROWSER-BASED UX SCANNING FOUNDATION
+
+Use Python-compatible tooling because the current backend and Celery worker are Python-based.
+
+Do not introduce an independent Node scanner service for the MVP.
+
+Recommended Technology
+
+Use:
+
+Playwright for Python
+
+for:
+
+opening verified web pages;
+capturing screenshots;
+executing browser-side evaluation scripts;
+testing responsive viewports;
+safely inspecting visible forms and navigation.
+
+Create scanner modules under the existing scanner directory:
+
+wvs_backend/app/scanners/ux_browser_scanner.py
+wvs_backend/app/scanners/accessibility_scanner.py
+wvs_backend/app/scanners/responsive_scanner.py
+wvs_backend/app/scanners/performance_ux_scanner.py
+wvs_backend/app/scanners/form_usability_scanner.py
+wvs_backend/app/scanners/visual_ai_scanner.py
+
+Create shared support modules where useful:
+
+wvs_backend/app/utils/ux_scan_helpers.py
+wvs_backend/app/utils/ux_screenshot_manager.py
+wvs_backend/app/utils/remediation_prompts.py
+Browser Scan Limits
+
+Add configuration values using the existing settings/config approach:
+
+UX_SCAN_ENABLED=true
+UX_SCAN_MAX_PAGES=10
+UX_SCAN_DEFAULT_PAGES=5
+UX_SCAN_PAGE_TIMEOUT_SECONDS=20
+UX_SCAN_SCREENSHOT_DIR=reports/screenshots
+UX_SCAN_ENABLE_AI_REVIEW=false
+UX_SCAN_MOBILE_WIDTH=390
+UX_SCAN_MOBILE_HEIGHT=844
+UX_SCAN_DESKTOP_WIDTH=1440
+UX_SCAN_DESKTOP_HEIGHT=1024
+
+Optimise for the user’s local hardware:
+
+MacBook Pro 2019: one UX scan at a time.
+HP Victus with 32 GB RAM: several test workers later, but do not build around concurrency yet.
+
+For the MVP:
+
+One Celery UX/full scan job at a time during local development.
+Maximum 10 scanned pages.
+Default 5 pages.
+Default two viewports: mobile and desktop.
+Screenshots retained only when linked to findings or final reports.
+No video recording or Playwright tracing by default.
+PHASE 3: ACCESSIBILITY SCANNER
+
+Implement accessibility scanning as an objective measured module.
+
+Approach
+
+Use Playwright for Python to load the rendered page.
+
+For automated accessibility rules, use a reliable axe-core browser injection strategy compatible with Python Playwright. Prefer loading a pinned local axe.min.js asset or a stable maintained Python integration after inspecting project dependency conventions.
+
+Do not rely on an LLM for accessibility violation detection.
+
+Detect
+
+At minimum detect and normalise findings for:
+
+colour contrast violations;
+inputs without accessible labels;
+buttons without accessible names;
+images without alt text;
+invalid ARIA usage;
+duplicate IDs affecting accessibility;
+missing document language;
+heading hierarchy issues reported by axe;
+keyboard-accessibility concerns where measurable.
+Tap Target Rule
+
+Add a custom measurable rule using Playwright DOM bounding boxes.
+
+For visible interactive elements such as:
+
+button
+a[href]
+input[type=submit]
+input[type=button]
+[role=button]
+
+Flag mobile targets that are significantly too small for reliable tapping.
+
+Do not call this a strict WCAG failure unless the rule mapping is confirmed. Label the finding appropriately as:
+
+confidence: measured
+category: Mobile Accessibility
+Keyboard Check
+
+Implement a conservative keyboard-navigation test:
+
+press Tab through a capped number of interactive elements;
+detect whether visible focus moves;
+capture obvious cases where navigation cannot reach visible key controls;
+avoid claiming total keyboard accessibility coverage.
+Output
+
+Each result must include:
+
+affected URL;
+viewport;
+rule identifier;
+severity;
+confidence=measured;
+affected selector or safe HTML summary where possible;
+user impact;
+remediation;
+optional screenshot;
+AI-builder-ready fix prompt.
+PHASE 4: RESPONSIVE AND MOBILE UX SCANNER
+
+Implement measurable mobile/responsive checks using Playwright screenshots and DOM geometry.
+
+Default Viewports
+
+Use:
+
+VIEWPORTS = {
+    "mobile": {"width": 390, "height": 844},
+    "desktop": {"width": 1440, "height": 1024},
+}
+
+Structure the code so tablet and small-mobile viewports may be added later.
+
+Measured Checks
+
+Detect:
+
+Horizontal Overflow
+
+Flag when:
+
+document.documentElement.scrollWidth > window.innerWidth
+
+Attempt to identify overflowing elements and capture a screenshot.
+
+Off-Screen Interactive Elements
+
+Identify visible buttons, links, inputs or CTAs whose bounding boxes extend materially outside the viewport.
+
+Clipped Forms
+
+Identify visible form fields or submit controls cut off by the viewport.
+
+Broken Mobile Navigation
+
+Using conservative logic:
+
+identify likely mobile menu toggles through accessible labels, button roles or common menu indicators;
+click only non-destructive menu controls;
+check whether navigation links become visible;
+flag clear failures only.
+Modal Usability
+
+If a visible modal is already present:
+
+verify that it can be dismissed using a visible close control or Escape;
+do not trigger arbitrary destructive actions.
+Primary CTA Visibility
+
+For landing pages and app entry pages:
+
+identify likely primary action buttons through visible labels such as Sign up, Get started, Start, Contact, Buy, Try, Book, Register or Login;
+report missing or off-screen primary CTAs only as a heuristic unless directly clipped or hidden.
+Evidence
+
+For layout findings, capture:
+
+full or viewport screenshot;
+target selector if available;
+bounding box values where useful;
+viewport;
+issue explanation;
+remediation prompt.
+PHASE 5: PERFORMANCE UX SCANNER
+
+Do not replace the existing SSL/header/security scanning pipeline.
+
+Add a performance-oriented UX scanner.
+
+Implementation Constraint
+
+Because the current backend is Python-based, choose the lowest-risk integration after repository inspection:
+
+Preferred options in order:
+
+Use an existing supported Lighthouse CLI invocation through a controlled subprocess wrapper if Node is already available in the project environment.
+If Lighthouse integration creates unacceptable dependency complexity, implement initial browser-timing evidence using Playwright and document Lighthouse as the next integration step.
+
+Do not silently add an unstable or difficult-to-run dependency.
+
+Performance Data to Surface
+
+Where available, collect:
+
+performance score;
+Largest Contentful Paint;
+Cumulative Layout Shift;
+First Contentful Paint;
+Total Blocking Time;
+Speed Index;
+oversized image/resource opportunities;
+render-blocking resources;
+unused JavaScript opportunities.
+UX Translation
+
+Translate metrics into user-facing findings.
+
+Example:
+
+{
+    "category": "Performance UX",
+    "title": "Main content becomes visible too slowly on mobile",
+    "severity": "medium",
+    "confidence": "measured",
+    "user_impact": "New visitors may perceive the app as slow before they understand its value.",
+    "technical_remediation": "Compress and correctly size hero media, preload critical resources and reduce blocking scripts.",
+    "builder_prompt": "Optimise the landing page for faster mobile rendering. Compress and responsively size the hero image, lazy-load non-critical images, reduce render-blocking scripts and preserve the current design."
+}
+PHASE 6: FORM AND INTERACTION USABILITY SCANNER
+
+Implement safe usability testing for forms and navigation.
+
+Safety Constraint
+
+Never automatically:
+
+create user accounts;
+complete purchases;
+submit payment information;
+submit real enquiries;
+delete data;
+upload files;
+trigger logout or account changes;
+perform actions with irreversible effects.
+Form Checks
+
+For visible forms on selected pages:
+
+identify required inputs;
+inspect whether labels exist;
+inspect whether required fields are indicated;
+where safely identifiable as a non-destructive validation-only interaction, test empty submission;
+detect whether clear validation messages appear;
+detect whether invalid fields are associated with visible feedback;
+detect generic or absent error messaging.
+
+Findings based on interpretation should be marked:
+
+confidence: heuristic
+
+Unless the evidence is purely measurable, such as no accessible label.
+
+Navigation Checks
+
+Measure:
+
+broken visible internal links where safe;
+mobile navigation toggle behaviour;
+presence of navigational escape routes from major pages;
+links/buttons that appear interactive but cannot be activated.
+
+Do not crawl beyond configured page limits or approved verified domain scope.
+
+PHASE 7: AI-ASSISTED VISUAL UX REVIEW
+
+This module is advisory and must not be allowed to generate confirmed security/accessibility failures.
+
+Goal
+
+Use screenshots from Playwright to produce design and product-quality recommendations such as:
+
+unclear CTA prominence;
+visually cluttered hero section;
+weak visual hierarchy;
+inconsistent spacing;
+lack of obvious trust signals;
+confusing information density;
+unprofessional mobile layout impression;
+conversion-friction opportunities.
+AI Provider Abstraction
+
+Do not hard-code a single AI vendor directly into scanner logic.
+
+Create an abstraction similar to:
+
+wvs_backend/app/services/visual_ai_provider.py
+
+It should support:
+
+class VisualAIProvider:
+    def analyse_page_screenshot(
+        self,
+        image_path: str,
+        page_url: str,
+        viewport: str,
+        page_type: str | None = None
+    ) -> list[dict]:
+        ...
+
+Provide a disabled/no-op implementation when credentials are absent.
+
+Configuration example:
+
+VISUAL_AI_ENABLED=false
+VISUAL_AI_PROVIDER=
+VISUAL_AI_API_KEY=
+VISUAL_AI_MODEL=
+VISUAL_AI_MAX_SCREENSHOTS_PER_SCAN=5
+
+Never send screenshots to an external provider unless AI analysis is enabled by the user for that scan.
+
+Structured AI Output
+
+Require the model response to match a validated schema.
+
+Example:
+
+{
+    "category": "Visual UX",
+    "title": "Primary call-to-action lacks prominence",
+    "severity": "recommendation",
+    "confidence": "ai_assisted",
+    "page_url": "...",
+    "viewport": "mobile",
+    "observation": "The main action competes visually with several similar controls.",
+    "user_impact": "Visitors may not immediately know the next action to take.",
+    "technical_remediation": "Increase CTA prominence through clearer hierarchy, spacing and contrast while retaining the existing brand style.",
+    "builder_prompt": "Improve the mobile hero section by making the primary CTA visually dominant through spacing, hierarchy and accessible contrast. Keep the existing branding and do not remove current content."
+}
+AI Guardrails
+
+All AI findings must be rendered in the UI and reports as:
+
+AI-Assisted Recommendation
+
+They must not be counted as confirmed:
+
+vulnerabilities;
+WCAG violations;
+security blockers;
+launch blockers unless corroborated by measured evidence.
+PHASE 8: REMEDIATION PROMPT GENERATOR
+
+This feature is central to users who built their products with AI tools.
+
+For each UX/product finding, generate an actionable prompt that the user can copy into:
+
+Lovable;
+Bolt;
+Cursor;
+Replit;
+Claude Code;
+another AI app builder.
+Requirements
+
+The remediation prompt must:
+
+identify the affected page or component when known;
+state the precise problem;
+request a correction;
+preserve existing branding unless the finding concerns branding itself;
+require accessible implementation where relevant;
+avoid suggesting destructive rewrites;
+avoid inventing unseen project internals.
+
+Example:
+
+Issue:
+The mobile signup form shows validation errors without connecting them to the corresponding inputs.
+
+AI Builder Fix Prompt:
+Update the mobile signup form validation. Add visible inline error messages beneath each affected input, connect each input to its error message using accessible attributes, preserve valid user-entered values after submission failure, maintain the existing visual style, and ensure the submit button remains visible without horizontal overflow on 390px screens.
+
+Implement this first through deterministic templates based on finding type.
+
+Do not require generative AI for every remediation prompt in the MVP.
+
+Suggested module:
+
+wvs_backend/app/utils/remediation_prompts.py
+PHASE 9: INTEGRATE UX SCANNERS INTO EXISTING PIPELINE
+
+Modify the existing full scan architecture carefully.
+
+Current Pipeline
+
+The existing full scan currently executes scanners such as:
+
+SQLi
+SSL
+Headers
+WordPress
+ZAP
+Malicious Reputation
+XSS
+Technology Fingerprinting
+File Exposure
+DNS
+Open Redirect
+Subdomain Takeover
+New Product-Readiness Scan Types
+
+Introduce a clean concept of scan profile.
+
+Recommended scan profiles:
+
+security_only
+product_readiness
+full_launch_audit
+
+Expected behaviour:
+
+security_only
+
+Preserves existing security-focused scan behaviour.
+
+product_readiness
+
+Runs:
+
+target verification requirement;
+accessibility scan;
+responsive/mobile scan;
+performance UX scan;
+form/usability scan;
+optional AI visual review.
+full_launch_audit
+
+Runs:
+
+existing full security pipeline;
+accessibility scan;
+responsive/mobile scan;
+performance UX scan;
+form/usability scan;
+optional AI visual review.
+
+Do not force UX browser automation into every existing scanner endpoint.
+
+Pipeline Work
+
+Inspect and extend:
+
+wvs_backend/app/utils/scan_pipeline.py
+wvs_backend/app/tasks/scan_jobs.py
+wvs_backend/app/routes/scans.py
+
+Add clean orchestration functions such as:
+
+build_product_readiness_scan(...)
+build_full_launch_audit(...)
+
+or adapt to existing patterns after inspection.
+
+Progress Updates
+
+Celery progress should show understandable UX stages, for example:
+
+Validating verified target
+Capturing mobile and desktop pages
+Checking accessibility
+Checking responsive layout
+Measuring performance experience
+Reviewing safe form interactions
+Generating remediation prompts
+Running AI visual recommendations
+Building report
+
+Keep current lifecycle:
+
+queued -> running -> completed | failed
+PHASE 10: REPORTING AND SCORING
+
+The existing platform already creates report summaries, sections, recommendations and PDF reports.
+
+Extend those systems without breaking old security reports.
+
+New Report Sections
+
+Add report sections for:
+
+Accessibility
+Mobile and Responsive UX
+Performance UX
+Form and Interaction Usability
+Visual UX Recommendations
+Launch Readiness Summary
+Evidence Labels
+
+Every new finding must show one of:
+
+Measured
+Heuristic
+AI-Assisted
+
+Use clearly visible badges in both React report views and PDF reports.
+
+Recommended Scores
+
+Do not mix AI opinions directly into confirmed technical scores.
+
+Add or extend scoring to support:
+
+Security Score
+Accessibility Score
+Responsive UX Score
+Performance UX Score
+Usability Risk Score
+Launch Readiness Score
+
+Visual AI recommendations may be displayed separately:
+
+AI Visual Recommendations: 4 opportunities found
+
+Do not let AI suggestions alone cause a failed launch-readiness state.
+
+Launch Blockers
+
+Define launch blockers based only on reliable signals such as:
+
+critical/high confirmed security finding;
+serious accessibility failure affecting core user tasks;
+broken mobile form or inaccessible CTA;
+major measured navigation failure;
+extreme performance defect on a primary page.
+Comparison Support
+
+When a user runs a later scan against the same verified target, show:
+
+fixed findings;
+newly introduced findings;
+unresolved findings;
+score movement;
+screenshots where useful.
+
+Implement a lightweight comparison service only after the new findings schema is stable.
+
+PHASE 11: FRONTEND REACT INTEGRATION
+
+Preserve the existing React SPA architecture.
+
+Inspect existing components, hooks, styles and routing before adding new UI.
+
+Required Frontend Enhancements
+Scanner Selection Screen
+
+Extend the existing scanner interface in:
+
+wvs/src/components/Scanners.jsx
+
+and associated hooks to support:
+
+Security Scan
+Product Readiness Scan
+Full Launch Audit
+
+Show a concise explanation for each.
+
+Target Verification UI
+
+Add UI to:
+
+submit a target website;
+display verification status;
+display meta tag verification instructions;
+display well-known file verification instructions;
+trigger verification checks;
+block product-readiness/full-launch scans until verification is complete where configuration requires it.
+Scan Setup UI
+
+For product-readiness scans, allow the user to:
+
+choose up to 10 pages or paths;
+select project/page type:
+SaaS App
+Landing Page
+E-commerce
+Business Website
+Portfolio
+enable or disable AI-assisted visual review;
+view expected checks.
+Scan Progress UI
+
+Extend existing job progress rendering to support UX scan stages.
+
+Report UI
+
+Extend the existing report page to show:
+
+overall launch readiness summary;
+category score cards;
+blockers before launch;
+findings grouped by category;
+evidence type badges;
+severity badges;
+screenshots;
+user impact;
+remediation guidance;
+copyable AI-builder fix prompt;
+re-scan/comparison results when implemented.
+History UI
+
+Extend scan history to show scan type:
+
+Security
+Product Readiness
+Full Launch Audit
+
+Avoid rewriting current dashboard and report code where additive components are sufficient.
+
+PHASE 12: DATABASE AND MIGRATIONS
+
+Inspect the current SQLAlchemy setup and migration practices before changing models.
+
+Likely new persistence needs:
+
+VerifiedTarget
+UXScanConfiguration or scan metadata fields
+Finding evidence/screenshot metadata
+Scan profile/type
+AI analysis enabled status
+Previous scan comparison reference
+
+Prefer minimal additions compatible with existing ScanResult and ScanJob storage.
+
+Do not prematurely design a complicated normalized issue-tracking database if the existing project stores findings in JSON.
+
+Recommended MVP approach:
+
+add verified target model;
+add scan type/profile metadata to scan job/result if needed;
+store new UX findings in the existing findings JSON structure after normalisation;
+store screenshot paths safely and reference them in findings;
+extend only when reporting/history requirements demand it.
+
+Include migration instructions and ensure SQLite development still works.
+
+PHASE 13: FILE AND SCREENSHOT HANDLING
+
+Screenshots may contain sensitive customer information.
+
+Implement safe handling:
+
+store screenshots in a controlled report/evidence directory;
+generate unpredictable filenames;
+prevent path traversal;
+do not expose arbitrary local file paths through API responses;
+allow authenticated access only to the scan owner or permitted admin;
+remove orphan screenshots when a scan is deleted;
+limit screenshots captured per scan;
+avoid capturing authenticated areas unless deliberately configured later.
+
+For MVP, scan public pages only.
+
+PHASE 14: TESTING REQUIREMENTS
+
+Add tests for all safety-critical and pipeline-critical behaviour.
+
+Backend Tests
+
+Include:
+
+URL/SSRF validation tests;
+target verification tests;
+authentication requirements;
+ownership enforcement;
+new scanner output normalisation;
+scan profile selection;
+report section generation;
+Celery task progress mapping;
+screenshot file access permissions;
+findings comparison logic if implemented.
+Scanner Tests
+
+Use mocked/local test pages for:
+
+low contrast;
+missing labels;
+overflow on mobile;
+tiny tap target;
+broken mobile menu;
+missing form feedback;
+simulated slow page/performance mapping;
+screenshot evidence linkage.
+
+Do not run tests against arbitrary external domains.
+
+Frontend Tests
+
+Add tests where the current project setup supports them for:
+
+scan-type selection;
+verification instructions;
+evidence badges;
+finding display;
+builder-prompt copy action;
+scan progress stages.
+PHASE 15: DOCUMENTATION
+
+The current frontend README is reportedly still close to a default Vite README. Replace or supplement it with useful project documentation.
+
+Create or update:
+
+README.md
+ARCHITECTURE.md
+docs/UX_PRODUCT_READINESS_EXTENSION.md
+docs/SECURITY_AND_SCAN_SAFETY.md
+
+Document:
+
+system architecture;
+current security scanner modules;
+new UX scanner modules;
+target verification;
+local development commands;
+Celery requirements;
+Playwright browser installation;
+optional Lighthouse setup;
+optional AI provider configuration;
+environment variables;
+how to run a development scan safely;
+local hardware expectations;
+known MVP limitations.
+MVP IMPLEMENTATION ORDER
+
+Do not implement everything simultaneously.
+
+Work in this order:
+
+Step 1: Repository Audit and Change Plan
+
+Output:
+
+confirmed architecture;
+current scan/result schemas;
+exact files to modify;
+database changes required;
+dependencies required;
+risks and backwards compatibility concerns.
+
+Do not modify code before this review unless making documentation-only notes.
+
+Step 2: Normalised New Finding Contract and Tests
+
+Implement:
+
+normalised UX finding structure;
+unit tests;
+report-section compatibility;
+placeholder support in frontend report rendering where necessary.
+Step 3: Verified Target Ownership
+
+Implement:
+
+model/migration;
+safety helpers;
+target routes;
+frontend verification UI;
+tests.
+Step 4: Accessibility and Responsive Scan MVP
+
+Implement:
+
+Playwright Python integration;
+accessibility checks;
+overflow/mobile layout checks;
+screenshots attached to evidence;
+standalone product-readiness scan route or profile;
+Celery job integration;
+report rendering;
+React results rendering.
+Step 5: Performance UX and Form Usability
+
+Implement:
+
+measured performance integration using the lowest-risk compatible method;
+safe form/navigation checks;
+report extensions.
+Step 6: Remediation Prompt Templates
+
+Implement:
+
+deterministic AI-builder-ready prompt generation;
+copy prompt UI;
+report/PDF support.
+Step 7: Optional AI Visual Review
+
+Implement:
+
+provider abstraction;
+feature flag;
+consent/configuration;
+structured response validation;
+UI and report badges clearly labelled AI-Assisted.
+Step 8: Re-Scan Improvement Comparison
+
+Only after new finding schemas are stable:
+
+compare previous and current findings;
+show fixed/new/unresolved issues;
+show score improvements.
+STRICT SCOPE LIMITS FOR THE MVP
+
+Do not implement these unless all earlier steps are stable and tested:
+
+automated code rewriting of customer applications;
+destructive active pentesting;
+authenticated customer-app scanning;
+payment flow testing;
+behaviour analytics or heatmap ingestion;
+full AI model training;
+local vision-language model inference;
+complex multi-tenant agency billing;
+production distributed worker scaling.
+
+Design for these later, but do not build them now.
+
+PRODUCT AND UX LANGUAGE
+
+The platform should avoid claiming that it guarantees security, accessibility or successful conversions.
+
+Use language such as:
+
+Measured Finding
+Potential UX Risk
+AI-Assisted Recommendation
+Recommended Before Launch
+Security Issue Detected
+Re-scan to Verify Improvement
+
+Avoid language such as:
+
+Your app is completely secure
+Your site is fully accessible
+This change will guarantee conversions
+AI confirmed this is broken
+EXPECTED OUTPUT FROM YOU BEFORE IMPLEMENTATION
+
+Begin by inspecting the actual repository and return:
+
+Confirmed frontend/backend/tooling architecture.
+Current API/report JSON contracts that must be preserved.
+Existing dependencies and new dependencies required.
+Exact file-by-file extension plan.
+New database fields/models and migration approach.
+How verified targets will integrate with current URL validation.
+How UX scan jobs will integrate with Celery progress reporting.
+How new result sections will integrate with existing PDF/report frontend.
+Risks, backwards compatibility concerns and safeguards.
+Proposed implementation sequence.
+
+After presenting that audit and plan, begin implementation only in the phased order above.
+
+
+## Why this prompt now fits your actual project
+
+Your current platform already provides the hard security-scanner backbone: Flask scanner modules, Celery job progress, report persistence, PDF generation, React reporting and cookie-based authentication. The new product feature should therefore enter through the same scanner pipeline and reporting model, rather than introducing a second TypeScript scanner backend.
+
+The most important architectural decisions are:
+
+| Existing capability | Correct extension |
+|---|---|
+| Flask scanner modules | Add UX scanner modules in Python |
+| Celery full scan pipeline | Add product-readiness/full-launch scan profiles |
+| Existing URL validation | Extend it with verified-target ownership |
+| Existing report JSON/PDF | Add UX sections and evidence labels |
+| React scanner dashboard | Add scan type, verification, findings and prompt-copy UI |
+| Existing active security checks | Preserve, but require verified targets in production |
+| PDF reports | Expand into launch-readiness reports |
+
+One warning: what you uploaded is an **architectural analysis of the repository**, not the comple

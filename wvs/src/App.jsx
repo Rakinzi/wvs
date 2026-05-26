@@ -1,20 +1,27 @@
-import React from 'react';
+import React, { Suspense } from 'react';
 import { ThemeContext, useThemeProvider } from './hooks/useTheme';
 import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate, useLocation, useParams } from 'react-router-dom';
-import { clearSession, getSessionUsername, isAuthenticated } from './lib/auth';
+import { clearSession, getSessionIsAdmin, getSessionUsername, isAuthenticated, updateSession } from './lib/auth';
 import { apiJson } from './lib/api';
-import Dashboard from './components/Dashboard';
-import Scanners from './components/Scanners';
-import ScanReport from './components/ScanReport';
-import ScanHistory from './components/ScanHistory';
 import Sidebar from './components/Sidebar';
-import Login from './components/Login';
-import Register from './components/Register';
-import ResetPassword from './components/ResetPassword';
-import VerifyEmail from './components/VerifyEmail';
-import Settings from './components/Settings';
-import BlockedSites from './components/BlockedSites';
-import BlockedAccess from './components/BlockedAccess';
+const Dashboard = React.lazy(() => import('./components/Dashboard'));
+const Scanners = React.lazy(() => import('./components/Scanners'));
+const ScanReport = React.lazy(() => import('./components/ScanReport'));
+const ScanHistory = React.lazy(() => import('./components/ScanHistory'));
+const Login = React.lazy(() => import('./components/Login'));
+const Register = React.lazy(() => import('./components/Register'));
+const ResetPassword = React.lazy(() => import('./components/ResetPassword'));
+const VerifyEmail = React.lazy(() => import('./components/VerifyEmail'));
+const Settings = React.lazy(() => import('./components/Settings'));
+const BlockedSites = React.lazy(() => import('./components/BlockedSites'));
+const BlockedAccess = React.lazy(() => import('./components/BlockedAccess'));
+const VerifiedTargets = React.lazy(() => import('./components/VerifiedTargets'));
+
+const RouteFallback = () => (
+  <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--color-bg)', color: 'var(--color-text-muted)' }}>
+    <div className="text-sm">Loading…</div>
+  </div>
+);
 
 // A wrapper component for authenticated routes
 const ProtectedRoute = ({ children }) => {
@@ -22,6 +29,33 @@ const ProtectedRoute = ({ children }) => {
     return <Navigate to="/login" replace />;
   }
   
+  return children;
+};
+
+const AdminRoute = ({ children }) => {
+  const [isAdmin, setIsAdmin] = React.useState(getSessionIsAdmin());
+
+  React.useEffect(() => {
+    if (isAdmin !== null) {
+      return;
+    }
+    apiJson('/profile', { auth: true })
+      .then(({ data }) => {
+        const next = Boolean(data?.is_admin);
+        updateSession({ isAdmin: next });
+        setIsAdmin(next);
+      })
+      .catch(() => setIsAdmin(false));
+  }, [isAdmin]);
+
+  if (isAdmin === null) {
+    return null;
+  }
+
+  if (!isAdmin) {
+    return <Navigate to="/" replace />;
+  }
+
   return children;
 };
 
@@ -33,6 +67,21 @@ const Layout = ({ children }) => {
   const authenticated = isAuthenticated();
   const navigate = useNavigate();
   const isAuthRoute = AUTH_ROUTES.includes(location.pathname);
+  const [isAdmin, setIsAdmin] = React.useState(getSessionIsAdmin());
+
+  React.useEffect(() => {
+    if (!authenticated) {
+      setIsAdmin(null);
+      return;
+    }
+    apiJson('/profile', { auth: true })
+      .then(({ data }) => {
+        const next = Boolean(data?.is_admin);
+        updateSession({ isAdmin: next });
+        setIsAdmin(next);
+      })
+      .catch(() => {});
+  }, [authenticated]);
 
   const handleLogout = async () => {
     try {
@@ -53,19 +102,20 @@ const Layout = ({ children }) => {
   };
 
   if (isAuthRoute) {
-    return <>{children}</>;
+    return <Suspense fallback={<RouteFallback />}>{children}</Suspense>;
   }
 
   return (
     <div className="flex min-h-screen" style={{ background: 'var(--color-bg)' }}>
       <Sidebar
         isAuthenticated={authenticated}
+        isAdmin={Boolean(isAdmin)}
         onLogout={handleLogout}
         currentPage={getCurrentPage()}
         navigateTo={(page) => navigate(page === 'dashboard' ? '/' : `/${page}`)}
       />
       <main className="flex-1 min-w-0">
-        {children}
+        <Suspense fallback={<RouteFallback />}>{children}</Suspense>
       </main>
     </div>
   );
@@ -162,6 +212,16 @@ const BlockedAccessWrapper = () => {
   return <BlockedAccess navigateTo={navigateTo} />;
 };
 
+const VerifiedTargetsWrapper = () => {
+  const navigate = useNavigate();
+
+  const navigateTo = (page) => {
+    navigate(page === 'dashboard' ? '/' : `/${page}`);
+  };
+
+  return <VerifiedTargets navigateTo={navigateTo} />;
+};
+
 const App = () => {
   const themeValue = useThemeProvider();
   return (
@@ -243,7 +303,17 @@ const App = () => {
         <Route path="/blockedAccess" element={
           <Layout>
             <ProtectedRoute>
-              <BlockedAccessWrapper />
+              <AdminRoute>
+                <BlockedAccessWrapper />
+              </AdminRoute>
+            </ProtectedRoute>
+          </Layout>
+        } />
+
+        <Route path="/targets" element={
+          <Layout>
+            <ProtectedRoute>
+              <VerifiedTargetsWrapper />
             </ProtectedRoute>
           </Layout>
         } />

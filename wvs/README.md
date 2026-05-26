@@ -1,12 +1,68 @@
-# React + Vite
+# WVS Frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+This directory contains the React SPA for WVS. It is the operator-facing interface for:
 
-Currently, two official plugins are available:
+- authentication and account flows
+- dashboard metrics
+- scan setup and async job tracking
+- verified target ownership management
+- scan history
+- report viewing for security and product-readiness findings
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react/README.md) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+## Main Files
 
-## Expanding the ESLint configuration
+- `src/App.jsx`: route wiring and authenticated layout
+- `src/components/Scanners.jsx`: scan launcher for sync scanners and async scan profiles
+- `src/components/VerifiedTargets.jsx`: dedicated target ownership management screen
+- `src/components/ScanReport.jsx`: report rendering, including screenshot evidence and remediation prompts
+- `src/hooks/useScansData.js`: async scan submission and job polling
+- `src/hooks/useScanReportData.js`: report data fetching
+- `src/hooks/useVerifiedTargetsData.js`: verified target API integration
+- `src/lib/api.js`: fetch wrapper with cookie auth and CSRF handling
 
-If you are developing a production application, we recommend using TypeScript and enable type-aware lint rules. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+## Commands
+
+Install dependencies:
+
+```bash
+npm install
+```
+
+Start development server:
+
+```bash
+npm run dev
+```
+
+Create a production build:
+
+```bash
+npm run build
+```
+
+## Backend Expectations
+
+The SPA expects the Flask backend to expose:
+
+- cookie-based JWT auth
+- CSRF support via `X-CSRF-TOKEN`
+- `/scan` async job creation
+- `/scan/jobs` polling
+- `/report/:id?format=json`
+- `/targets` verified target management
+
+## Product-Readiness UI
+
+The frontend now supports three async scan profiles:
+
+- `Security Scan`
+- `Product Readiness Scan`
+- `Full Launch Audit`
+
+For product-readiness and full-launch flows, the UI can also:
+
+- create verification tokens
+- show meta-tag and well-known-file instructions
+- verify target ownership
+- select a saved verified target
+- include page paths and optional AI review configuration in the scan request

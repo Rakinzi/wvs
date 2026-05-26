@@ -4,6 +4,7 @@ import {
   User, Globe, Calendar, Clock, Filter, Monitor, Info, AlertTriangle, Shield, MapPin
 } from 'lucide-react';
 import { useBlockedAccessData } from '../hooks/useBlockedAccessData';
+import Spinner from './Spinner';
 
 const geoCache = new Map();
 
@@ -237,9 +238,8 @@ const BlockedAccess = ({ navigateTo }) => {
 
           {/* Body */}
           {loading ? (
-            <div className="flex items-center justify-center gap-3 py-20">
-              <RefreshCw size={16} className="animate-spin" style={{ color: T.primary }} />
-              <p className="text-sm" style={{ color: T.muted }}>Loading access attempts…</p>
+            <div className="flex items-center justify-center py-20">
+              <Spinner size="md" label="Loading access attempts…" />
             </div>
           ) : error ? (
             <div className="flex flex-col items-center gap-4 py-20">

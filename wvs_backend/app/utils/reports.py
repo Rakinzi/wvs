@@ -1,4 +1,5 @@
 import io
+import os
 from datetime import datetime, timezone, timedelta
 from xml.sax.saxutils import escape
 
@@ -9,7 +10,7 @@ from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import inch
 from reportlab.platypus import (
     BaseDocTemplate, Frame, HRFlowable, PageTemplate,
-    Paragraph, Spacer, Table, TableStyle,
+    Paragraph, Spacer, Table, TableStyle, Image,
 )
 from reportlab.lib.colors import HexColor
 
@@ -175,10 +176,12 @@ def _strip_html(text: str) -> str:
 def _findings_block(items, color, ST):
     """Render a list of findings as a styled table block."""
     rows = []
+    screenshots = []
     for item in items:
         name  = item.get('name') or item.get('type', 'Finding')
         sev   = item.get('severity') or item.get('risk', 'Info')
         evid  = item.get('evidence') or item.get('payload') or item.get('parameter', '')
+        confidence = str(item.get('confidence') or '').replace('_', ' ').title()
         sev_colors = {
             'Critical': ('#4B0000', '#FF4444'),
             'High':     ('#3D2000', '#F59E0B'),
@@ -200,6 +203,15 @@ def _findings_block(items, color, ST):
                                                                 leading=11, textColor=MUTED)),
                 '',
             ])
+        if confidence:
+            rows.append([
+                Paragraph(f'Confidence: {_safe_text(confidence)}', ParagraphStyle('cv', fontName='Helvetica-Oblique', fontSize=8,
+                                                                                  leading=10, textColor=DIM)),
+                '',
+            ])
+        screenshot_path = item.get('screenshot_path')
+        if isinstance(screenshot_path, str) and screenshot_path and os.path.exists(screenshot_path):
+            screenshots.append((name, screenshot_path))
 
     if not rows:
         return []
@@ -216,7 +228,13 @@ def _findings_block(items, color, ST):
         ('VALIGN',        (0,0), (-1,-1), 'TOP'),
     ]
     t.setStyle(TableStyle(ts))
-    return [t]
+    blocks = [t]
+    for index, (name, screenshot_path) in enumerate(screenshots[:2], start=1):
+        blocks.append(Spacer(1, 6))
+        blocks.append(Paragraph(f'Evidence Screenshot {index}: {_safe_text(name, 70)}', ST['small']))
+        blocks.append(Spacer(1, 4))
+        blocks.append(Image(screenshot_path, width=4.8 * inch, height=2.7 * inch, kind='proportional'))
+    return blocks
 
 
 def _recs_block(items, ST):
@@ -911,6 +929,33 @@ def generate_report(results):
             ST['secure'],
         ))
     story.append(sp(10))
+
+    # Product Readiness / UX sections
+    sections = results.get('sections') or {}
+    for section_key, color in [
+        ('accessibility', INFO),
+        ('responsive_ux', WARN),
+        ('performance_ux', INFO),
+        ('form_usability', WARN),
+        ('visual_ai', PURPLE),
+    ]:
+        section = sections.get(section_key) or {}
+        if section.get('status') == 'not_run':
+            continue
+        story.append(_section_header(
+            section.get('label', section_key.replace('_', ' ').title()),
+            f"{section.get('issue_count', 0)} issue{'s' if section.get('issue_count', 0) != 1 else ''}" if section.get('issue_count', 0) else 'No issues',
+            '✗' if section.get('issue_count', 0) else '✓',
+            color if section.get('issue_count', 0) else SECURE,
+            ST,
+        ))
+        story.append(sp(4))
+        if section.get('issue_count', 0):
+            story.extend(_findings_block(section.get('top_findings') or [], color, ST))
+            story.extend(_recs_block(section.get('recommendations') or [], ST))
+        else:
+            story.append(Paragraph('✓  No issues detected in this category.', ST['secure']))
+        story.append(sp(10))
 
     # ── Conclusion ────────────────────────────────────────────────────────────
     story.append(_divider())

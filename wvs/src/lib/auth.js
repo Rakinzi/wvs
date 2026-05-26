@@ -65,7 +65,7 @@ export const getSession = () => {
   return session;
 };
 
-export const saveSession = ({ username, userId, expiresInSeconds }) => {
+export const saveSession = ({ username, userId, expiresInSeconds, isAdmin = null }) => {
   const expiresAt = expiresInSeconds
     ? Date.now() + (expiresInSeconds * 1000)
     : null;
@@ -73,11 +73,27 @@ export const saveSession = ({ username, userId, expiresInSeconds }) => {
   getStorage().setItem(SESSION_KEY, JSON.stringify({
     username,
     userId,
+    isAdmin,
     expiresAt,
   }));
   clearLegacyLocalStorage();
 };
 
+export const updateSession = (patch) => {
+  const current = getSession();
+  if (!current) {
+    return;
+  }
+  getStorage().setItem(SESSION_KEY, JSON.stringify({
+    ...current,
+    ...patch,
+  }));
+};
+
 export const getCsrfToken = () => parseCookieValue('csrf_access_token');
 export const getSessionUsername = () => getSession()?.username || null;
+export const getSessionIsAdmin = () => {
+  const value = getSession()?.isAdmin;
+  return typeof value === 'boolean' ? value : null;
+};
 export const isAuthenticated = () => Boolean(getSession());

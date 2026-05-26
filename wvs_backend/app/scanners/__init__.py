@@ -11,6 +11,11 @@ from .exposure_scanner import ExposureScanner
 from .dns_scanner import DNSScanner
 from .redirect_scanner import OpenRedirectScanner
 from .takeover_scanner import SubdomainTakeoverScanner
+from .accessibility_scanner import AccessibilityScanner
+from .responsive_scanner import ResponsiveScanner
+from .performance_ux_scanner import PerformanceUXScanner
+from .form_usability_scanner import FormUsabilityScanner
+from .visual_ai_scanner import VisualAIScanner
 
 class SecurityScanner:
     def __init__(self):
@@ -27,6 +32,11 @@ class SecurityScanner:
         self.dns_scanner = DNSScanner()
         self.redirect_scanner = OpenRedirectScanner()
         self.takeover_scanner = SubdomainTakeoverScanner()
+        self.accessibility_scanner = AccessibilityScanner()
+        self.responsive_scanner = ResponsiveScanner()
+        self.performance_ux_scanner = PerformanceUXScanner()
+        self.form_usability_scanner = FormUsabilityScanner()
+        self.visual_ai_scanner = VisualAIScanner()
 
     def check_sql_injection(self, url):
         return self.sql_scanner.scan(url)
@@ -60,6 +70,21 @@ class SecurityScanner:
 
     def check_takeover(self, url):
         return self.takeover_scanner.scan(url)
+
+    def check_accessibility(self, url, page_paths=None):
+        return self.accessibility_scanner.scan(url, page_paths=page_paths)
+
+    def check_responsive_ux(self, url, page_paths=None):
+        return self.responsive_scanner.scan(url, page_paths=page_paths)
+
+    def check_performance_ux(self, url, page_paths=None):
+        return self.performance_ux_scanner.scan(url, page_paths=page_paths)
+
+    def check_form_usability(self, url, page_paths=None):
+        return self.form_usability_scanner.scan(url, page_paths=page_paths)
+
+    def check_visual_ai(self, url, page_paths=None, enabled=False, page_type=None):
+        return self.visual_ai_scanner.scan(url, page_paths=page_paths, enabled=enabled, page_type=page_type)
 
     def check_ai(self, url):
         if self.ai_scanner is None:

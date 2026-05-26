@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { useScanHistoryData } from '../hooks/useScanHistoryData';
 import { apiJson } from '../lib/api';
+import Spinner from './Spinner';
 import ConfirmDialog from './ConfirmDialog';
 
 const T = {
@@ -77,6 +78,11 @@ const Pagination = ({ page, totalPages, setPage }) => {
 
 const SCANNERS = ['sql', 'ssl', 'headers', 'xss', 'malicious', 'exposure'];
 const SCANNER_LABELS = { sql: 'SQLi', ssl: 'SSL/TLS', headers: 'Headers', xss: 'XSS', malicious: 'Malicious', exposure: 'Exposure' };
+const PROFILE_LABELS = {
+  security_only: 'Security',
+  product_readiness: 'Product Readiness',
+  full_launch_audit: 'Full Launch Audit',
+};
 
 const ScoreBadge = ({ score }) => {
   const color = score >= 80 ? T.secure : score >= 50 ? T.warn : T.danger;
@@ -114,9 +120,8 @@ const CompareView = ({ ids, onClose }) => {
       </div>
 
       {loading ? (
-        <div className="flex-1 flex items-center justify-center gap-3">
-          <RefreshCw size={18} className="animate-spin" style={{ color: T.primary }} />
-          <span className="text-sm" style={{ color: T.muted }}>Loading reports…</span>
+        <div className="flex-1 flex items-center justify-center">
+          <Spinner size="md" label="Loading reports…" />
         </div>
       ) : (
         <div className="flex-1 overflow-y-auto">
@@ -356,9 +361,8 @@ const ScanHistory = ({ navigateTo }) => {
 
           {/* Body states */}
           {loading ? (
-            <div className="flex items-center justify-center gap-3 py-20">
-              <RefreshCw size={16} className="animate-spin" style={{ color: T.primary }} />
-              <p className="text-sm" style={{ color: T.muted }}>Loading scan history…</p>
+            <div className="flex items-center justify-center py-20">
+              <Spinner size="md" label="Loading scan history…" />
             </div>
           ) : error ? (
             <div className="flex flex-col items-center gap-4 py-20">
@@ -427,7 +431,12 @@ const ScanHistory = ({ navigateTo }) => {
                         </td>
                         <td className="px-5 py-4">
                           <p className="text-xs font-mono font-medium truncate max-w-sm" style={{ color: T.text }}>{scan.url}</p>
-                          <p className="text-xs font-mono mt-0.5" style={{ color: T.dim }}>{String(scan.id).slice(0, 8)}</p>
+                          <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                            <p className="text-xs font-mono" style={{ color: T.dim }}>{String(scan.id).slice(0, 8)}</p>
+                            <span className="px-2 py-0.5 rounded text-[11px] font-semibold" style={{ background: T.surface, color: T.primary, border: `1px solid ${T.border}` }}>
+                              {PROFILE_LABELS[scan.scan_profile] || 'Security'}
+                            </span>
+                          </div>
                         </td>
                         <td className="px-5 py-4">
                           <div className="flex items-center gap-1.5 text-xs font-mono" style={{ color: T.muted }}>
@@ -460,7 +469,7 @@ const ScanHistory = ({ navigateTo }) => {
                               className="cursor-pointer transition-colors disabled:opacity-40"
                               style={{ color: T.danger }}>
                               {deleting === scan.id
-                                ? <RefreshCw size={14} className="animate-spin" />
+                                ? <Spinner size="sm" color={T.danger} style={{ width: 14, height: 14 }} />
                                 : <Trash2 size={14} />}
                             </button>
                           </div>

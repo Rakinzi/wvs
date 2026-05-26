@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Shield, CheckCircle, AlertTriangle, RefreshCw, Mail } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { apiJson, ApiError } from '../lib/api';
+import Spinner from './Spinner';
 
 const VerifyEmail = () => {
   const [searchParams] = useSearchParams();
@@ -41,10 +42,7 @@ const VerifyEmail = () => {
 
         <div className="px-8 py-8 flex flex-col items-center gap-5 text-center">
           {status === 'verifying' && (
-            <>
-              <RefreshCw size={32} className="animate-spin" style={{ color: 'var(--color-primary)' }} />
-              <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>Verifying your email address…</p>
-            </>
+            <Spinner size="md" label="Verifying your email address…" />
           )}
 
           {status === 'success' && (

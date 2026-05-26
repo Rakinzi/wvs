@@ -3,6 +3,7 @@ import { Shield, Lock, AlertTriangle, Eye, EyeOff, ArrowRight, Mail, X, CheckCir
 import { useNavigate } from 'react-router-dom';
 import { saveSession } from '../lib/auth';
 import { apiJson, ApiError } from '../lib/api';
+import Spinner from './Spinner';
 
 const ForgotPasswordModal = ({ onClose }) => {
   const [email, setEmail]       = useState('');
@@ -97,7 +98,7 @@ const ForgotPasswordModal = ({ onClose }) => {
                   className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-semibold text-white cursor-pointer"
                   style={{ background: 'var(--color-primary)', opacity: loading ? 0.7 : 1 }}>
                   {loading ? (
-                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    <Spinner size="sm" />
                   ) : 'Send Reset Link'}
                 </button>
               </div>
@@ -143,6 +144,7 @@ const Login = () => {
         username: data.username,
         userId: data.user_id,
         expiresInSeconds: data.expires_in,
+        isAdmin: data.is_admin,
       });
       navigate('/');
     } catch (err) {
@@ -290,7 +292,7 @@ const Login = () => {
               >
                 {isLoading ? (
                   <>
-                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    <Spinner size="sm" />
                     Signing in…
                   </>
                 ) : (

@@ -6,6 +6,7 @@ import {
   Mail, ArrowRightLeft, Link2Off
 } from 'lucide-react';
 import { useScanReportData } from '../hooks/useScanReportData';
+import Spinner from './Spinner';
 import { apiFetch, apiJson, ApiError } from '../lib/api';
 import ConfirmDialog from './ConfirmDialog';
 
@@ -41,6 +42,19 @@ const fmt = (d) => {
 };
 
 const obfuscateEmail = (email) => String(email || '').replace('@', ' [at] ');
+
+const labelForConfidence = (value) => {
+  const normalized = String(value || 'heuristic').replace(/_/g, ' ').toLowerCase();
+  if (normalized === 'measured') return 'Measured';
+  if (normalized === 'ai assisted') return 'AI-Assisted';
+  return 'Heuristic';
+};
+
+const deltaLabel = (value) => {
+  if (value === null || value === undefined) return '—';
+  if (value === 0) return 'No change';
+  return value > 0 ? `+${value}` : `${value}`;
+};
 
 /* Collapsible section */
 const Section = ({ id, label, subLabel, icon: Icon, iconColor, iconBg, expanded, onToggle, children }) => (
@@ -130,7 +144,7 @@ const ScoreRing = ({ score, color }) => {
 
 /* ─────────────────────────────────────────────── */
 const ScanReport = ({ scanId, navigateTo }) => {
-  const [expanded, setExpanded] = useState({ sql: true, ssl: true, headers: true, wordpress: true, zap: true, malicious: true, xss: true, tech: true, exposure: true, dns: true, redirect: true, takeover: true });
+  const [expanded, setExpanded] = useState({ sql: true, ssl: true, headers: true, wordpress: true, zap: true, malicious: true, xss: true, tech: true, exposure: true, dns: true, redirect: true, takeover: true, accessibility: true, responsive_ux: true, performance_ux: true, form_usability: true, visual_ai: true, comparison: true });
   const { report, loading, error } = useScanReportData(scanId);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState(null);
@@ -185,12 +199,7 @@ const ScanReport = ({ scanId, navigateTo }) => {
 
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center" style={{ background: T.bg }}>
-      <div className="flex flex-col items-center gap-4">
-        <div className="w-14 h-14 rounded-2xl flex items-center justify-center" style={{ background: T.primaryDim }}>
-          <RefreshCw size={24} className="animate-spin" style={{ color: T.primary }} />
-        </div>
-        <p className="text-sm" style={{ color: T.muted }}>Loading report…</p>
-      </div>
+      <Spinner size="lg" label="Loading report…" />
     </div>
   );
 
@@ -216,6 +225,7 @@ const ScanReport = ({ scanId, navigateTo }) => {
   const findings  = report.findings || {};
   const sections  = report.sections || findings.sections || {};
   const summary   = report.summary  || findings.summary  || {};
+  const comparison = report.comparison || null;
 
   const hasSql       = findings.sqli && findings.sqli.length > 0;
   const hasSsl       = findings.ssl  && !findings.ssl.valid;
@@ -233,6 +243,12 @@ const ScanReport = ({ scanId, navigateTo }) => {
   const dnsIssues    = findings.dns?.issues || [];
   const redirIssues  = findings.redirect?.issues || [];
   const takeIssues   = findings.takeover?.issues || [];
+  const accessibilityIssues = findings.accessibility?.issues || [];
+  const responsiveIssues = findings.responsive_ux?.issues || [];
+  const performanceIssues = findings.performance_ux?.issues || [];
+  const formIssues = findings.form_usability?.issues || [];
+  const visualAiIssues = findings.visual_ai?.issues || [];
+  const launchReadiness = findings.launch_readiness || {};
 
   const totalIssues = summary.total_issues ??
     (
@@ -380,6 +396,30 @@ const ScanReport = ({ scanId, navigateTo }) => {
                     <span className="font-mono" style={{ color: takeIssues.length > 0 ? T.danger : T.secure }}>{takeIssues.length || '—'}</span>
                   </div>
                 )}
+                {findings.accessibility && (
+                  <div className="flex items-center justify-between text-xs py-1.5">
+                    <span style={{ color: T.muted }}>Accessibility</span>
+                    <span className="font-mono" style={{ color: accessibilityIssues.length > 0 ? T.info : T.secure }}>{accessibilityIssues.length || '—'}</span>
+                  </div>
+                )}
+                {findings.responsive_ux && (
+                  <div className="flex items-center justify-between text-xs py-1.5">
+                    <span style={{ color: T.muted }}>Responsive UX</span>
+                    <span className="font-mono" style={{ color: responsiveIssues.length > 0 ? T.warn : T.secure }}>{responsiveIssues.length || '—'}</span>
+                  </div>
+                )}
+                {findings.performance_ux && (
+                  <div className="flex items-center justify-between text-xs py-1.5">
+                    <span style={{ color: T.muted }}>Performance UX</span>
+                    <span className="font-mono" style={{ color: performanceIssues.length > 0 ? T.warn : T.secure }}>{performanceIssues.length || '—'}</span>
+                  </div>
+                )}
+                {findings.form_usability && (
+                  <div className="flex items-center justify-between text-xs py-1.5">
+                    <span style={{ color: T.muted }}>Form Usability</span>
+                    <span className="font-mono" style={{ color: formIssues.length > 0 ? T.warn : T.secure }}>{formIssues.length || '—'}</span>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -427,9 +467,36 @@ const ScanReport = ({ scanId, navigateTo }) => {
                   {dnsIssues.length > 0 && <li className="flex items-center gap-2 text-xs" style={{ color: T.warn }}><AlertTriangle size={11} /> {dnsIssues.length} DNS issue{dnsIssues.length > 1 ? 's' : ''}</li>}
                   {redirIssues.length > 0 && <li className="flex items-center gap-2 text-xs" style={{ color: T.danger }}><AlertOctagon size={11} /> {redirIssues.length} open redirect{redirIssues.length > 1 ? 's' : ''}</li>}
                   {takeIssues.length > 0 && <li className="flex items-center gap-2 text-xs" style={{ color: T.danger }}><AlertOctagon size={11} /> {takeIssues.length} subdomain takeover{takeIssues.length > 1 ? 's' : ''}</li>}
+                  {accessibilityIssues.length > 0 && <li className="flex items-center gap-2 text-xs" style={{ color: T.info }}><AlertTriangle size={11} /> {accessibilityIssues.length} accessibility finding{accessibilityIssues.length > 1 ? 's' : ''}</li>}
+                  {responsiveIssues.length > 0 && <li className="flex items-center gap-2 text-xs" style={{ color: T.warn }}><AlertTriangle size={11} /> {responsiveIssues.length} responsive/mobile finding{responsiveIssues.length > 1 ? 's' : ''}</li>}
+                  {performanceIssues.length > 0 && <li className="flex items-center gap-2 text-xs" style={{ color: T.warn }}><AlertTriangle size={11} /> {performanceIssues.length} performance UX issue{performanceIssues.length > 1 ? 's' : ''}</li>}
+                  {formIssues.length > 0 && <li className="flex items-center gap-2 text-xs" style={{ color: T.warn }}><AlertTriangle size={11} /> {formIssues.length} form usability issue{formIssues.length > 1 ? 's' : ''}</li>}
                 </ul>
               )}
             </div>
+
+            {comparison && (
+              <div className="rounded-xl p-5" style={{ background: T.card, border: `1px solid ${T.border}` }}>
+                <p className="text-xs font-mono uppercase tracking-widest mb-3" style={{ color: T.dim }}>Re-scan Comparison</p>
+                <div className="grid grid-cols-3 gap-3">
+                  {[
+                    { label: 'Fixed', value: comparison.fixed_count, color: T.secure },
+                    { label: 'New', value: comparison.new_count, color: T.danger },
+                    { label: 'Unresolved', value: comparison.unresolved_count, color: T.warn },
+                  ].map((item) => (
+                    <div key={item.label} className="rounded-lg p-3" style={{ background: T.surface, border: `1px solid ${T.borderSubtle}` }}>
+                      <p className="text-xs mb-1" style={{ color: T.muted }}>{item.label}</p>
+                      <p className="text-sm font-bold font-mono" style={{ color: item.color }}>{item.value}</p>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-3 flex flex-col gap-1.5 text-xs" style={{ color: T.muted }}>
+                  <p>Previous scan: <span style={{ color: T.text }}>{comparison.previous_scan_id || '—'}</span></p>
+                  <p>Issue count delta: <span style={{ color: T.text }}>{deltaLabel(comparison.summary_delta?.issue_count)}</span></p>
+                  <p>Launch readiness delta: <span style={{ color: T.text }}>{deltaLabel(comparison.summary_delta?.launch_readiness_score)}</span></p>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* ── Right: findings sections ── */}
@@ -985,9 +1052,114 @@ const ScanReport = ({ scanId, navigateTo }) => {
               );
             })()}
 
+            {[
+              { id: 'accessibility', label: 'Accessibility', issues: accessibilityIssues, iconColor: T.info, iconBg: T.infoDim, recommendations: findings.accessibility?.recommendations || [] },
+              { id: 'responsive_ux', label: 'Mobile and Responsive UX', issues: responsiveIssues, iconColor: T.warn, iconBg: T.warnDim, recommendations: findings.responsive_ux?.recommendations || [] },
+              { id: 'performance_ux', label: 'Performance UX', issues: performanceIssues, iconColor: T.info, iconBg: T.infoDim, recommendations: findings.performance_ux?.recommendations || [] },
+              { id: 'form_usability', label: 'Form and Interaction Usability', issues: formIssues, iconColor: T.warn, iconBg: T.warnDim, recommendations: findings.form_usability?.recommendations || [] },
+              { id: 'visual_ai', label: 'Visual UX Recommendations', issues: visualAiIssues, iconColor: T.purple, iconBg: T.purpleDim, recommendations: findings.visual_ai?.recommendations || [] },
+            ].filter((item) => findings[item.id]).map((item) => (
+              <Section
+                key={item.id}
+                id={item.id}
+                label={item.label}
+                subLabel={item.issues.length > 0 ? `${item.issues.length} finding${item.issues.length !== 1 ? 's' : ''}` : 'No issues'}
+                icon={item.issues.length > 0 ? AlertTriangle : CheckCircle}
+                iconColor={item.issues.length > 0 ? item.iconColor : T.secure}
+                iconBg={item.issues.length > 0 ? item.iconBg : T.secureDim}
+                expanded={expanded[item.id]}
+                onToggle={toggle}
+              >
+                {item.issues.length > 0 ? (
+                  <div className="flex flex-col gap-3">
+                    {item.issues.map((issue, index) => (
+                      <div key={issue.id || index} className="rounded-lg p-4" style={{ background: T.surface, border: `1px solid ${T.border}` }}>
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-semibold" style={{ color: T.text }}>{issue.title || issue.name}</p>
+                            <div className="mt-2 flex items-center gap-2 flex-wrap">
+                              <span className="px-2 py-0.5 rounded text-[11px] font-semibold" style={{ background: T.elev, color: item.iconColor, border: `1px solid ${T.border}` }}>
+                                {labelForConfidence(issue.confidence)}
+                              </span>
+                              <span className="text-xs" style={{ color: T.dim }}>{issue.viewport || 'all viewports'}</span>
+                            </div>
+                            {issue.user_impact && <p className="text-xs mt-2" style={{ color: T.muted }}>{issue.user_impact}</p>}
+                            {issue.technical_remediation && <p className="text-xs mt-2" style={{ color: T.text }}>{issue.technical_remediation}</p>}
+                            {issue.builder_prompt && (
+                              <pre className="mt-2 text-xs whitespace-pre-wrap break-words" style={{ color: T.info, background: T.elev, padding: '10px', borderRadius: '8px' }}>
+                                {issue.builder_prompt}
+                              </pre>
+                            )}
+                            {issue.evidence?.screenshot_url && (
+                              <img
+                                src={issue.evidence.screenshot_url}
+                                alt={issue.title || issue.name || 'Issue evidence'}
+                                className="mt-3 rounded-lg border max-w-full"
+                                style={{ borderColor: T.border, maxHeight: '280px' }}
+                              />
+                            )}
+                          </div>
+                          <span className="px-2 py-1 rounded text-xs font-semibold" style={{ background: item.iconBg, color: item.iconColor }}>
+                            {issue.severity}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                    {item.recommendations.length > 0 && <Recs items={item.recommendations} />}
+                  </div>
+                ) : <CleanState icon={CheckCircle} title={`No ${item.label} Issues`} body="No findings detected in this category." />}
+              </Section>
+            ))}
+
+            {comparison && (
+              <Section
+                id="comparison"
+                label="Re-scan Improvements"
+                subLabel={`${comparison.fixed_count} fixed · ${comparison.new_count} new · ${comparison.unresolved_count} unresolved`}
+                icon={ArrowRightLeft}
+                iconColor={T.info}
+                iconBg={T.infoDim}
+                expanded={expanded.comparison ?? true}
+                onToggle={toggle}
+              >
+                <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+                  {[
+                    { key: 'fixed', title: 'Fixed Findings', color: T.secure, icon: CheckCircle },
+                    { key: 'new', title: 'New Findings', color: T.danger, icon: AlertTriangle },
+                    { key: 'unresolved', title: 'Unresolved Findings', color: T.warn, icon: Link2Off },
+                  ].map((bucket) => (
+                    <div key={bucket.key} className="rounded-lg p-4" style={{ background: T.surface, border: `1px solid ${T.border}` }}>
+                      <p className="text-sm font-semibold mb-3" style={{ color: bucket.color }}>{bucket.title}</p>
+                      <div className="flex flex-col gap-3">
+                        {(comparison[bucket.key] || []).length > 0 ? (comparison[bucket.key] || []).map((issue) => (
+                          <div key={`${bucket.key}-${issue.id}`} className="rounded-lg p-3" style={{ background: T.elev, border: `1px solid ${T.borderSubtle}` }}>
+                            <div className="flex items-start gap-2">
+                              <bucket.icon size={13} className="mt-0.5 flex-shrink-0" style={{ color: bucket.color }} />
+                              <div>
+                                <p className="text-xs font-semibold" style={{ color: T.text }}>{issue.title}</p>
+                                <p className="text-[11px] mt-1" style={{ color: T.dim }}>{issue.scanner} · {issue.viewport || 'all viewports'}</p>
+                                {issue.page_url && <p className="text-[11px] mt-1 break-all" style={{ color: T.muted }}>{issue.page_url}</p>}
+                              </div>
+                            </div>
+                          </div>
+                        )) : (
+                          <p className="text-xs" style={{ color: T.muted }}>No items.</p>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </Section>
+            )}
+
             {/* Conclusion */}
             <div className="rounded-xl p-5" style={{ background: T.card, border: `1px solid ${T.border}` }}>
               <p className="text-xs font-mono uppercase tracking-widest mb-3" style={{ color: T.dim }}>Conclusion & Next Steps</p>
+              {launchReadiness.summary && (
+                <p className="text-xs mb-3" style={{ color: T.info }}>
+                  Launch readiness: {launchReadiness.summary}
+                </p>
+              )}
               {totalIssues > 0 ? (
                 <div>
                   <p className="text-xs mb-3" style={{ color: T.muted }}>

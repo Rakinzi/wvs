@@ -1,8 +1,8 @@
 from app import db
 from app.models import MaliciousSite, ScanResult, User
 from urllib.parse import urlparse
-from datetime import datetime
 import os
+from app.utils.time_utils import utc_now
 
 class DBManager:
     @staticmethod
@@ -27,7 +27,7 @@ class DBManager:
                 url=url,
                 reason=reason,
                 source=source,
-                date_added=datetime.utcnow()
+                date_added=utc_now()
             )
             db.session.add(site)
             db.session.commit()

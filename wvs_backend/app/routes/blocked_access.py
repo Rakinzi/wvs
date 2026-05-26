@@ -3,8 +3,9 @@ from flask_jwt_extended import jwt_required
 from app.auth import get_current_user
 from app.models import BlockedRequest
 from app import db
-from datetime import datetime, timedelta
+from datetime import timedelta
 from urllib.parse import urlparse
+from app.utils.time_utils import utc_now
 
 bp = Blueprint('blocked_access', __name__)
 
@@ -71,7 +72,7 @@ def get_blocked_access_stats():
             return jsonify({'error': 'Unauthorized access'}), 403
         
         # Get stats for the past 7 days
-        seven_days_ago = datetime.utcnow() - timedelta(days=7)
+        seven_days_ago = utc_now() - timedelta(days=7)
         
         # Count attempts by day
         attempts_by_day = db.session.query(
@@ -86,7 +87,7 @@ def get_blocked_access_stats():
         # Format results for past 7 days (fill in missing days with 0)
         days_data = []
         for i in range(7):
-            day = (datetime.utcnow() - timedelta(days=i)).date()
+            day = (utc_now() - timedelta(days=i)).date()
             # Find count for this day, or default to 0
             count = 0
             for attempt_day, attempt_count in attempts_by_day:
@@ -103,7 +104,7 @@ def get_blocked_access_stats():
         # Get total counts
         total_blocked = BlockedRequest.query.count()
         today_blocked = BlockedRequest.query.filter(
-            BlockedRequest.timestamp >= datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+            BlockedRequest.timestamp >= utc_now().replace(hour=0, minute=0, second=0, microsecond=0)
         ).count()
         
         # Get counts by browser

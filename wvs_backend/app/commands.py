@@ -1,12 +1,15 @@
 import click
+from flask import current_app
 from flask.cli import with_appcontext
 from app import db
-from app.models import MaliciousSite, User
+from app.models import MaliciousSite, ScanResult, User
 import requests
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 import os
 import sqlite3
+from app.utils.time_utils import utc_now
+from app.utils.ux_screenshot_manager import collect_screenshot_paths
 
 @click.command('init-db')
 @with_appcontext
@@ -124,7 +127,7 @@ def update_blocklist_command():
                             url=f"http://{domain}",
                             reason=source['reason'],
                             source=source['source'],
-                            date_added=datetime.utcnow()
+                            date_added=utc_now()
                         )
                         db.session.add(site)
                         added += 1
@@ -162,8 +165,69 @@ def update_blocklist_command():
     
     click.echo(f"Added a total of {total_added} new domains to the database")
 
+
+@click.command('cleanup-report-artifacts')
+@click.option('--dry-run', is_flag=True, help='Show what would be removed without deleting files or rows.')
+@with_appcontext
+def cleanup_report_artifacts_command(dry_run):
+    """Remove expired scan results, orphaned screenshots, and missing-report references."""
+    retention_days = int(current_app.config.get('SCAN_RESULT_RETENTION_DAYS', 90))
+    screenshot_retention_days = int(current_app.config.get('SCREENSHOT_RETENTION_DAYS', 30))
+    cutoff = utc_now() - timedelta(days=retention_days)
+    screenshot_cutoff = utc_now() - timedelta(days=screenshot_retention_days)
+
+    all_scans = ScanResult.query.all()
+    referenced_screenshots = set()
+    removed_scan_count = 0
+    removed_file_count = 0
+
+    for scan in all_scans:
+        referenced_screenshots.update(collect_screenshot_paths(scan.findings or {}))
+
+    expired_scans = ScanResult.query.filter(ScanResult.timestamp < cutoff).all()
+    for scan in expired_scans:
+        for path in collect_screenshot_paths(scan.findings or {}):
+            if os.path.exists(path):
+                click.echo(f"remove screenshot {path}")
+                if not dry_run:
+                    os.remove(path)
+                removed_file_count += 1
+        if scan.report_path and os.path.exists(scan.report_path):
+            click.echo(f"remove report {scan.report_path}")
+            if not dry_run:
+                os.remove(scan.report_path)
+            removed_file_count += 1
+        click.echo(f"remove scan result {scan.public_id}")
+        if not dry_run:
+            db.session.delete(scan)
+        removed_scan_count += 1
+
+    screenshot_root = current_app.config.get('UX_SCAN_SCREENSHOT_DIR')
+    if screenshot_root and os.path.isdir(screenshot_root):
+        for name in os.listdir(screenshot_root):
+            path = os.path.join(screenshot_root, name)
+            if path in referenced_screenshots:
+                continue
+            if not os.path.isfile(path):
+                continue
+            modified_at = datetime.utcfromtimestamp(os.path.getmtime(path))
+            if modified_at >= screenshot_cutoff:
+                continue
+            click.echo(f"remove orphan screenshot {path}")
+            if not dry_run:
+                os.remove(path)
+            removed_file_count += 1
+
+    if not dry_run:
+        db.session.commit()
+
+    click.echo(
+        f"Cleanup complete. Removed {removed_scan_count} expired scan rows and {removed_file_count} files."
+    )
+
 def register_commands(app):
     app.cli.add_command(init_db_command)
     app.cli.add_command(migrate_legacy_sqlite_command)
     app.cli.add_command(create_admin_command)
     app.cli.add_command(update_blocklist_command)
+    app.cli.add_command(cleanup_report_artifacts_command)

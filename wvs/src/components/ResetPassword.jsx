@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, ArrowRight, CheckCircle, Eye, EyeOff, Lock, Shield } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { apiJson, ApiError } from '../lib/api';
+import Spinner from './Spinner';
 
 const ResetPassword = () => {
   const [searchParams] = useSearchParams();
@@ -181,7 +182,7 @@ const ResetPassword = () => {
                 >
                   {isLoading ? (
                     <>
-                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      <Spinner size="sm" />
                       Updating password…
                     </>
                   ) : (
