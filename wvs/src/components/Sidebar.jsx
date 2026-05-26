@@ -68,7 +68,7 @@ const Sidebar = ({ isAuthenticated, onLogout, navigateTo, currentPage }) => {
             <Shield size={16} className="text-white" />
           </div>
           <span className="text-white font-semibold tracking-tight text-sm">
-            WebVulnScanner
+            LaunchGuard
           </span>
         </button>
 

@@ -75,7 +75,7 @@ const Settings = ({ navigateTo, userData }) => {
   const [attempted, setAttempted] = useState(false);
 
   useEffect(() => {
-    document.title = 'Settings — WebVulnScanner';
+    document.title = 'Settings — LaunchGuard';
     if (userData) setFormData(p => ({ ...p, name: userData.username || '' }));
   }, [userData]);
 

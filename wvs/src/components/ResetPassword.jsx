@@ -17,7 +17,7 @@ const ResetPassword = () => {
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
-    document.title = 'Reset Password — WebVulnScanner';
+    document.title = 'Reset Password — LaunchGuard';
     requestAnimationFrame(() => setVisible(true));
   }, []);
 
@@ -93,7 +93,7 @@ const ResetPassword = () => {
             </div>
             <div className="text-center">
               <h1 className="text-xl font-semibold" style={{ color: 'var(--color-text)' }}>Choose a new password</h1>
-              <p className="text-sm mt-0.5" style={{ color: 'var(--color-text-muted)' }}>WebVulnScanner account recovery</p>
+              <p className="text-sm mt-0.5" style={{ color: 'var(--color-text-muted)' }}>LaunchGuard account recovery</p>
             </div>
           </div>
 

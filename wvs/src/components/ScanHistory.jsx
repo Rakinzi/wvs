@@ -199,7 +199,7 @@ const ScanHistory = ({ navigateTo }) => {
   const perPage = 10;
   const { scans, loading, error, fetchScans, deleteScan } = useScanHistoryData();
 
-  useEffect(() => { document.title = 'Scan History — WebVulnScanner'; }, []);
+  useEffect(() => { document.title = 'Scan History — LaunchGuard'; }, []);
 
   const filtered = scans
     .filter(s => {

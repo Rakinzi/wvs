@@ -120,7 +120,7 @@ const Login = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    document.title = 'Sign In — WebVulnScanner';
+    document.title = 'Sign In — LaunchGuard';
     requestAnimationFrame(() => setVisible(true));
   }, []);
 
@@ -194,7 +194,7 @@ const Login = () => {
               <Shield size={26} className="text-white" />
             </div>
             <div className="text-center">
-              <h1 className="text-xl font-semibold" style={{ color: 'var(--color-text)' }}>WebVulnScanner</h1>
+              <h1 className="text-xl font-semibold" style={{ color: 'var(--color-text)' }}>LaunchGuard</h1>
               <p className="text-sm mt-0.5" style={{ color: 'var(--color-text-muted)' }}>Security Intelligence Platform</p>
             </div>
           </div>

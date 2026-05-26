@@ -142,7 +142,7 @@ const Dashboard = ({ navigateTo }) => {
     recentScanJobs,
   } = useDashboardData();
 
-  useEffect(() => { document.title = 'Dashboard — WebVulnScanner'; }, []);
+  useEffect(() => { document.title = 'Dashboard — LaunchGuard'; }, []);
 
   const rel = (d) => {
     const diff = Math.floor((Date.now() - new Date(d)) / 60000);

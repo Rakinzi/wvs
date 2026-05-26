@@ -295,7 +295,7 @@ const Scanners = ({ navigateTo }) => {
     handleXssScan, handleTechScan, handleExposureScan,
   } = useScansData();
 
-  useEffect(() => { document.title = 'Scanners — WebVulnScanner'; }, []);
+  useEffect(() => { document.title = 'Scanners — LaunchGuard'; }, []);
 
   const fmt = (d) => new Date(d).toLocaleDateString() + ' ' +
     new Date(d).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });

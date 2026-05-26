@@ -124,7 +124,7 @@ const BlockedAccess = ({ navigateTo }) => {
   const allIps = useMemo(() => blockedRequests.map(r => r.ip_address).filter(Boolean), [blockedRequests]);
   const geoMap = useGeoLookup(allIps);
 
-  useEffect(() => { document.title = 'Blocked Access — WebVulnScanner'; }, []);
+  useEffect(() => { document.title = 'Blocked Access — LaunchGuard'; }, []);
 
   const filteredRequests = useMemo(() => blockedRequests.filter(r => {
     const matchQ = !q ||

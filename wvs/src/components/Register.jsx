@@ -48,7 +48,7 @@ const Register = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    document.title = 'Register — WebVulnScanner';
+    document.title = 'Register — LaunchGuard';
     requestAnimationFrame(() => setVisible(true));
   }, []);
 
@@ -125,7 +125,7 @@ const Register = () => {
             </div>
             <div className="text-center">
               <h1 className="text-xl font-semibold" style={{ color: 'var(--color-text)' }}>Create Account</h1>
-              <p className="text-sm mt-0.5" style={{ color: 'var(--color-text-muted)' }}>Join WebVulnScanner</p>
+              <p className="text-sm mt-0.5" style={{ color: 'var(--color-text-muted)' }}>Join LaunchGuard</p>
             </div>
           </div>
 

@@ -20,7 +20,7 @@ const Footer = () => (
           <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: T.primary }}>
             <Shield size={14} className="text-white" />
           </div>
-          <span className="text-sm font-semibold" style={{ color: T.text }}>WebVulnScanner</span>
+          <span className="text-sm font-semibold" style={{ color: T.text }}>LaunchGuard</span>
         </div>
 
         <div className="flex items-center gap-6">
@@ -34,13 +34,13 @@ const Footer = () => (
         </div>
 
         <p className="text-xs" style={{ color: T.dim }}>
-          © {new Date().getFullYear()} WebVulnScanner. All rights reserved.
+          © {new Date().getFullYear()} LaunchGuard. All rights reserved.
         </p>
       </div>
 
       <div className="mt-5 pt-5 text-center" style={{ borderTop: `1px solid ${T.borderSubtle}` }}>
         <p className="text-xs" style={{ color: T.dim }}>
-          WebVulnScanner helps identify SQL injection, SSL vulnerabilities, and malicious content. Use responsibly on authorized targets only.
+          LaunchGuard helps identify SQL injection, SSL vulnerabilities, and malicious content. Use responsibly on authorized targets only.
         </p>
       </div>
     </div>

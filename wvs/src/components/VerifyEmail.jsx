@@ -10,7 +10,7 @@ const VerifyEmail = () => {
   const [message, setMessage] = useState('');
 
   useEffect(() => {
-    document.title = 'Verify Email — WebVulnScanner';
+    document.title = 'Verify Email — LaunchGuard';
     const token = searchParams.get('token');
     if (!token) { setStatus('no_token'); return; }
 
@@ -35,7 +35,7 @@ const VerifyEmail = () => {
           </div>
           <div className="text-center">
             <h1 className="text-xl font-semibold" style={{ color: 'var(--color-text)' }}>Email Verification</h1>
-            <p className="text-sm mt-0.5" style={{ color: 'var(--color-text-muted)' }}>WebVulnScanner account</p>
+            <p className="text-sm mt-0.5" style={{ color: 'var(--color-text-muted)' }}>LaunchGuard account</p>
           </div>
         </div>
 

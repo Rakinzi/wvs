@@ -136,7 +136,7 @@ const ScanReport = ({ scanId, navigateTo }) => {
   const [deleteError, setDeleteError] = useState(null);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
-  useEffect(() => { document.title = 'Scan Report — WebVulnScanner'; }, []);
+  useEffect(() => { document.title = 'Scan Report — LaunchGuard'; }, []);
 
   const toggle = (id) => setExpanded(p => ({ ...p, [id]: !p[id] }));
 

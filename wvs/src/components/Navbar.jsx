@@ -59,7 +59,7 @@ const Navbar = ({ isAuthenticated, onLogout, navigateTo, currentPage }) => {
               <Shield size={16} className="text-white" />
             </div>
             <span className="text-white font-semibold tracking-tight text-base hidden sm:block">
-              WebVulnScanner
+              LaunchGuard
             </span>
           </button>
 

@@ -76,7 +76,7 @@ const BlockedSites = ({ navigateTo }) => {
   const { addBlockedSite, addingUrl, blockedSites, error, fetchBlockedSites, loading, removeBlockedSite, successMessage } = useBlockedSitesData();
   const sources = ['all', ...new Set(blockedSites.map(s => s.source))];
 
-  useEffect(() => { document.title = 'Blocked Sites — WebVulnScanner'; }, []);
+  useEffect(() => { document.title = 'Blocked Sites — LaunchGuard'; }, []);
 
   const filtered = blockedSites.filter(s => {
     const mq = !q || s.domain?.toLowerCase().includes(q.toLowerCase()) || s.reason?.toLowerCase().includes(q.toLowerCase());
