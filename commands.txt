@@ -1,2 +1,3 @@
 mitmweb --set block_global=false --ssl-insecure -s site_blocker.py -p 8080
- ZAP_ENABLED=true ZAP_AUTO_START=true uv run python start.py
+ZAP_ENABLED=true ZAP_AUTO_START=true ZAP_START_CMD="/Applications/ZAP.app/Contents/MacOS/ZAP.sh" PORT=5001 uv run python start.py
+ZAP_ENABLED=true ZAP_AUTO_START=true ZAP_START_CMD="/Applications/ZAP.app/Contents/MacOS/ZAP.sh" PORT=5001 uv run python start.py

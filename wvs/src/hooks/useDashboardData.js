@@ -25,17 +25,6 @@ export const useDashboardData = () => {
     }
   }, []);
 
-  const fetchRecentBlockedAttempts = useCallback(async () => {
-    try {
-      const { data } = await apiJson('/dashboard/recent-blocked', { auth: true });
-      if (data.status === 'success') {
-        setDashboardStats(prev => prev ? { ...prev, recentBlockedAttempts: data.recent_blocked } : prev);
-      }
-    } catch (error) {
-      console.error('Error fetching recent blocked access:', error);
-    }
-  }, []);
-
   const fetchRecentScanJobs = useCallback(async () => {
     try {
       const { data } = await apiJson('/scan/jobs?limit=5', { auth: true });
@@ -48,9 +37,8 @@ export const useDashboardData = () => {
   }, []);
 
   const refreshDashboard = useCallback(async () => {
-    await fetchDashboardStats();
-    await Promise.all([fetchRecentBlockedAttempts(), fetchRecentScanJobs()]);
-  }, [fetchDashboardStats, fetchRecentBlockedAttempts, fetchRecentScanJobs]);
+    await Promise.all([fetchDashboardStats(), fetchRecentScanJobs()]);
+  }, [fetchDashboardStats, fetchRecentScanJobs]);
 
   useEffect(() => {
     refreshDashboard();

@@ -1,23 +1,20 @@
 import React from 'react';
 
-/**
- * size="sm"  — inline button spinner (16px)
- * size="md"  — section loader (default, 40px)
- * size="lg"  — full-page loader (56px)
- * color      — optional hex/CSS color override (defaults to --color-primary)
- */
 export default function Spinner({ size = 'md', label, color, style = {} }) {
   const c = color || 'var(--color-primary)';
 
   if (size === 'sm') {
-    const borderColor = color
-      ? `${color}4d`  // ~30% opacity hex
-      : 'rgba(255,255,255,0.3)';
-    const borderTopColor = color || 'white';
     return (
       <div
-        className="rounded-full border-2 animate-spin"
-        style={{ width: 16, height: 16, borderColor, borderTopColor, ...style }}
+        className="rounded-full border-2 animate-spin flex-shrink-0"
+        style={{
+          width: 14,
+          height: 14,
+          borderColor: color ? `${color}33` : 'rgba(255,255,255,0.2)',
+          borderTopColor: color || 'white',
+          animationDuration: '600ms',
+          ...style,
+        }}
       />
     );
   }

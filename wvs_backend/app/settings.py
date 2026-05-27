@@ -61,6 +61,24 @@ class AppSettings(BaseSettings):
     ux_scan_rate_limit: str = Field(default="10/h", alias="UX_SCAN_RATE_LIMIT")
     scan_result_retention_days: int = Field(default=90, alias="SCAN_RESULT_RETENTION_DAYS")
     screenshot_retention_days: int = Field(default=30, alias="SCREENSHOT_RETENTION_DAYS")
+    uptime_monitor_enabled: bool = Field(default=True, alias="UPTIME_MONITOR_ENABLED")
+    uptime_monitor_default_interval_minutes: int = Field(default=5, alias="UPTIME_MONITOR_DEFAULT_INTERVAL_MINUTES")
+    uptime_monitor_request_timeout_seconds: int = Field(default=15, alias="UPTIME_MONITOR_REQUEST_TIMEOUT_SECONDS")
+    uptime_monitor_history_limit: int = Field(default=100, alias="UPTIME_MONITOR_HISTORY_LIMIT")
+    malware_scan_enabled: bool = Field(default=True, alias="MALWARE_SCAN_ENABLED")
+    malware_max_artifacts: int = Field(default=5, alias="MALWARE_MAX_ARTIFACTS")
+    malware_max_download_bytes: int = Field(default=25 * 1024 * 1024, alias="MALWARE_MAX_DOWNLOAD_BYTES")
+    malware_download_timeout_seconds: int = Field(default=20, alias="MALWARE_DOWNLOAD_TIMEOUT_SECONDS")
+    malware_temp_dir: str = Field(default=str(DEFAULT_REPORTS_PATH / "malware"), alias="MALWARE_TEMP_DIR")
+    malware_allowed_extensions: str = Field(
+        default=".exe,.dll,.msi,.jar,.js,.vbs,.ps1,.bat,.cmd,.scr,.doc,.docm,.xls,.xlsm,.ppt,.pptm,.rtf,.pdf,.zip",
+        alias="MALWARE_ALLOWED_EXTENSIONS",
+    )
+    clamav_enabled: bool = Field(default=False, alias="CLAMAV_ENABLED")
+    clamav_network_socket: str | None = Field(default=None, alias="CLAMAV_NETWORK_SOCKET")
+    clamav_unix_socket: str | None = Field(default=None, alias="CLAMAV_UNIX_SOCKET")
+    yara_enabled: bool = Field(default=True, alias="YARA_ENABLED")
+    yara_rules_dir: str = Field(default=str(BASE_DIR / "app" / "yara_rules"), alias="YARA_RULES_DIR")
 
     smtp_host: str = Field(default="smtp.gmail.com", alias="SMTP_HOST")
     smtp_port: int = Field(default=587, alias="SMTP_PORT")
@@ -81,7 +99,7 @@ class AppSettings(BaseSettings):
         alias="PHISHING_DB_URL",
     )
     report_folder: str = Field(default=str(DEFAULT_REPORTS_PATH), alias="REPORT_FOLDER")
-    max_scan_time: int = Field(default=300, alias="MAX_SCAN_TIME")
+    max_scan_time: int = Field(default=900, alias="MAX_SCAN_TIME")
     auto_create_tables: bool = Field(default=False, alias="AUTO_CREATE_TABLES")
     ratelimit_storage_uri: str = Field(default="memory://", alias="RATELIMIT_STORAGE_URI")
     requests_cache_name: str = Field(default=str(INSTANCE_DIR / "http_cache"), alias="REQUESTS_CACHE_NAME")
@@ -98,6 +116,8 @@ class AppSettings(BaseSettings):
     zap_api_key: str = Field(default="", alias="ZAP_API_KEY")
     zap_spider_max_minutes: int = Field(default=2, alias="ZAP_SPIDER_MAX_MINUTES")
     zap_active_scan_max_minutes: int = Field(default=4, alias="ZAP_ACTIVE_SCAN_MAX_MINUTES")
+    zap_auto_start: bool = Field(default=False, alias="ZAP_AUTO_START")
+    zap_start_cmd: str | None = Field(default=None, alias="ZAP_START_CMD")
 
     @property
     def effective_jwt_secret_key(self) -> str | None:

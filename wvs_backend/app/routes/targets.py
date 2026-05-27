@@ -57,6 +57,15 @@ def _build_instructions(method: str, token: str, origin: str) -> dict:
 def _serialize_target(target: VerifiedTarget) -> dict:
     data = target.to_dict()
     data["requires_verification_for_scans"] = current_app.config.get("REQUIRE_VERIFIED_TARGETS", False)
+    # Include live instructions whenever a token is stored and not yet verified
+    if target.verification_token and target.verification_status != "verified":
+        data["instructions"] = _build_instructions(
+            target.verification_method,
+            target.verification_token,
+            extract_target_origin(target.target_url),
+        )
+    else:
+        data["instructions"] = None
     return data
 
 
@@ -155,6 +164,7 @@ def create_target():
                 normalized_domain=normalized_domain,
                 verification_method=payload.verification_method,
                 verification_token_hash=_hash_token(raw_token),
+                verification_token=raw_token,
                 verification_status="pending",
                 token_expires_at=_verification_expiry(),
             )
@@ -164,6 +174,7 @@ def create_target():
             target.target_url = target_url
             target.verification_method = payload.verification_method
             target.verification_token_hash = _hash_token(raw_token)
+            target.verification_token = raw_token
             target.verification_status = "pending"
             target.verified_at = None
             target.token_expires_at = _verification_expiry()
@@ -229,6 +240,7 @@ def regenerate_verification_token(target_id: str):
 
     raw_token = _generate_token()
     target.verification_token_hash = _hash_token(raw_token)
+    target.verification_token = raw_token
     target.verification_status = "pending"
     target.verified_at = None
     target.token_expires_at = _verification_expiry()
@@ -288,6 +300,7 @@ def verify_target(target_id: str):
 
     target.verification_status = "verified"
     target.verified_at = utc_now()
+    target.verification_token = None
     db.session.commit()
 
     return jsonify({"status": "success", "target": _serialize_target(target)}), 200

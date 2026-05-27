@@ -335,6 +335,8 @@ def generate_report(results):
     tech_count     = summary.get('tech_issue_count', 0)
     advisory_count = summary.get('advisory_count', 0)
     exposure_count = summary.get('exposure_count', 0)
+    secrets_count  = summary.get('secrets_count', 0)
+    malware_artifact_count = summary.get('malware_artifact_count', 0)
     total          = summary.get('total_issues', 0)
 
     risk  = ('Critical' if (total > 5 or is_mal) else
@@ -394,6 +396,64 @@ def generate_report(results):
     story.append(sp(12))
     story.append(_divider())
 
+    # ── Site Screenshots ──────────────────────────────────────────────────────
+    screenshots_data = results.get('screenshots') or {}
+    shot_map = screenshots_data.get('screenshots') if isinstance(screenshots_data, dict) else {}
+    if shot_map:
+        story.append(sp(4))
+        story.append(Paragraph('Site Screenshots', ST['h2']))
+        story.append(sp(6))
+        shot_cells = []
+        labels = {'desktop': 'Desktop (1440px)', 'mobile': 'Mobile (390px)'}
+        for vp in ('desktop', 'mobile'):
+            path = shot_map.get(vp)
+            if path and os.path.isfile(path):
+                avail_w = (PAGE_W - 2 * MARGIN - 12) / 2
+                try:
+                    img = Image(path, width=avail_w, height=avail_w * 0.6)
+                    label = Paragraph(labels.get(vp, vp), ParagraphStyle(
+                        'sl', fontName='Helvetica-Bold', fontSize=8,
+                        textColor=MUTED, leading=11, alignment=TA_CENTER,
+                    ))
+                    shot_cells.append([label, img])
+                except Exception:
+                    pass
+        if shot_cells:
+            col_w = (PAGE_W - 2 * MARGIN - 12) / 2
+            for label_row, img_row in [(s[0], s[1]) for s in shot_cells]:
+                pass
+            # Build side-by-side if both viewports present, else single
+            if len(shot_cells) == 2:
+                side_by_side = Table(
+                    [[shot_cells[0][1], shot_cells[1][1]],
+                     [shot_cells[0][0], shot_cells[1][0]]],
+                    colWidths=[col_w, col_w],
+                    hAlign='CENTER',
+                )
+                side_by_side.setStyle(TableStyle([
+                    ('ALIGN',         (0,0), (-1,-1), 'CENTER'),
+                    ('VALIGN',        (0,0), (-1,-1), 'TOP'),
+                    ('LEFTPADDING',   (0,0), (-1,-1), 6),
+                    ('RIGHTPADDING',  (0,0), (-1,-1), 6),
+                    ('TOPPADDING',    (0,0), (-1,-1), 4),
+                    ('BOTTOMPADDING', (0,0), (-1,-1), 4),
+                    ('BACKGROUND',    (0,0), (-1,-1), SURFACE),
+                    ('ROUNDEDCORNERS',(0,0), (-1,-1), [6,6,6,6]),
+                ]))
+                story.append(side_by_side)
+            else:
+                c = shot_cells[0]
+                single = Table([[c[1]], [c[0]]], colWidths=[PAGE_W - 2 * MARGIN], hAlign='CENTER')
+                single.setStyle(TableStyle([
+                    ('ALIGN',         (0,0), (-1,-1), 'CENTER'),
+                    ('BACKGROUND',    (0,0), (-1,-1), SURFACE),
+                    ('TOPPADDING',    (0,0), (-1,-1), 4),
+                    ('BOTTOMPADDING', (0,0), (-1,-1), 4),
+                ]))
+                story.append(single)
+        story.append(sp(12))
+        story.append(_divider())
+
     # ── Executive Summary ─────────────────────────────────────────────────────
     story.append(sp(4))
     story.append(Paragraph('Executive Summary', ST['h2']))
@@ -419,6 +479,8 @@ def generate_report(results):
             ('Technology Exposure',     tech_count,         INFO),
             ('Dependency Advisories',   advisory_count,     DANGER),
             ('Sensitive File Exposure', exposure_count,     WARN),
+            ('Hardcoded Secrets',       secrets_count,      DANGER),
+            ('Malware Artifacts',       malware_artifact_count, DANGER),
             ('Malicious Indicators',    1 if is_mal else 0, PURPLE),
         ]:
             if count > 0:
@@ -852,6 +914,103 @@ def generate_report(results):
         story.append(Paragraph('✓  No sensitive files or credentials exposed at common paths.', ST['secure']))
     story.append(sp(10))
 
+    # Hardcoded Secrets & API Keys
+    sec_data   = findings.get('secrets') or results.get('secrets') or {}
+    sec_issues = sec_data.get('issues') or []
+    sec_ran    = bool(sec_data)
+    sec_critical = [i for i in sec_issues if i.get('severity') in ('Critical', 'High')]
+    story.append(_section_header(
+        'Hardcoded Secrets & API Keys',
+        'Not run' if not sec_ran else (
+            f'{len(sec_issues)} secret{"s" if len(sec_issues) != 1 else ""} detected'
+            if sec_issues else 'No hardcoded secrets detected'
+        ),
+        '—' if not sec_ran else ('✗' if sec_issues else '✓'),
+        DIM if not sec_ran else (DANGER if sec_critical else (WARN if sec_issues else SECURE)), ST,
+    ))
+    story.append(sp(4))
+    if not sec_ran:
+        story.append(Paragraph('Hardcoded secrets scan was not run.', ST['body']))
+    elif sec_issues:
+        from reportlab.platypus import KeepTogether as _KT
+        for i in sec_issues:
+            sev = i.get('severity', 'Medium')
+            sev_colors = {'Critical': DANGER, 'High': DANGER, 'Medium': WARN, 'Low': INFO}
+            sev_color = sev_colors.get(sev, DIM)
+            meta_rows = [
+                [Paragraph('SEVERITY', ST['label']),
+                 Paragraph(f'<font color="#{sev_color.hexval()[2:]}">{sev}</font>', ST['body_w'])],
+                [Paragraph('SOURCE', ST['label']),
+                 Paragraph(_safe_text(i.get('source') or ''), ST['mono'])],
+                [Paragraph('VALUE', ST['label']),
+                 Paragraph(_safe_text(i.get('match_redacted') or ''), ST['mono'])],
+            ]
+            if i.get('line'):
+                meta_rows.append([
+                    Paragraph('LINE', ST['label']),
+                    Paragraph(str(i.get('line')), ST['body_w']),
+                ])
+            meta_t = Table(
+                meta_rows,
+                colWidths=[72, PAGE_W - 2 * MARGIN - 72],
+                style=TableStyle([
+                    ('BACKGROUND',    (0, 0), (-1, -1), CARD),
+                    ('LINEBELOW',     (0, 0), (-1, -2), 0.3, BORDER),
+                    ('TOPPADDING',    (0, 0), (-1, -1), 4),
+                    ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+                    ('LEFTPADDING',   (0, 0), (-1, -1), 10),
+                    ('VALIGN',        (0, 0), (-1, -1), 'TOP'),
+                ]),
+            )
+            title_row = Table(
+                [[Paragraph(
+                    f'<b>{_safe_text(i.get("name", "Secret"))}</b>',
+                    ParagraphStyle('stitle', fontName='Helvetica-Bold', fontSize=9,
+                                   leading=12, textColor=TEXT),
+                )]],
+                colWidths=[PAGE_W - 2 * MARGIN],
+                style=TableStyle([
+                    ('BACKGROUND',    (0, 0), (-1, -1), sev_color if sev in ('Critical', 'High') else ELEVATED),
+                    ('LEFTPADDING',   (0, 0), (-1, -1), 10),
+                    ('TOPPADDING',    (0, 0), (-1, -1), 6),
+                    ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+                    ('LINEABOVE',     (0, 0), (-1, 0),  1.5, sev_color),
+                ]),
+            )
+            story.append(_KT([title_row, meta_t, sp(6)]))
+        story.extend(_recs_block(sec_data.get('recommendations') or [
+            'Remove hardcoded API keys and secrets from client-side code immediately.',
+            'Rotate any exposed credentials — treat them as fully compromised.',
+            'Use environment variables or a secrets manager (AWS Secrets Manager, HashiCorp Vault).',
+            'Add pre-commit hooks (git-secrets, truffleHog) to prevent future leaks.',
+        ], ST))
+    else:
+        story.append(Paragraph('✓  No hardcoded API keys or secrets detected in page source or JavaScript files.', ST['secure']))
+    story.append(sp(10))
+
+    # Downloaded Artifact Malware Analysis
+    malware_data = findings.get('malware_analysis') or results.get('malware_analysis') or {}
+    malware_issues = malware_data.get('issues') or []
+    malware_ran = bool(malware_data)
+    story.append(_section_header(
+        'Downloaded Artifact Malware Analysis',
+        'Not run' if not malware_ran else (
+            f'{len(malware_issues)} malware-related finding{"s" if len(malware_issues) != 1 else ""}'
+            if malware_issues else 'No malware indicators detected'
+        ),
+        '—' if not malware_ran else ('✗' if malware_issues else '✓'),
+        DIM if not malware_ran else (DANGER if malware_issues else SECURE), ST,
+    ))
+    story.append(sp(4))
+    if not malware_ran:
+        story.append(Paragraph('Downloaded artifact malware analysis was not run.', ST['body']))
+    elif malware_issues:
+        story.extend(_findings_block(malware_issues, DANGER, ST))
+        story.extend(_recs_block(malware_data.get('recommendations') or [], ST))
+    else:
+        story.append(Paragraph('✓  No malware indicators were detected in same-origin downloadable artifacts.', ST['secure']))
+    story.append(sp(10))
+
     # DNS Security
     dns_data   = findings.get('dns') or results.get('dns') or {}
     dns_issues = dns_data.get('issues') or []
@@ -980,6 +1139,8 @@ def generate_report(results):
         if tech_count:     steps.append(('Technology Exposure', 'Patch outdated client libraries, disable directory indexes, and reduce version disclosure.'))
         if advisory_count: steps.append(('Dependency Risk',     'Upgrade vulnerable packages, review CVE/CWE exposure, and automate dependency scanning in CI/CD.'))
         if exposure_count: steps.append(('File Exposure',       'Block sensitive paths in the web server and rotate any exposed credentials.'))
+        if secrets_count:  steps.append(('Hardcoded Secrets',   'Remove API keys from client-side code, rotate all exposed credentials immediately, and use a secrets manager.'))
+        if malware_artifact_count: steps.append(('Malware Artifacts', 'Remove suspicious downloads, verify artifact integrity, and only publish signed release files from trusted CI.'))
         if is_mal:         steps.append(('Malicious Site',      'Investigate server compromise, rotate credentials, and notify users.'))
         dns_count = summary.get('dns_issue_count', 0)
         redir_count = summary.get('redirect_count', 0)
@@ -994,17 +1155,21 @@ def generate_report(results):
             Paragraph(desc, ST['body']),
         ] for i, (t, desc) in enumerate(steps)]
 
-        t = Table(rows, colWidths=[110, PAGE_W - 2 * MARGIN - 110])
-        t.setStyle(TableStyle([
-            ('BACKGROUND',     (0,0), (-1,-1), CARD),
-            ('ROWBACKGROUNDS', (0,0), (-1,-1), [CARD, ELEVATED]),
-            ('LINEBELOW',      (0,0), (-1,-2), 0.3, BORDER),
-            ('TOPPADDING',     (0,0), (-1,-1), 6),
-            ('BOTTOMPADDING',  (0,0), (-1,-1), 6),
-            ('LEFTPADDING',    (0,0), (-1,-1), 10),
-            ('VALIGN',         (0,0), (-1,-1), 'TOP'),
-        ]))
-        story.append(t)
+        if not rows:
+            story.append(Paragraph('No priority remediation steps identified.', ST['body']))
+            story.append(sp(12))
+        else:
+            t = Table(rows, colWidths=[110, PAGE_W - 2 * MARGIN - 110])
+            t.setStyle(TableStyle([
+                ('BACKGROUND',     (0,0), (-1,-1), CARD),
+                ('ROWBACKGROUNDS', (0,0), (-1,-1), [CARD, ELEVATED]),
+                ('LINEBELOW',      (0,0), (-1,-2), 0.3, BORDER),
+                ('TOPPADDING',     (0,0), (-1,-1), 6),
+                ('BOTTOMPADDING',  (0,0), (-1,-1), 6),
+                ('LEFTPADDING',    (0,0), (-1,-1), 10),
+                ('VALIGN',         (0,0), (-1,-1), 'TOP'),
+            ]))
+            story.append(t)
 
     story.append(sp(12))
     story.append(_divider())

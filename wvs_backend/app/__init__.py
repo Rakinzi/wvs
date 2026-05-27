@@ -49,6 +49,7 @@ def register_blueprints(app: Flask) -> None:
     from app.routes.malicious import bp as malicious_bp
     from app.routes.scans import bp as scans_bp
     from app.routes.targets import bp as targets_bp
+    from app.routes.uptime import bp as uptime_bp
     from app.routes.users import bp as users_bp
 
     app.register_blueprint(blocked_access_bp)
@@ -57,6 +58,7 @@ def register_blueprints(app: Flask) -> None:
     app.register_blueprint(users_bp)
     app.register_blueprint(malicious_bp)
     app.register_blueprint(targets_bp)
+    app.register_blueprint(uptime_bp)
 
 
 def create_app(config_class=None):

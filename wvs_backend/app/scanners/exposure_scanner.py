@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import re
 from typing import Any
 from urllib.parse import urljoin, urlparse
 
 import httpx
+from html.parser import HTMLParser
 
 EMAIL_PATTERN = re.compile(r"\b[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}\b", re.I)
 
@@ -478,6 +480,7 @@ class ExposureScanner:
             follow_redirects=False,
             headers={"User-Agent": "WVS-ExposureScanner/1.0"},
         )
+        self.max_workers = 12
 
     def _base(self, url: str) -> str:
         p = urlparse(url)
@@ -545,32 +548,39 @@ class ExposureScanner:
         discovered_emails: list[str] = []
         seen_emails: set[str] = set()
 
-        for entry in SENSITIVE_PATHS:
+        def fetch(entry: dict[str, Any]) -> tuple[dict[str, Any], str, str, httpx.Response | None]:
             path = entry["path"]
             target = urljoin(base, path)
             try:
-                resp = self.client.get(target)
-                if self._is_real_hit(path, entry, resp):
-                    issue_emails = self._extract_emails(resp.text)
-                    for email in issue_emails:
-                        if email not in seen_emails:
-                            seen_emails.add(email)
-                            discovered_emails.append(email)
-
-                    findings.append({
-                        "name": entry["name"],
-                        "severity": entry["severity"],
-                        "path": path,
-                        "url": target,
-                        "stack": entry.get("stack", "universal"),
-                        "status_code": resp.status_code,
-                        "content_preview": resp.text[:2000].strip(),
-                        "content_length": len(resp.content),
-                        "emails": issue_emails,
-                    })
-                    stacks_hit.add(entry.get("stack", "universal"))
+                return entry, path, target, self.client.get(target)
             except Exception:
-                continue
+                return entry, path, target, None
+
+        with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+            futures = [executor.submit(fetch, entry) for entry in SENSITIVE_PATHS]
+            for future in as_completed(futures):
+                entry, path, target, resp = future.result()
+                if resp is None or not self._is_real_hit(path, entry, resp):
+                    continue
+
+                issue_emails = self._extract_emails(resp.text)
+                for email in issue_emails:
+                    if email not in seen_emails:
+                        seen_emails.add(email)
+                        discovered_emails.append(email)
+
+                findings.append({
+                    "name": entry["name"],
+                    "severity": entry["severity"],
+                    "path": path,
+                    "url": target,
+                    "stack": entry.get("stack", "universal"),
+                    "status_code": resp.status_code,
+                    "content_preview": resp.text[:2000].strip(),
+                    "content_length": len(resp.content),
+                    "emails": issue_emails,
+                })
+                stacks_hit.add(entry.get("stack", "universal"))
 
         recommendations: list[str] = []
         if findings:
@@ -595,6 +605,223 @@ class ExposureScanner:
             "score": score,
             "recommendations": recommendations,
             "discovered_emails": discovered_emails,
+        }
+
+    def close(self):
+        self.client.close()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_):
+        self.close()
+
+
+# ── API key / secret pattern registry ────────────────────────────────────────
+
+_SECRET_PATTERNS: list[dict] = [
+    # AWS
+    {"name": "AWS Access Key ID",          "severity": "Critical", "pattern": re.compile(r'\b(AKIA[0-9A-Z]{16})\b')},
+    {"name": "AWS Secret Access Key",      "severity": "Critical", "pattern": re.compile(r'(?i)aws[_\-\s]?secret[_\-\s]?access[_\-\s]?key[\s=:\"\'`]+([A-Za-z0-9/+]{40})\b')},
+    # Google / Firebase / GCP
+    {"name": "Google API Key",             "severity": "High",     "pattern": re.compile(r'\b(AIza[0-9A-Za-z\-_]{35})\b')},
+    {"name": "Google OAuth Client Secret", "severity": "High",     "pattern": re.compile(r'(?i)client[_\-]?secret[\s=:\"\'`]+([A-Za-z0-9_\-]{24,})\b')},
+    {"name": "Firebase API Key",           "severity": "High",     "pattern": re.compile(r'\b(AIza[0-9A-Za-z\-_]{35})\b')},
+    # OpenAI
+    {"name": "OpenAI API Key",             "severity": "Critical", "pattern": re.compile(r'\b(sk-[A-Za-z0-9]{20,})\b')},
+    {"name": "OpenAI Project Key",         "severity": "Critical", "pattern": re.compile(r'\b(sk-proj-[A-Za-z0-9_\-]{20,})\b')},
+    # GitHub
+    {"name": "GitHub Personal Access Token", "severity": "Critical", "pattern": re.compile(r'\b(ghp_[A-Za-z0-9]{36,})\b')},
+    {"name": "GitHub OAuth Token",         "severity": "Critical", "pattern": re.compile(r'\b(gho_[A-Za-z0-9]{36,})\b')},
+    {"name": "GitHub App Token",           "severity": "Critical", "pattern": re.compile(r'\b(ghs_[A-Za-z0-9]{36,})\b')},
+    # Stripe
+    {"name": "Stripe Live Secret Key",     "severity": "Critical", "pattern": re.compile(r'\b(sk_live_[A-Za-z0-9]{24,})\b')},
+    {"name": "Stripe Live Publishable Key","severity": "Medium",   "pattern": re.compile(r'\b(pk_live_[A-Za-z0-9]{24,})\b')},
+    {"name": "Stripe Test Secret Key",     "severity": "Low",      "pattern": re.compile(r'\b(sk_test_[A-Za-z0-9]{24,})\b')},
+    # Twilio
+    {"name": "Twilio Account SID",        "severity": "High",     "pattern": re.compile(r'\b(AC[0-9a-fA-F]{32})\b')},
+    {"name": "Twilio Auth Token",          "severity": "Critical", "pattern": re.compile(r'(?i)twilio[_\-\s]?auth[_\-\s]?token[\s=:\"\'`]+([0-9a-fA-F]{32})\b')},
+    # SendGrid
+    {"name": "SendGrid API Key",           "severity": "Critical", "pattern": re.compile(r'\b(SG\.[A-Za-z0-9_\-]{22,}\.[A-Za-z0-9_\-]{43,})\b')},
+    # Slack
+    {"name": "Slack Bot Token",            "severity": "Critical", "pattern": re.compile(r'\b(xoxb-[0-9]{10,}-[0-9]{10,}-[A-Za-z0-9]{24,})\b')},
+    {"name": "Slack OAuth Token",          "severity": "High",     "pattern": re.compile(r'\b(xoxp-[0-9]{10,}-[0-9]{10,}-[0-9]{10,}-[A-Za-z0-9]{32,})\b')},
+    {"name": "Slack Webhook URL",          "severity": "High",     "pattern": re.compile(r'https://hooks\.slack\.com/services/T[A-Z0-9]+/B[A-Z0-9]+/[A-Za-z0-9]+')},
+    # Mailchimp
+    {"name": "Mailchimp API Key",          "severity": "High",     "pattern": re.compile(r'\b([0-9a-f]{32}-us[0-9]{1,2})\b')},
+    # Mailgun
+    {"name": "Mailgun API Key",            "severity": "High",     "pattern": re.compile(r'\b(key-[0-9a-f]{32})\b')},
+    # Heroku
+    {"name": "Heroku API Key",             "severity": "High",     "pattern": re.compile(r'(?i)heroku[_\-\s]?api[_\-\s]?key[\s=:\"\'`]+([0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12})\b')},
+    # Shopify
+    {"name": "Shopify Access Token",       "severity": "Critical", "pattern": re.compile(r'\b(shpat_[A-Za-z0-9]{32,})\b')},
+    {"name": "Shopify Shared Secret",      "severity": "High",     "pattern": re.compile(r'\b(shpss_[A-Za-z0-9]{32,})\b')},
+    # Anthropic / Claude
+    {"name": "Anthropic API Key",          "severity": "Critical", "pattern": re.compile(r'\b(sk-ant-[A-Za-z0-9_\-]{20,})\b')},
+    # HuggingFace
+    {"name": "HuggingFace API Token",      "severity": "High",     "pattern": re.compile(r'\b(hf_[A-Za-z0-9]{30,})\b')},
+    # Cloudflare
+    {"name": "Cloudflare API Token",       "severity": "Critical", "pattern": re.compile(r'\b([A-Za-z0-9_\-]{40})\b(?=.*cloudflare)', re.S)},
+    # Generic high-entropy password/secret assignments
+    {"name": "Hardcoded Password",         "severity": "High",     "pattern": re.compile(r'(?i)(?:password|passwd|pwd)\s*[=:]\s*[\"\'`]([^\"\'`\s]{8,})[\"\'`]')},
+    {"name": "Hardcoded Secret/Token",     "severity": "High",     "pattern": re.compile(r'(?i)(?:secret|api_?key|auth_?token)\s*[=:]\s*[\"\'`]([A-Za-z0-9_\-]{16,})[\"\'`]')},
+]
+
+_SEVERITY_ORDER = {"Critical": 0, "High": 1, "Medium": 2, "Low": 3}
+
+
+def _redact(value: str) -> str:
+    if len(value) <= 8:
+        return "***"
+    return value[:4] + "..." + value[-4:]
+
+
+class _ScriptExtractor(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.inline_scripts: list[str] = []
+        self.script_srcs: list[str] = []
+        self._in_script = False
+        self._buf: list[str] = []
+
+    def handle_starttag(self, tag, attrs):
+        if tag != "script":
+            return
+        attrs_dict = dict(attrs)
+        src = attrs_dict.get("src")
+        if src:
+            self.script_srcs.append(src)
+            self._in_script = False
+        else:
+            self._in_script = True
+            self._buf = []
+
+    def handle_endtag(self, tag):
+        if tag == "script" and self._in_script:
+            self.inline_scripts.append("".join(self._buf))
+            self._in_script = False
+
+    def handle_data(self, data):
+        if self._in_script:
+            self._buf.append(data)
+
+
+class SecretScanner:
+    _MAX_JS_FILES = 20
+    _MAX_CONTENT_BYTES = 512_000  # 512 KB per resource
+
+    def __init__(self, timeout: int = 10):
+        self.timeout = timeout
+        self.client = httpx.Client(
+            timeout=timeout,
+            follow_redirects=True,
+            headers={"User-Agent": "Mozilla/5.0 (compatible; LaunchGuard-SecretScanner/1.0)"},
+        )
+
+    def _fetch_text(self, url: str) -> str | None:
+        try:
+            r = self.client.get(url)
+            if r.status_code != 200:
+                return None
+            return r.text[:self._MAX_CONTENT_BYTES]
+        except Exception:
+            return None
+
+    def _collect_js_urls(self, base_url: str, html: str) -> list[str]:
+        parser = _ScriptExtractor()
+        try:
+            parser.feed(html)
+        except Exception:
+            pass
+        urls: list[str] = []
+        for src in parser.script_srcs:
+            if src.startswith("//"):
+                src = "https:" + src
+            full = urljoin(base_url, src)
+            urls.append(full)
+        return urls[:self._MAX_JS_FILES]
+
+    def _scan_content(self, content: str, source_url: str) -> list[dict]:
+        hits: list[dict] = []
+        seen_values: set[str] = set()
+        for entry in _SECRET_PATTERNS:
+            for match in entry["pattern"].finditer(content):
+                # The captured group (group 1) is the secret value when available
+                value = match.group(1) if match.lastindex else match.group(0)
+                if value in seen_values:
+                    continue
+                seen_values.add(value)
+                # Compute rough line number
+                line_no = content.count("\n", 0, match.start()) + 1
+                hits.append({
+                    "name": entry["name"],
+                    "severity": entry["severity"],
+                    "source": source_url,
+                    "line": line_no,
+                    "match_redacted": _redact(value),
+                })
+        return hits
+
+    def scan(self, url: str) -> dict[str, Any]:
+        findings: list[dict] = []
+        sources_scanned: list[str] = []
+
+        html = self._fetch_text(url)
+        if html:
+            sources_scanned.append(url)
+            # Scan inline scripts extracted from the HTML
+            parser = _ScriptExtractor()
+            try:
+                parser.feed(html)
+            except Exception:
+                pass
+            for inline in parser.inline_scripts:
+                findings.extend(self._scan_content(inline, f"{url} (inline script)"))
+
+            # Fetch and scan external JS files
+            js_urls = self._collect_js_urls(url, html)
+
+            def fetch_and_scan(js_url: str) -> list[dict]:
+                js_text = self._fetch_text(js_url)
+                if not js_text:
+                    return []
+                sources_scanned.append(js_url)
+                return self._scan_content(js_text, js_url)
+
+            with ThreadPoolExecutor(max_workers=6) as pool:
+                for results in pool.map(fetch_and_scan, js_urls):
+                    findings.extend(results)
+
+        # Deduplicate by (name, match_redacted, source)
+        seen: set[tuple] = set()
+        deduped: list[dict] = []
+        for f in findings:
+            key = (f["name"], f["match_redacted"], f["source"])
+            if key not in seen:
+                seen.add(key)
+                deduped.append(f)
+
+        deduped.sort(key=lambda f: _SEVERITY_ORDER.get(f["severity"], 99))
+
+        score = max(0, 100 - sum(
+            {"Critical": 30, "High": 20, "Medium": 10, "Low": 5}.get(f["severity"], 5)
+            for f in deduped
+        ))
+
+        return {
+            "status": "issues_found" if deduped else "ok",
+            "issues": deduped,
+            "score": score,
+            "sources_scanned": len(sources_scanned),
+            "recommendations": (
+                [
+                    "Remove hardcoded API keys and secrets from client-side code.",
+                    "Use environment variables or a secrets manager (e.g., AWS Secrets Manager, HashiCorp Vault).",
+                    "Rotate any exposed credentials immediately.",
+                    "Add pre-commit hooks (e.g., git-secrets, truffleHog) to prevent future leaks.",
+                ]
+                if deduped else []
+            ),
         }
 
     def close(self):

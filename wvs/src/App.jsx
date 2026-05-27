@@ -1,4 +1,4 @@
-import React, { Suspense } from 'react';
+import React, { Suspense, useEffect, useState } from 'react';
 import { ThemeContext, useThemeProvider } from './hooks/useTheme';
 import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate, useLocation, useParams } from 'react-router-dom';
 import { clearSession, getSessionIsAdmin, getSessionUsername, isAuthenticated, updateSession } from './lib/auth';
@@ -16,12 +16,46 @@ const Settings = React.lazy(() => import('./components/Settings'));
 const BlockedSites = React.lazy(() => import('./components/BlockedSites'));
 const BlockedAccess = React.lazy(() => import('./components/BlockedAccess'));
 const VerifiedTargets = React.lazy(() => import('./components/VerifiedTargets'));
+const UptimeMonitors = React.lazy(() => import('./components/UptimeMonitors'));
 
-const RouteFallback = () => (
-  <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--color-bg)', color: 'var(--color-text-muted)' }}>
-    <div className="text-sm">Loading…</div>
-  </div>
-);
+const RouteFallback = () => {
+  const [visible, setVisible] = useState(false);
+  useEffect(() => { requestAnimationFrame(() => setVisible(true)); }, []);
+
+  return (
+    <div
+      className="min-h-screen flex items-center justify-center"
+      style={{ background: 'var(--color-bg)', opacity: visible ? 1 : 0, transition: 'opacity 250ms ease' }}
+    >
+      {/* Spinner ring wrapping the logo */}
+      <div style={{ position: 'relative', width: 120, height: 120 }}>
+        {/* Track */}
+        <svg width="120" height="120" viewBox="0 0 120 120" fill="none" style={{ position: 'absolute', inset: 0 }}>
+          <circle cx="60" cy="60" r="56" stroke="var(--color-border)" strokeWidth="2.5" />
+        </svg>
+        {/* Spinning arc */}
+        <svg width="120" height="120" viewBox="0 0 120 120" fill="none"
+          style={{ position: 'absolute', inset: 0, animation: 'spin 900ms linear infinite' }}>
+          <circle cx="60" cy="60" r="56" stroke="var(--color-primary)" strokeWidth="2.5"
+            strokeLinecap="round" strokeDasharray="70 282" />
+        </svg>
+        {/* Logo mark centered inside ring */}
+        <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{
+            width: 72, height: 72, borderRadius: 20,
+            background: 'linear-gradient(135deg, #6366f1, #4f46e5)',
+            boxShadow: '0 0 40px rgba(99,102,241,0.45)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+            </svg>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 // A wrapper component for authenticated routes
 const ProtectedRoute = ({ children }) => {
@@ -222,6 +256,16 @@ const VerifiedTargetsWrapper = () => {
   return <VerifiedTargets navigateTo={navigateTo} />;
 };
 
+const UptimeMonitorsWrapper = () => {
+  const navigate = useNavigate();
+
+  const navigateTo = (page) => {
+    navigate(page === 'dashboard' ? '/' : `/${page}`);
+  };
+
+  return <UptimeMonitors navigateTo={navigateTo} />;
+};
+
 const App = () => {
   const themeValue = useThemeProvider();
   return (
@@ -314,6 +358,14 @@ const App = () => {
           <Layout>
             <ProtectedRoute>
               <VerifiedTargetsWrapper />
+            </ProtectedRoute>
+          </Layout>
+        } />
+
+        <Route path="/uptime" element={
+          <Layout>
+            <ProtectedRoute>
+              <UptimeMonitorsWrapper />
             </ProtectedRoute>
           </Layout>
         } />

@@ -63,12 +63,43 @@ class PerformanceUXScanner:
             () => {
               const nav = performance.getEntriesByType('navigation')[0];
               const paints = performance.getEntriesByType('paint');
-              const fcp = paints.find((entry) => entry.name === 'first-contentful-paint');
+              const fcp = paints.find((e) => e.name === 'first-contentful-paint');
+              const resources = performance.getEntriesByType('resource');
+
+              // TTFB: time from navigationStart to first byte from server
+              const ttfb = nav ? Math.round(nav.responseStart - nav.requestStart) : null;
+
+              // TTI approximation: time until no long tasks for 5s window
+              // We use domInteractive as a proxy since PerformanceLongTaskTiming
+              // may not be available in all contexts.
+              const tti = nav ? Math.round(nav.domInteractive) : null;
+
+              // Transfer size breakdown
+              let totalTransferBytes = 0;
+              let jsTransferBytes = 0;
+              let cssTransferBytes = 0;
+              let imageTransferBytes = 0;
+              let requestCount = resources.length;
+              resources.forEach((r) => {
+                const size = r.transferSize || 0;
+                totalTransferBytes += size;
+                const url = r.name || '';
+                if (/\\.js(\\?|$)/.test(url)) jsTransferBytes += size;
+                else if (/\\.css(\\?|$)/.test(url)) cssTransferBytes += size;
+                else if (/\\.(png|jpe?g|gif|webp|avif|svg)(\\?|$)/i.test(url)) imageTransferBytes += size;
+              });
+
               return {
                 load_time_ms: nav ? Math.round(nav.loadEventEnd) : null,
                 dom_content_loaded_ms: nav ? Math.round(nav.domContentLoadedEventEnd) : null,
                 first_contentful_paint_ms: fcp ? Math.round(fcp.startTime) : null,
-                resource_count: performance.getEntriesByType('resource').length,
+                ttfb_ms: ttfb,
+                tti_ms: tti,
+                resource_count: requestCount,
+                total_transfer_kb: Math.round(totalTransferBytes / 1024),
+                js_transfer_kb: Math.round(jsTransferBytes / 1024),
+                css_transfer_kb: Math.round(cssTransferBytes / 1024),
+                image_transfer_kb: Math.round(imageTransferBytes / 1024),
               };
             }
             """
@@ -79,11 +110,13 @@ class PerformanceUXScanner:
         audits = audit.get("audits", {}) or {}
         perf_score = int(round(((categories.get("performance") or {}).get("score") or 0) * 100))
         metrics = {
-            "largest-contentful-paint": (2500, "Main content becomes visible too slowly on mobile", "LCP"),
-            "cumulative-layout-shift": (0.1, "Layout shifts are likely to disrupt reading or tapping", "CLS"),
-            "first-contentful-paint": (1800, "Initial content appears too slowly", "FCP"),
-            "total-blocking-time": (200, "Main thread blocking is likely to harm responsiveness", "TBT"),
-            "speed-index": (3400, "Page visually completes too slowly", "Speed Index"),
+            "largest-contentful-paint":  (2500,  "Main content becomes visible too slowly (LCP)", "LCP"),
+            "cumulative-layout-shift":   (0.1,   "Layout shifts are likely to disrupt reading or tapping (CLS)", "CLS"),
+            "first-contentful-paint":    (1800,  "Initial content appears too slowly (FCP)", "FCP"),
+            "total-blocking-time":       (200,   "Main thread blocking is likely to harm responsiveness (TBT)", "TBT"),
+            "speed-index":               (3400,  "Page visually completes too slowly (Speed Index)", "Speed Index"),
+            "interactive":               (3800,  "Page takes too long to become fully interactive (TTI)", "TTI"),
+            "server-response-time":      (600,   "Server response time is too high (TTFB)", "TTFB"),
         }
         issues: list[dict[str, Any]] = []
         for audit_key, (threshold, title, metric_label) in metrics.items():
@@ -169,8 +202,60 @@ class PerformanceUXScanner:
 
         return issues
 
+    def _issues_from_browser_metrics(self, metrics: dict[str, Any], page_url: str, screenshot_path: str) -> list[dict[str, Any]]:
+        """Convert raw Navigation Timing / Resource Timing metrics into findings."""
+        checks = [
+            ("load_time_ms",              5000,  "slow-load",               "Page load time is too high",                      "medium",
+             "load_time_ms",  "Load Time",
+             "Visitors may perceive the product as slow before they understand its value.",
+             "Compress media, reduce render-blocking scripts, and prioritize above-the-fold resources."),
+            ("first_contentful_paint_ms", 1800,  "first-contentful-paint",  "Initial content appears too slowly (FCP)",         "medium",
+             "FCP",           "FCP (ms)",
+             "Users may feel the page is unresponsive before seeing useful content.",
+             "Reduce critical-path work and prioritize the first visible content."),
+            ("ttfb_ms",                   600,   "server-response-time",    "Server response time is too high (TTFB)",          "medium",
+             "TTFB",          "TTFB (ms)",
+             "A slow server response delays every subsequent resource and metric.",
+             "Improve server-side caching, use a CDN, or reduce database query time."),
+            ("tti_ms",                    3800,  "interactive",             "Page takes too long to become fully interactive (TTI)", "medium",
+             "TTI",           "TTI (ms)",
+             "Users cannot interact with the page reliably while it is still loading.",
+             "Defer or split non-critical JavaScript to reduce main-thread work."),
+            ("total_transfer_kb",         2000,  "transfer-size",           "Total page transfer size is too large",            "medium",
+             "total_transfer_kb", "Transfer Size (KB)",
+             "Large pages consume mobile data budgets and load slowly on slow connections.",
+             "Compress assets, enable Brotli/gzip, lazy-load images, and code-split JavaScript."),
+            ("js_transfer_kb",            500,   "js-transfer-size",        "JavaScript bundle size is too large",              "medium",
+             "js_transfer_kb", "JS Size (KB)",
+             "Large JavaScript bundles block the main thread and delay interactivity.",
+             "Tree-shake unused code, split bundles, and defer non-critical scripts."),
+        ]
+        issues: list[dict[str, Any]] = []
+        for field, threshold, rule_id, title, severity, metric_key, metric_label, user_impact, remediation in checks:
+            value = metrics.get(field)
+            if value is None or value <= threshold:
+                continue
+            issue = ux_finding_defaults(
+                "performance_ux", "Performance UX", page_url, "mobile",
+                title=title, severity=severity, confidence="measured",
+                evidence={
+                    "rule_id": rule_id,
+                    "description": f"{metric_label} was {value} (threshold: {threshold}).",
+                    "metric": metric_key,
+                    "value": value,
+                    "threshold": threshold,
+                    "screenshot_path": screenshot_path,
+                },
+                user_impact=user_impact,
+                technical_remediation=remediation,
+            )
+            issue["builder_prompt"] = build_builder_prompt(issue)
+            issues.append(issue)
+        return issues
+
     def scan(self, url: str, page_paths: list[str] | None = None) -> dict[str, Any]:
         issues: list[dict[str, Any]] = []
+        raw_metrics_by_page: dict[str, Any] = {}
         pages = build_page_targets(url, page_paths)[:3]
 
         with sync_playwright() as playwright:
@@ -181,56 +266,24 @@ class PerformanceUXScanner:
                 for page_url in pages:
                     page.goto(page_url, wait_until="networkidle", timeout=self.timeout_ms)
                     screenshot_path = capture_page_screenshot(page, page_url, "mobile")
+
+                    # Always collect raw timing metrics — used both for findings and
+                    # as baseline data surfaced in the report regardless of Lighthouse.
+                    metrics = self._browser_metrics(page)
+                    raw_metrics_by_page[page_url] = metrics
+
                     lighthouse_payload = self._run_lighthouse(page_url)
                     if lighthouse_payload:
                         issues.extend(self._findings_from_lighthouse(lighthouse_payload, page_url, screenshot_path))
-                        continue
-
-                    metrics = self._browser_metrics(page)
-                    if metrics.get("load_time_ms") and metrics["load_time_ms"] > 5000:
-                        issue = ux_finding_defaults(
-                            "performance_ux",
-                            "Performance UX",
-                            page_url,
-                            "mobile",
-                            title="Main content becomes visible too slowly on mobile",
-                            severity="medium",
-                            confidence="measured",
-                            evidence={
-                                "rule_id": "slow-load",
-                                "description": "Navigation load time exceeded 5000ms.",
-                                "metric": "load_time_ms",
-                                "value": metrics["load_time_ms"],
-                                "threshold": 5000,
-                                "screenshot_path": screenshot_path,
-                            },
-                            user_impact="Visitors may perceive the product as slow before they understand its value.",
-                            technical_remediation="Compress media, reduce render-blocking scripts, and prioritize above-the-fold resources.",
-                        )
-                        issue["builder_prompt"] = build_builder_prompt(issue)
-                        issues.append(issue)
-                    if metrics.get("first_contentful_paint_ms") and metrics["first_contentful_paint_ms"] > 1800:
-                        issue = ux_finding_defaults(
-                            "performance_ux",
-                            "Performance UX",
-                            page_url,
-                            "mobile",
-                            title="Initial content appears too slowly",
-                            severity="medium",
-                            confidence="measured",
-                            evidence={
-                                "rule_id": "first-contentful-paint",
-                                "description": "First Contentful Paint exceeded 1800ms.",
-                                "metric": "FCP",
-                                "value": metrics["first_contentful_paint_ms"],
-                                "threshold": 1800,
-                                "screenshot_path": screenshot_path,
-                            },
-                            user_impact="Users may feel the page is unresponsive before seeing useful content.",
-                            technical_remediation="Reduce critical-path work and prioritize the first visible content.",
-                        )
-                        issue["builder_prompt"] = build_builder_prompt(issue)
-                        issues.append(issue)
+                        # Also check raw metrics that Lighthouse doesn't cover
+                        # (transfer size, resource count) even when LH succeeds.
+                        for field in ("total_transfer_kb", "js_transfer_kb"):
+                            issues.extend(
+                                i for i in self._issues_from_browser_metrics({field: metrics.get(field)}, page_url, screenshot_path)
+                                if i
+                            )
+                    else:
+                        issues.extend(self._issues_from_browser_metrics(metrics, page_url, screenshot_path))
             finally:
                 browser.close()
 
@@ -238,6 +291,7 @@ class PerformanceUXScanner:
         return {
             "status": "issues_found" if normalized else "ok",
             "issues": normalized,
+            "raw_metrics": raw_metrics_by_page,
             "recommendations": [
                 "Use Lighthouse for repeatable mobile performance budgets in release readiness checks when available.",
                 "Optimize largest above-the-fold assets and reduce render-blocking JavaScript.",

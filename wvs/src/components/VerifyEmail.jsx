@@ -15,7 +15,7 @@ const VerifyEmail = () => {
     const token = searchParams.get('token');
     if (!token) { setStatus('no_token'); return; }
 
-    apiJson('/verify-email/confirm', { method: 'POST', body: { token } })
+    apiJson('/verify-email/confirm', { method: 'POST', json: true, body: { token } })
       .then(() => setStatus('success'))
       .catch(err => {
         setMessage(err instanceof ApiError ? err.message : 'Verification failed');
@@ -54,9 +54,7 @@ const VerifyEmail = () => {
                 <p className="text-base font-semibold" style={{ color: 'var(--color-text)' }}>Email verified</p>
                 <p className="text-sm mt-1" style={{ color: 'var(--color-text-muted)' }}>Your account is now fully active.</p>
               </div>
-              <button onClick={() => navigate('/login')}
-                className="px-6 py-2.5 rounded-lg text-sm font-semibold text-white cursor-pointer"
-                style={{ background: 'var(--color-primary)' }}>
+              <button onClick={() => navigate('/login')} className="btn-primary">
                 Continue to login
               </button>
             </>
@@ -81,9 +79,7 @@ const VerifyEmail = () => {
                 <p className="text-xs" style={{ color: 'var(--color-text-dim)' }}>
                   Log in and go to Settings to resend the verification email.
                 </p>
-                <button onClick={() => navigate('/login')}
-                  className="flex items-center gap-2 px-6 py-2.5 rounded-lg text-sm font-semibold text-white cursor-pointer"
-                  style={{ background: 'var(--color-primary)' }}>
+                <button onClick={() => navigate('/login')} className="btn-primary">
                   <Mail size={14} /> Go to login
                 </button>
               </div>

@@ -129,8 +129,7 @@ const ResetPassword = () => {
                       value={password}
                       onChange={(event) => setPassword(event.target.value)}
                       placeholder="At least 8 characters"
-                      className="w-full pl-9 pr-10 py-2.5 rounded-lg text-sm outline-none transition-all duration-150"
-                      style={{ background: 'var(--color-card)', border: '1px solid var(--color-border)', color: 'var(--color-text)' }}
+                      className="input pl-9 pr-10 text-sm"
                     />
                     <button
                       type="button"
@@ -157,8 +156,7 @@ const ResetPassword = () => {
                       value={confirmPassword}
                       onChange={(event) => setConfirmPassword(event.target.value)}
                       placeholder="Repeat your new password"
-                      className="w-full pl-9 pr-4 py-2.5 rounded-lg text-sm outline-none transition-all duration-150"
-                      style={{ background: 'var(--color-card)', border: '1px solid var(--color-border)', color: 'var(--color-text)' }}
+                      className="input pl-9 text-sm"
                     />
                   </div>
                 </div>
@@ -174,23 +172,10 @@ const ResetPassword = () => {
                   </div>
                 )}
 
-                <button
-                  type="submit"
-                  disabled={isLoading}
-                  className="flex items-center justify-center gap-2 w-full py-2.5 rounded-lg text-sm font-semibold text-white transition-all duration-150 cursor-pointer mt-1"
-                  style={{ background: isLoading ? 'var(--color-primary-dim)' : 'var(--color-primary)', opacity: isLoading ? 0.7 : 1 }}
-                >
-                  {isLoading ? (
-                    <>
-                      <Spinner size="sm" />
-                      Updating password…
-                    </>
-                  ) : (
-                    <>
-                      Reset password
-                      <ArrowRight size={15} />
-                    </>
-                  )}
+                <button type="submit" disabled={isLoading}
+                  className="btn-primary justify-center w-full mt-1"
+                  style={{ opacity: isLoading ? 0.75 : 1 }}>
+                  {isLoading ? <><Spinner size="sm" /> Updating password…</> : <>Reset password <ArrowRight size={15} /></>}
                 </button>
               </form>
             )}

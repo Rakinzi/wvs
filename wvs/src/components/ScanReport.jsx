@@ -3,7 +3,7 @@ import {
   FileText, Shield, ArrowLeft, Download,
   AlertTriangle, CheckCircle, AlertOctagon, Database, Lock,
   Info, RefreshCw, ChevronDown, ChevronUp, ExternalLink, Globe, Trash2, Package,
-  Mail, ArrowRightLeft, Link2Off
+  Mail, ArrowRightLeft, Link2Off, Camera, Monitor, Smartphone,
 } from 'lucide-react';
 import { useScanReportData } from '../hooks/useScanReportData';
 import Spinner from './Spinner';
@@ -58,10 +58,10 @@ const deltaLabel = (value) => {
 
 /* Collapsible section */
 const Section = ({ id, label, subLabel, icon: Icon, iconColor, iconBg, expanded, onToggle, children }) => (
-  <div className="rounded-xl overflow-hidden" style={{ border: `1px solid ${T.border}` }}>
+  <div className="card overflow-hidden">
     <button onClick={() => onToggle(id)}
       className="w-full flex items-center justify-between px-5 py-4 cursor-pointer transition-colors"
-      style={{ background: T.surface }} aria-expanded={expanded}>
+      style={{ background: 'var(--color-surface)' }} aria-expanded={expanded}>
       <div className="flex items-center gap-3">
         <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: iconBg }}>
           <Icon size={16} style={{ color: iconColor }} />
@@ -74,7 +74,7 @@ const Section = ({ id, label, subLabel, icon: Icon, iconColor, iconBg, expanded,
       {expanded ? <ChevronUp size={15} style={{ color: T.dim }} /> : <ChevronDown size={15} style={{ color: T.dim }} />}
     </button>
     {expanded && (
-      <div className="px-5 py-4" style={{ borderTop: `1px solid ${T.borderSubtle}` }}>
+      <div className="px-5 py-4" style={{ borderTop: '1px solid var(--color-border-subtle)' }}>
         {children}
       </div>
     )}
@@ -130,21 +130,125 @@ const ScoreRing = ({ score, color }) => {
   return (
     <div className="relative w-24 h-24 flex items-center justify-center">
       <svg width="96" height="96" className="-rotate-90">
-        <circle cx="48" cy="48" r={r} fill="none" stroke={T.border} strokeWidth="6" />
+        <circle cx="48" cy="48" r={r} fill="none" stroke="var(--color-border)" strokeWidth="6" />
         <circle cx="48" cy="48" r={r} fill="none" stroke={color} strokeWidth="6"
           strokeDasharray={`${dash} ${circ}`} strokeLinecap="round" style={{ transition: 'stroke-dasharray 0.6s ease' }} />
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
         <span className="text-xl font-bold" style={{ color }}>{score}</span>
-        <span className="text-xs" style={{ color: T.dim }}>/100</span>
+        <span className="text-xs" style={{ color: 'var(--color-text-dim)' }}>/100</span>
       </div>
+    </div>
+  );
+};
+
+/* Authenticated screenshot image — fetches via cookie-auth and converts to blob URL */
+const AuthImage = ({ src, alt, className, style }) => {
+  const [blobUrl, setBlobUrl] = useState(null);
+  useEffect(() => {
+    if (!src) return;
+    let revoke;
+    apiFetch(src, { auth: true })
+      .then(r => r.ok ? r.blob() : null)
+      .then(blob => {
+        if (!blob) return;
+        const url = URL.createObjectURL(blob);
+        revoke = url;
+        setBlobUrl(url);
+      })
+      .catch(() => {});
+    return () => { if (revoke) URL.revokeObjectURL(revoke); };
+  }, [src]);
+  if (!blobUrl) return (
+    <div className="flex items-center justify-center py-12" style={{ color: 'var(--color-text-dim)' }}>
+      <RefreshCw size={16} className="animate-spin" />
+    </div>
+  );
+  return <img src={blobUrl} alt={alt} className={className} style={style} />;
+};
+
+/* Site screenshot panel */
+const ScreenshotPanel = ({ screenshots }) => {
+  const [active, setActive] = useState('desktop');
+  const [lightbox, setLightbox] = useState(null);
+
+  const shots = screenshots?.screenshots || {};
+  const hasDesktop = !!shots.desktop;
+  const hasMobile  = !!shots.mobile;
+  if (!hasDesktop && !hasMobile) return null;
+
+  const tabs = [
+    hasDesktop && { key: 'desktop', label: 'Desktop', icon: Monitor },
+    hasMobile  && { key: 'mobile',  label: 'Mobile',  icon: Smartphone },
+  ].filter(Boolean);
+
+  const currentRel = shots[active] || shots.desktop || shots.mobile;
+
+  return (
+    <div className="card overflow-hidden">
+      <div className="flex items-center justify-between px-5 py-4"
+        style={{ background: 'var(--color-surface)', borderBottom: '1px solid var(--color-border)' }}>
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: T.primaryDim }}>
+            <Camera size={16} style={{ color: T.primary }} />
+          </div>
+          <div>
+            <p className="text-sm font-semibold" style={{ color: T.text }}>Site Screenshots</p>
+            <p className="text-xs mt-0.5" style={{ color: T.muted }}>Captured at scan time</p>
+          </div>
+        </div>
+        {tabs.length > 1 && (
+          <div className="flex items-center gap-1 rounded-lg p-1" style={{ background: 'var(--color-elevated)' }}>
+            {tabs.map(({ key, label, icon: Icon }) => (
+              <button key={key} onClick={() => setActive(key)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all duration-150 cursor-pointer"
+                style={active === key
+                  ? { background: 'var(--color-card)', color: T.primary, boxShadow: '0 1px 4px rgba(0,0,0,0.3)' }
+                  : { color: T.muted }}>
+                <Icon size={12} /> {label}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="p-4">
+        <div className="relative rounded-xl overflow-hidden cursor-zoom-in group"
+          style={{ border: '1px solid var(--color-border)', background: 'var(--color-bg)' }}
+          onClick={() => setLightbox(currentRel)}>
+          <AuthImage
+            src={currentRel}
+            alt={`${active} screenshot`}
+            className="w-full h-auto block"
+            style={{ maxHeight: active === 'mobile' ? '500px' : '420px', objectFit: 'contain', objectPosition: 'top' }}
+          />
+          <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200"
+            style={{ background: 'rgba(0,0,0,0.4)' }}>
+            <span className="text-white text-xs font-semibold px-3 py-1.5 rounded-lg"
+              style={{ background: 'rgba(0,0,0,0.6)' }}>Click to enlarge</span>
+          </div>
+        </div>
+      </div>
+
+      {lightbox && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-6"
+          style={{ background: 'rgba(0,0,0,0.9)', backdropFilter: 'blur(10px)' }}
+          onClick={() => setLightbox(null)}>
+          <AuthImage src={lightbox} alt="enlarged"
+            className="max-w-full max-h-full rounded-xl shadow-2xl"
+            style={{ border: '1px solid rgba(255,255,255,0.1)' }} />
+          <button onClick={() => setLightbox(null)}
+            className="absolute top-5 right-5 w-9 h-9 rounded-full flex items-center justify-center text-white cursor-pointer text-lg font-bold"
+            style={{ background: 'rgba(255,255,255,0.15)' }}>✕</button>
+        </div>
+      )}
     </div>
   );
 };
 
 /* ─────────────────────────────────────────────── */
 const ScanReport = ({ scanId, navigateTo }) => {
-  const [expanded, setExpanded] = useState({ sql: true, ssl: true, headers: true, wordpress: true, zap: true, malicious: true, xss: true, tech: true, exposure: true, dns: true, redirect: true, takeover: true, accessibility: true, responsive_ux: true, performance_ux: true, form_usability: true, visual_ai: true, comparison: true });
+  const [expanded, setExpanded] = useState({ sql: true, ssl: true, headers: true, wordpress: true, zap: true, malicious: true, xss: true, tech: true, exposure: true, secrets: true, dns: true, redirect: true, takeover: true, accessibility: true, responsive_ux: true, performance_ux: true, form_usability: true, visual_ai: true, comparison: true });
   const { report, loading, error } = useScanReportData(scanId);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState(null);
@@ -198,22 +302,20 @@ const ScanReport = ({ scanId, navigateTo }) => {
   };
 
   if (loading) return (
-    <div className="min-h-screen flex items-center justify-center" style={{ background: T.bg }}>
+    <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--color-bg)' }}>
       <Spinner size="lg" label="Loading report…" />
     </div>
   );
 
   if (error || !report) return (
-    <div className="min-h-screen flex items-center justify-center" style={{ background: T.bg }}>
+    <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--color-bg)' }}>
       <div className="flex flex-col items-center gap-4">
-        <div className="w-14 h-14 rounded-2xl flex items-center justify-center" style={{ background: T.dangerDim }}>
-          <AlertTriangle size={24} style={{ color: T.danger }} />
+        <div className="w-14 h-14 rounded-2xl flex items-center justify-center" style={{ background: 'var(--color-danger-dim)' }}>
+          <AlertTriangle size={24} style={{ color: 'var(--color-danger)' }} />
         </div>
         <p className="text-sm font-medium" style={{ color: T.text }}>{error ? 'Error loading report' : 'Report not found'}</p>
         <p className="text-xs" style={{ color: T.muted }}>{error || `Report ${scanId} could not be found.`}</p>
-        <button onClick={() => navigateTo('dashboard')}
-          className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium cursor-pointer text-white"
-          style={{ background: T.primary }}>
+        <button onClick={() => navigateTo('dashboard')} className="btn-primary">
           <ArrowLeft size={14} /> Back to Dashboard
         </button>
       </div>
@@ -225,6 +327,9 @@ const ScanReport = ({ scanId, navigateTo }) => {
   const findings  = report.findings || {};
   const sections  = report.sections || findings.sections || {};
   const summary   = report.summary  || findings.summary  || {};
+  const scanProfile = findings.scan_profile || 'full_scan';
+  const isSecurityScan = scanProfile === 'full_scan' || scanProfile === 'full_launch_audit' || scanProfile === 'security_only';
+  const isUxScan = scanProfile === 'product_readiness' || scanProfile === 'full_launch_audit';
   const comparison = report.comparison || null;
 
   const hasSql       = findings.sqli && findings.sqli.length > 0;
@@ -240,6 +345,8 @@ const ScanReport = ({ scanId, navigateTo }) => {
   const exposureIssues = findings.exposure?.issues || [];
   const exposureEmails = findings.exposure?.discovered_emails || [];
   const hasExposure  = exposureIssues.some(i => ['Critical','High'].includes(i.severity));
+  const secretsIssues = findings.secrets?.issues || [];
+  const hasSecrets   = secretsIssues.some(i => ['Critical','High'].includes(i.severity));
   const dnsIssues    = findings.dns?.issues || [];
   const redirIssues  = findings.redirect?.issues || [];
   const takeIssues   = findings.takeover?.issues || [];
@@ -259,6 +366,7 @@ const ScanReport = ({ scanId, navigateTo }) => {
       xssIssues.length +
       actionableTechIssues.length +
       exposureIssues.length +
+      secretsIssues.length +
       dnsIssues.length +
       redirIssues.length +
       takeIssues.length +
@@ -288,30 +396,24 @@ const ScanReport = ({ scanId, navigateTo }) => {
       />
 
       {/* Nav bar */}
-      <div className="sticky top-0 z-20 px-6 lg:px-10 py-4 flex items-center justify-between"
-        style={{ background: `${T.surface}E0`, backdropFilter: 'blur(12px)', borderBottom: `1px solid ${T.border}` }}>
-        <button onClick={() => navigateTo('dashboard')}
-          className="flex items-center gap-1.5 text-xs font-medium cursor-pointer px-3 py-1.5 rounded-lg"
-          style={{ color: T.muted, background: T.card, border: `1px solid ${T.border}` }}>
+      <div className="page-header px-6 lg:px-10 py-4 flex items-center justify-between">
+        <button onClick={() => navigateTo('dashboard')} className="btn-secondary flex items-center gap-1.5 text-xs">
           <ArrowLeft size={13} /> Dashboard
         </button>
         <div className="flex items-center gap-2">
-          <span className="px-2.5 py-1 rounded-lg text-xs font-semibold font-mono" style={{ background: riskDim, color: riskColor }}>
+          <span className="badge" style={{ background: riskDim, color: riskColor }}>
             {risk} Risk
           </span>
-          <button onClick={handleSbomDownload}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium cursor-pointer"
-            style={{ background: T.card, color: T.info, border: `1px solid ${T.border}` }}>
+          <button onClick={handleSbomDownload} className="btn-secondary text-xs"
+            style={{ color: 'var(--color-info)' }}>
             <Package size={12} /> SBOM
           </button>
           <button onClick={() => setShowDeleteDialog(true)} disabled={isDeleting}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium cursor-pointer disabled:opacity-60"
-            style={{ background: T.card, color: T.danger, border: `1px solid ${T.border}` }}>
+            className="btn-secondary text-xs disabled:opacity-60"
+            style={{ color: 'var(--color-danger)', borderColor: 'rgba(239,68,68,0.2)', background: 'var(--color-danger-dim)' }}>
             <Trash2 size={12} /> {isDeleting ? 'Deleting…' : 'Delete'}
           </button>
-          <button onClick={handleDownload}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium cursor-pointer"
-            style={{ background: T.card, color: T.muted, border: `1px solid ${T.border}` }}>
+          <button onClick={handleDownload} className="btn-secondary text-xs">
             <Download size={12} /> PDF
           </button>
         </div>
@@ -319,7 +421,8 @@ const ScanReport = ({ scanId, navigateTo }) => {
 
       <div className="px-6 lg:px-10 py-6">
         {deleteError && (
-          <div className="mb-4 rounded-xl px-4 py-3 text-xs flex items-center gap-2" style={{ background: T.dangerDim, color: T.danger, border: `1px solid ${T.danger}25` }}>
+          <div className="mb-4 rounded-xl px-4 py-3 text-xs flex items-center gap-2"
+            style={{ background: 'var(--color-danger-dim)', color: 'var(--color-danger)', border: '1px solid rgba(239,68,68,0.2)' }}>
             <AlertTriangle size={14} /> {deleteError}
           </div>
         )}
@@ -329,19 +432,20 @@ const ScanReport = ({ scanId, navigateTo }) => {
           <div className="lg:sticky lg:top-24 flex flex-col gap-4">
 
             {/* Score card */}
-            <div className="rounded-xl p-5 flex flex-col items-center gap-4" style={{ background: T.card, border: `1px solid ${T.border}` }}>
+            <div className="card p-5 flex flex-col items-center gap-4">
               <ScoreRing score={score} color={scoreColor} />
               <div className="text-center">
-                <p className="text-xs font-mono uppercase tracking-widest mb-1" style={{ color: T.dim }}>Security Score</p>
-                <span className="px-3 py-1 rounded-lg text-xs font-bold" style={{ background: riskDim, color: riskColor }}>
+                <p className="section-label mb-1">Security Score</p>
+                <span className="badge" style={{ background: riskDim, color: riskColor }}>
                   {risk} Risk
                 </span>
               </div>
-              <div className="w-full pt-2" style={{ borderTop: `1px solid ${T.borderSubtle}` }}>
+              <div className="w-full pt-2" style={{ borderTop: '1px solid var(--color-border-subtle)' }}>
                 <div className="flex items-center justify-between text-xs py-1.5">
                   <span style={{ color: T.muted }}>Issues found</span>
                   <span className="font-mono font-semibold" style={{ color: totalIssues > 0 ? T.danger : T.secure }}>{totalIssues}</span>
                 </div>
+                {isSecurityScan && (<>
                 <div className="flex items-center justify-between text-xs py-1.5">
                   <span style={{ color: T.muted }}>SQL Injection</span>
                   <span className="font-mono" style={{ color: hasSql ? T.danger : T.secure }}>{hasSql ? findings.sqli.length : '—'}</span>
@@ -353,10 +457,6 @@ const ScanReport = ({ scanId, navigateTo }) => {
                 <div className="flex items-center justify-between text-xs py-1.5">
                   <span style={{ color: T.muted }}>Header Issues</span>
                   <span className="font-mono" style={{ color: hdrIssues.length > 0 ? T.info : T.secure }}>{hdrIssues.length || '—'}</span>
-                </div>
-                <div className="flex items-center justify-between text-xs py-1.5">
-                  <span style={{ color: T.muted }}>WP Issues</span>
-                  <span className="font-mono" style={{ color: wpIssues.length > 0 ? T.warn : T.secure }}>{wpIssues.length || '—'}</span>
                 </div>
                 <div className="flex items-center justify-between text-xs py-1.5">
                   <span style={{ color: T.muted }}>ZAP Alerts</span>
@@ -374,10 +474,17 @@ const ScanReport = ({ scanId, navigateTo }) => {
                   <span style={{ color: T.muted }}>Sensitive Exposure</span>
                   <span className="font-mono" style={{ color: exposureIssues.length > 0 ? T.warn : T.secure }}>{exposureIssues.length || '—'}</span>
                 </div>
+                {findings.secrets && (
+                  <div className="flex items-center justify-between text-xs py-1.5">
+                    <span style={{ color: T.muted }}>Hardcoded Secrets</span>
+                    <span className="font-mono" style={{ color: secretsIssues.length > 0 ? T.danger : T.secure }}>{secretsIssues.length || '—'}</span>
+                  </div>
+                )}
                 <div className="flex items-center justify-between text-xs py-1.5">
                   <span style={{ color: T.muted }}>Malicious Flags</span>
                   <span className="font-mono" style={{ color: isMal ? T.purple : T.secure }}>{isMal ? '1' : '—'}</span>
                 </div>
+                </>)}
                 {findings.dns && (
                   <div className="flex items-center justify-between text-xs py-1.5">
                     <span style={{ color: T.muted }}>DNS Issues</span>
@@ -424,8 +531,8 @@ const ScanReport = ({ scanId, navigateTo }) => {
             </div>
 
             {/* Metadata card */}
-            <div className="rounded-xl p-5" style={{ background: T.card, border: `1px solid ${T.border}` }}>
-              <p className="text-xs font-mono uppercase tracking-widest mb-3" style={{ color: T.dim }}>Scan Metadata</p>
+            <div className="card p-5">
+              <p className="section-label mb-3">Scan Metadata</p>
               <div className="flex flex-col gap-3">
                 <div>
                   <p className="text-xs mb-0.5" style={{ color: T.muted }}>Target</p>
@@ -446,8 +553,8 @@ const ScanReport = ({ scanId, navigateTo }) => {
             </div>
 
             {/* Summary card */}
-            <div className="rounded-xl p-5" style={{ background: T.card, border: `1px solid ${T.border}` }}>
-              <p className="text-xs font-mono uppercase tracking-widest mb-3" style={{ color: T.dim }}>Executive Summary</p>
+            <div className="card p-5">
+              <p className="section-label mb-3">Executive Summary</p>
               <p className="text-xs leading-relaxed" style={{ color: T.muted }}>
                 {totalIssues > 0
                   ? `Detected ${totalIssues} security ${totalIssues === 1 ? 'issue' : 'issues'} that should be addressed promptly.`
@@ -463,6 +570,7 @@ const ScanReport = ({ scanId, navigateTo }) => {
                   {xssIssues.length > 0 && <li className="flex items-center gap-2 text-xs" style={{ color: T.purple }}><AlertTriangle size={11} /> {xssIssues.length} XSS issue{xssIssues.length > 1 ? 's' : ''}</li>}
                   {actionableTechIssues.length > 0 && <li className="flex items-center gap-2 text-xs" style={{ color: T.info }}><AlertTriangle size={11} /> {actionableTechIssues.length} technology issue{actionableTechIssues.length > 1 ? 's' : ''}</li>}
                   {exposureIssues.length > 0 && <li className="flex items-center gap-2 text-xs" style={{ color: T.warn }}><AlertTriangle size={11} /> {exposureIssues.length} exposed path{exposureIssues.length > 1 ? 's' : ''}</li>}
+                  {secretsIssues.length > 0 && <li className="flex items-center gap-2 text-xs" style={{ color: T.danger }}><AlertOctagon size={11} /> {secretsIssues.length} hardcoded secret{secretsIssues.length > 1 ? 's' : ''} detected</li>}
                   {isMal && <li className="flex items-center gap-2 text-xs" style={{ color: T.purple }}><AlertOctagon size={11} /> Potentially malicious</li>}
                   {dnsIssues.length > 0 && <li className="flex items-center gap-2 text-xs" style={{ color: T.warn }}><AlertTriangle size={11} /> {dnsIssues.length} DNS issue{dnsIssues.length > 1 ? 's' : ''}</li>}
                   {redirIssues.length > 0 && <li className="flex items-center gap-2 text-xs" style={{ color: T.danger }}><AlertOctagon size={11} /> {redirIssues.length} open redirect{redirIssues.length > 1 ? 's' : ''}</li>}
@@ -476,8 +584,8 @@ const ScanReport = ({ scanId, navigateTo }) => {
             </div>
 
             {comparison && (
-              <div className="rounded-xl p-5" style={{ background: T.card, border: `1px solid ${T.border}` }}>
-                <p className="text-xs font-mono uppercase tracking-widest mb-3" style={{ color: T.dim }}>Re-scan Comparison</p>
+              <div className="card p-5">
+                <p className="section-label mb-3">Re-scan Comparison</p>
                 <div className="grid grid-cols-3 gap-3">
                   {[
                     { label: 'Fixed', value: comparison.fixed_count, color: T.secure },
@@ -502,8 +610,11 @@ const ScanReport = ({ scanId, navigateTo }) => {
           {/* ── Right: findings sections ── */}
           <div className="flex flex-col gap-4">
 
+            {/* Screenshots */}
+            <ScreenshotPanel screenshots={findings.screenshots} scanId={scanId} />
+
             {/* SQL */}
-            <Section id="sql" label="SQL Injection" subLabel={hasSql ? `${findings.sqli.length} vulnerabilities` : 'No issues'}
+            {isSecurityScan && <Section id="sql" label="SQL Injection" subLabel={hasSql ? `${findings.sqli.length} vulnerabilities` : 'No issues'}
               icon={hasSql ? AlertTriangle : Database} iconColor={hasSql ? T.danger : T.secure}
               iconBg={hasSql ? T.dangerDim : T.secureDim}
               expanded={expanded.sql} onToggle={toggle}>
@@ -522,10 +633,10 @@ const ScanReport = ({ scanId, navigateTo }) => {
                   <Recs items={['Use parameterized queries / prepared statements', 'Validate and sanitize all user input', 'Apply least-privilege to database users', 'Consider a Web Application Firewall (WAF)']} />
                 </div>
               ) : <CleanState icon={CheckCircle} title="No SQL Injection Vulnerabilities" body="Protected against SQL injection attacks." />}
-            </Section>
+            </Section>}
 
             {/* SSL */}
-            <Section id="ssl" label="SSL/TLS Certificate" subLabel={hasSsl ? 'Certificate issues' : 'Valid certificate'}
+            {isSecurityScan && <Section id="ssl" label="SSL/TLS Certificate" subLabel={hasSsl ? 'Certificate issues' : 'Valid certificate'}
               icon={hasSsl ? AlertTriangle : Lock} iconColor={hasSsl ? T.warn : T.secure}
               iconBg={hasSsl ? T.warnDim : T.secureDim}
               expanded={expanded.ssl} onToggle={toggle}>
@@ -558,10 +669,10 @@ const ScanReport = ({ scanId, navigateTo }) => {
                   )}
                 </div>
               )}
-            </Section>
+            </Section>}
 
             {/* Headers */}
-            <Section id="headers" label="HTTP Header Security" subLabel={hdrIssues.length > 0 ? `${hdrIssues.length} issue${hdrIssues.length > 1 ? 's' : ''}` : 'No issues'}
+            {isSecurityScan && <Section id="headers" label="HTTP Header Security" subLabel={hdrIssues.length > 0 ? `${hdrIssues.length} issue${hdrIssues.length > 1 ? 's' : ''}` : 'No issues'}
               icon={hdrIssues.length > 0 ? AlertTriangle : CheckCircle}
               iconColor={hdrIssues.length > 0 ? T.info : T.secure}
               iconBg={hdrIssues.length > 0 ? T.infoDim : T.secureDim}
@@ -575,10 +686,10 @@ const ScanReport = ({ scanId, navigateTo }) => {
                   {sections.headers?.recommendations?.length > 0 && <Recs items={sections.headers.recommendations} />}
                 </div>
               ) : <CleanState icon={CheckCircle} title="No Header Issues" body="No HTTP header or HTTPS misconfigurations found." />}
-            </Section>
+            </Section>}
 
             {/* WordPress */}
-            <Section id="wordpress" label="WordPress Security"
+            {isSecurityScan && <Section id="wordpress" label="WordPress Security"
               subLabel={!findings.wordpress?.is_wordpress ? 'Not WordPress' : wpIssues.length > 0 ? `${wpIssues.length} issue${wpIssues.length > 1 ? 's' : ''}` : 'No issues'}
               icon={wpIssues.length > 0 ? AlertTriangle : CheckCircle}
               iconColor={wpIssues.length > 0 ? T.warn : T.secure}
@@ -635,10 +746,10 @@ const ScanReport = ({ scanId, navigateTo }) => {
                   {sections.wordpress?.recommendations?.length > 0 && <Recs items={sections.wordpress.recommendations} />}
                 </div>
               )}
-            </Section>
+            </Section>}
 
             {/* ZAP */}
-            <Section id="zap" label="OWASP ZAP Analysis"
+            {isSecurityScan && <Section id="zap" label="OWASP ZAP Analysis"
               subLabel={findings.zap?.status === 'disabled' ? 'Not enabled' : zapIssues.length > 0 ? `${zapIssues.length} alerts` : 'No alerts'}
               icon={zapIssues.length > 0 ? AlertOctagon : CheckCircle}
               iconColor={zapIssues.length > 0 ? T.danger : T.secure}
@@ -680,10 +791,10 @@ const ScanReport = ({ scanId, navigateTo }) => {
                   ))}
                 </div>
               ) : <CleanState icon={CheckCircle} title="No ZAP Alerts" body="OWASP ZAP found no additional issues." />}
-            </Section>
+            </Section>}
 
             {/* XSS */}
-            {findings.xss && (
+            {isSecurityScan && findings.xss && (
               <Section id="xss" label="Cross-Site Scripting (XSS)" subLabel={hasXss ? `${xssIssues.filter(i=>i.type==='Reflected XSS').length} reflected vector${xssIssues.filter(i=>i.type==='Reflected XSS').length!==1?'s':''} found` : 'No reflected XSS detected'}
                 icon={hasXss ? AlertTriangle : CheckCircle}
                 iconColor={hasXss ? T.purple : T.secure}
@@ -723,7 +834,7 @@ const ScanReport = ({ scanId, navigateTo }) => {
             )}
 
             {/* Technology */}
-            {findings.tech && (
+            {isSecurityScan && findings.tech && (
               <Section id="tech" label="Technology Fingerprinting"
                 subLabel={actionableTechIssues.length > 0 ? `${actionableTechIssues.length} actionable issue${actionableTechIssues.length !== 1 ? 's' : ''}` : 'No actionable technology issues'}
                 icon={actionableTechIssues.length > 0 ? AlertTriangle : CheckCircle}
@@ -818,7 +929,7 @@ const ScanReport = ({ scanId, navigateTo }) => {
             )}
 
             {/* Sensitive File Exposure */}
-            {findings.exposure && (
+            {isSecurityScan && findings.exposure && (
               <Section id="exposure" label="Sensitive File Exposure"
                 subLabel={exposureIssues.length > 0 ? `${exposureIssues.length} exposed path${exposureIssues.length!==1?'s':''}` : 'No exposed files detected'}
                 icon={hasExposure ? AlertOctagon : exposureIssues.length > 0 ? AlertTriangle : CheckCircle}
@@ -885,8 +996,59 @@ const ScanReport = ({ scanId, navigateTo }) => {
               </Section>
             )}
 
+            {/* Hardcoded Secrets & API Keys */}
+            {isSecurityScan && findings.secrets && (
+              <Section id="secrets" label="Hardcoded Secrets & API Keys"
+                subLabel={secretsIssues.length > 0 ? `${secretsIssues.length} secret${secretsIssues.length!==1?'s':''} detected` : 'No secrets detected'}
+                icon={hasSecrets ? AlertOctagon : secretsIssues.length > 0 ? AlertTriangle : CheckCircle}
+                iconColor={hasSecrets ? T.danger : secretsIssues.length > 0 ? T.warn : T.secure}
+                iconBg={hasSecrets ? T.dangerDim : secretsIssues.length > 0 ? T.warnDim : T.secureDim}
+                expanded={expanded.secrets} onToggle={toggle}>
+                {secretsIssues.length > 0 ? (
+                  <div className="flex flex-col gap-3">
+                    {secretsIssues.map((issue, i) => {
+                      const color = issue.severity === 'Critical' ? T.danger : issue.severity === 'High' ? T.warn : issue.severity === 'Medium' ? T.info : T.dim;
+                      const bg = issue.severity === 'Critical' ? T.dangerDim : issue.severity === 'High' ? T.warnDim : issue.severity === 'Medium' ? T.infoDim : T.surface;
+                      return (
+                        <div key={i} className="rounded-lg overflow-hidden" style={{ border: `1px solid ${color}40`, background: bg }}>
+                          <div className="flex items-start gap-3 p-4">
+                            {issue.severity === 'Critical'
+                              ? <AlertOctagon size={14} className="flex-shrink-0 mt-0.5" style={{ color }} />
+                              : <AlertTriangle size={14} className="flex-shrink-0 mt-0.5" style={{ color }} />}
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <p className="text-sm font-semibold" style={{ color }}>{issue.name}</p>
+                                <span className="text-xs px-2 py-0.5 rounded-full font-medium uppercase tracking-wider" style={{ background: `${color}20`, color }}>
+                                  {issue.severity}
+                                </span>
+                              </div>
+                              <p className="text-xs font-mono break-all mt-1" style={{ color: T.info }}>{issue.source}</p>
+                              <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1">
+                                <span className="text-xs" style={{ color: T.muted }}>
+                                  Value: <code className="font-mono" style={{ color: T.warn }}>{issue.match_redacted}</code>
+                                </span>
+                                {issue.line && (
+                                  <span className="text-xs" style={{ color: T.dim }}>Line {issue.line}</span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                    <Recs items={findings.secrets?.recommendations?.length ? findings.secrets.recommendations : [
+                      'Remove hardcoded API keys and secrets from client-side code.',
+                      'Rotate any exposed credentials immediately — treat them as compromised.',
+                      'Use environment variables or a secrets manager.',
+                      'Add pre-commit hooks (git-secrets, truffleHog) to prevent future leaks.',
+                    ]} />
+                  </div>
+                ) : <CleanState icon={CheckCircle} title="No Hardcoded Secrets Detected" body="No API keys, tokens, or credentials were found in the page source or JavaScript files." />}
+              </Section>
+            )}
+
             {/* DNS Security */}
-            {findings.dns && (() => {
+            {isSecurityScan && findings.dns && (() => {
               const dns = findings.dns;
               const dnsIssues = dns.issues || [];
               const dnsHigh = dnsIssues.some(i => ['Critical','High'].includes(i.severity));
@@ -924,7 +1086,7 @@ const ScanReport = ({ scanId, navigateTo }) => {
             })()}
 
             {/* Open Redirect */}
-            {findings.redirect && (() => {
+            {isSecurityScan && findings.redirect && (() => {
               const redir = findings.redirect;
               const redirIssues = redir.issues || [];
               return (
@@ -957,7 +1119,7 @@ const ScanReport = ({ scanId, navigateTo }) => {
             })()}
 
             {/* Subdomain Takeover */}
-            {findings.takeover && (() => {
+            {isSecurityScan && findings.takeover && (() => {
               const take = findings.takeover;
               const takeIssues = take.issues || [];
               const subsChecked = take.subdomains_checked || [];
@@ -992,7 +1154,7 @@ const ScanReport = ({ scanId, navigateTo }) => {
             })()}
 
             {/* Malicious */}
-            {(() => {
+            {isSecurityScan && (() => {
               const mal = findings.malicious || {};
               const score = mal.score ?? 0;
               const dnsblHit = mal.dnsbl?.blacklisted;
@@ -1055,7 +1217,7 @@ const ScanReport = ({ scanId, navigateTo }) => {
             {[
               { id: 'accessibility', label: 'Accessibility', issues: accessibilityIssues, iconColor: T.info, iconBg: T.infoDim, recommendations: findings.accessibility?.recommendations || [] },
               { id: 'responsive_ux', label: 'Mobile and Responsive UX', issues: responsiveIssues, iconColor: T.warn, iconBg: T.warnDim, recommendations: findings.responsive_ux?.recommendations || [] },
-              { id: 'performance_ux', label: 'Performance UX', issues: performanceIssues, iconColor: T.info, iconBg: T.infoDim, recommendations: findings.performance_ux?.recommendations || [] },
+              { id: 'performance_ux', label: 'Performance UX', issues: performanceIssues, iconColor: T.info, iconBg: T.infoDim, recommendations: findings.performance_ux?.recommendations || [], rawMetrics: findings.performance_ux?.raw_metrics },
               { id: 'form_usability', label: 'Form and Interaction Usability', issues: formIssues, iconColor: T.warn, iconBg: T.warnDim, recommendations: findings.form_usability?.recommendations || [] },
               { id: 'visual_ai', label: 'Visual UX Recommendations', issues: visualAiIssues, iconColor: T.purple, iconBg: T.purpleDim, recommendations: findings.visual_ai?.recommendations || [] },
             ].filter((item) => findings[item.id]).map((item) => (
@@ -1070,44 +1232,95 @@ const ScanReport = ({ scanId, navigateTo }) => {
                 expanded={expanded[item.id]}
                 onToggle={toggle}
               >
-                {item.issues.length > 0 ? (
-                  <div className="flex flex-col gap-3">
-                    {item.issues.map((issue, index) => (
-                      <div key={issue.id || index} className="rounded-lg p-4" style={{ background: T.surface, border: `1px solid ${T.border}` }}>
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <p className="text-sm font-semibold" style={{ color: T.text }}>{issue.title || issue.name}</p>
-                            <div className="mt-2 flex items-center gap-2 flex-wrap">
-                              <span className="px-2 py-0.5 rounded text-[11px] font-semibold" style={{ background: T.elev, color: item.iconColor, border: `1px solid ${T.border}` }}>
-                                {labelForConfidence(issue.confidence)}
-                              </span>
-                              <span className="text-xs" style={{ color: T.dim }}>{issue.viewport || 'all viewports'}</span>
-                            </div>
-                            {issue.user_impact && <p className="text-xs mt-2" style={{ color: T.muted }}>{issue.user_impact}</p>}
-                            {issue.technical_remediation && <p className="text-xs mt-2" style={{ color: T.text }}>{issue.technical_remediation}</p>}
-                            {issue.builder_prompt && (
-                              <pre className="mt-2 text-xs whitespace-pre-wrap break-words" style={{ color: T.info, background: T.elev, padding: '10px', borderRadius: '8px' }}>
-                                {issue.builder_prompt}
-                              </pre>
-                            )}
-                            {issue.evidence?.screenshot_url && (
-                              <img
-                                src={issue.evidence.screenshot_url}
-                                alt={issue.title || issue.name || 'Issue evidence'}
-                                className="mt-3 rounded-lg border max-w-full"
-                                style={{ borderColor: T.border, maxHeight: '280px' }}
-                              />
-                            )}
+                {(() => {
+                  const rawMetrics = item.rawMetrics;
+                  const metricRows = rawMetrics ? Object.entries(rawMetrics).flatMap(([pageUrl, m]) => {
+                    if (!m || typeof m !== 'object') return [];
+                    const labels = {
+                      load_time_ms:              { label: 'Load Time',        unit: 'ms',  good: 3000, warn: 5000 },
+                      dom_content_loaded_ms:     { label: 'DOM Ready',        unit: 'ms',  good: 1500, warn: 3000 },
+                      first_contentful_paint_ms: { label: 'FCP',              unit: 'ms',  good: 1800, warn: 3000 },
+                      ttfb_ms:                   { label: 'TTFB',             unit: 'ms',  good: 200,  warn: 600  },
+                      tti_ms:                    { label: 'TTI',              unit: 'ms',  good: 2500, warn: 3800 },
+                      total_transfer_kb:         { label: 'Transfer Size',    unit: 'KB',  good: 500,  warn: 2000 },
+                      js_transfer_kb:            { label: 'JS Size',          unit: 'KB',  good: 200,  warn: 500  },
+                      css_transfer_kb:           { label: 'CSS Size',         unit: 'KB',  good: 50,   warn: 150  },
+                      image_transfer_kb:         { label: 'Images Size',      unit: 'KB',  good: 200,  warn: 1000 },
+                      resource_count:            { label: 'Requests',         unit: '',    good: 50,   warn: 100  },
+                    };
+                    return Object.entries(labels)
+                      .filter(([k]) => m[k] != null && m[k] > 0)
+                      .map(([k, meta]) => {
+                        const v = m[k];
+                        const color = v <= meta.good ? T.secure : v <= meta.warn ? T.warn : T.danger;
+                        return { pageUrl, key: k, label: meta.label, value: v, unit: meta.unit, color };
+                      });
+                  }) : [];
+                  return (
+                    <div className="flex flex-col gap-3">
+                      {metricRows.length > 0 && (
+                        <div className="rounded-lg p-4" style={{ background: T.surface, border: `1px solid ${T.border}` }}>
+                          <p className="text-xs font-semibold mb-3" style={{ color: T.muted }}>RAW PERFORMANCE METRICS</p>
+                          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+                            {metricRows.map(({ key, label, value, unit, color }) => (
+                              <div key={key} className="flex flex-col gap-1 p-3 rounded" style={{ background: T.elev, border: `1px solid ${T.borderSubtle}` }}>
+                                <span className="text-[10px] uppercase tracking-wide" style={{ color: T.dim }}>{label}</span>
+                                <span className="text-lg font-bold font-mono" style={{ color }}>{value.toLocaleString()}<span className="text-xs ml-0.5" style={{ color: T.muted }}>{unit}</span></span>
+                              </div>
+                            ))}
                           </div>
-                          <span className="px-2 py-1 rounded text-xs font-semibold" style={{ background: item.iconBg, color: item.iconColor }}>
-                            {issue.severity}
-                          </span>
                         </div>
-                      </div>
-                    ))}
-                    {item.recommendations.length > 0 && <Recs items={item.recommendations} />}
-                  </div>
-                ) : <CleanState icon={CheckCircle} title={`No ${item.label} Issues`} body="No findings detected in this category." />}
+                      )}
+                      {item.issues.length > 0 ? (
+                        <>
+                          {item.issues.map((issue, index) => (
+                            <div key={issue.id || index} className="rounded-lg p-4" style={{ background: T.surface, border: `1px solid ${T.border}` }}>
+                              <div className="flex items-start justify-between gap-3">
+                                <div>
+                                  <p className="text-sm font-semibold" style={{ color: T.text }}>{issue.title || issue.name}</p>
+                                  <div className="mt-2 flex items-center gap-2 flex-wrap">
+                                    <span className="px-2 py-0.5 rounded text-[11px] font-semibold" style={{ background: T.elev, color: item.iconColor, border: `1px solid ${T.border}` }}>
+                                      {labelForConfidence(issue.confidence)}
+                                    </span>
+                                    <span className="text-xs" style={{ color: T.dim }}>{issue.viewport || 'all viewports'}</span>
+                                    {issue.evidence?.metric && (
+                                      <span className="text-xs font-mono" style={{ color: T.dim }}>
+                                        {issue.evidence.metric}: {issue.evidence.value} / threshold: {issue.evidence.threshold}
+                                      </span>
+                                    )}
+                                  </div>
+                                  {issue.user_impact && <p className="text-xs mt-2" style={{ color: T.muted }}>{issue.user_impact}</p>}
+                                  {issue.technical_remediation && <p className="text-xs mt-2" style={{ color: T.text }}>{issue.technical_remediation}</p>}
+                                  {issue.builder_prompt && (
+                                    <pre className="mt-2 text-xs whitespace-pre-wrap break-words" style={{ color: T.info, background: T.elev, padding: '10px', borderRadius: '8px' }}>
+                                      {issue.builder_prompt}
+                                    </pre>
+                                  )}
+                                  {issue.evidence?.screenshot_url && (
+                                    <img
+                                      src={issue.evidence.screenshot_url}
+                                      alt={issue.title || issue.name || 'Issue evidence'}
+                                      className="mt-3 rounded-lg border max-w-full"
+                                      style={{ borderColor: T.border, maxHeight: '280px' }}
+                                    />
+                                  )}
+                                </div>
+                                <span className="px-2 py-1 rounded text-xs font-semibold" style={{ background: item.iconBg, color: item.iconColor }}>
+                                  {issue.severity}
+                                </span>
+                              </div>
+                            </div>
+                          ))}
+                          {item.recommendations.length > 0 && <Recs items={item.recommendations} />}
+                        </>
+                      ) : metricRows.length === 0 ? (
+                        <CleanState icon={CheckCircle} title={`No ${item.label} Issues`} body="No findings detected in this category." />
+                      ) : (
+                        <CleanState icon={CheckCircle} title="No Performance Issues" body="All measured metrics are within acceptable thresholds." />
+                      )}
+                    </div>
+                  );
+                })()}
               </Section>
             ))}
 
@@ -1153,8 +1366,8 @@ const ScanReport = ({ scanId, navigateTo }) => {
             )}
 
             {/* Conclusion */}
-            <div className="rounded-xl p-5" style={{ background: T.card, border: `1px solid ${T.border}` }}>
-              <p className="text-xs font-mono uppercase tracking-widest mb-3" style={{ color: T.dim }}>Conclusion & Next Steps</p>
+            <div className="card p-5">
+              <p className="section-label mb-3">Conclusion & Next Steps</p>
               {launchReadiness.summary && (
                 <p className="text-xs mb-3" style={{ color: T.info }}>
                   Launch readiness: {launchReadiness.summary}
@@ -1186,8 +1399,8 @@ const ScanReport = ({ scanId, navigateTo }) => {
             </div>
 
             {bestPractices.length > 0 && (
-              <div className="rounded-xl p-5" style={{ background: T.card, border: `1px solid ${T.border}` }}>
-                <p className="text-xs font-mono uppercase tracking-widest mb-3" style={{ color: T.dim }}>Developer Best Practices</p>
+              <div className="card p-5">
+                <p className="section-label mb-3">Developer Best Practices</p>
                 <Recs items={bestPractices} />
               </div>
             )}

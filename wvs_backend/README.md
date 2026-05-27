@@ -14,9 +14,36 @@ uv run flask --app manage.py db upgrade
 
 ```bash
 uv run python manage.py
-uv run celery -A app.celery_app:celery_app worker --loglevel=info
+uv run celery -A app.celery_app:celery_app worker -Q security_scans --loglevel=info
+uv run celery -A app.celery_app:celery_app worker -Q ux_scans --loglevel=info --concurrency=1
 uv run celery -A app.celery_app:celery_app beat --loglevel=info
 ```
+
+All-in-one development startup:
+
+```bash
+PORT=5001 uv run python start.py
+```
+
+With ZAP auto-start on macOS:
+
+```bash
+ZAP_ENABLED=true ZAP_AUTO_START=true ZAP_START_CMD="/Applications/ZAP.app/Contents/MacOS/ZAP.sh" PORT=5001 uv run python start.py
+```
+
+## Docker Runtime
+
+From the repository root:
+
+```bash
+cp .env.docker.example .env.docker
+docker compose --env-file .env.docker up --build
+```
+
+The Compose stack runs this backend as separate API, Celery worker, Celery beat,
+Redis, MySQL, and OWASP ZAP containers. The backend image installs Playwright
+Chromium and Lighthouse so the UX scan worker can run browser-backed checks
+inside the container.
 
 ## Migrations
 

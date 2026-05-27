@@ -6,7 +6,8 @@ from flask import Blueprint, jsonify
 from flask_jwt_extended import jwt_required
 
 from app.auth import get_current_user
-from app.models import BlockedRequest, MaliciousSite, ScanResult
+from app.models import BlockedRequest, MaliciousSite, ScanResult, UptimeMonitor
+from app.services.uptime import calculate_uptime_percent
 from app.utils.scan_helpers import build_scan_summary
 from app.utils.time_utils import utc_now
 
@@ -24,6 +25,9 @@ def get_dashboard_stats():
 
         scans = ScanResult.query.filter_by(user_id=current_user.id).order_by(
             ScanResult.timestamp.desc()
+        ).all()
+        monitors = UptimeMonitor.query.filter_by(user_id=current_user.id).order_by(
+            UptimeMonitor.created_at.desc()
         ).all()
         can_view_security_feed = current_user.is_admin
         blocked_requests = []
@@ -44,6 +48,7 @@ def get_dashboard_stats():
         vulnerable_scans_xss = 0
         vulnerable_scans_exposure = 0
         vulnerable_scans_dependencies = 0
+        vulnerable_scans_malware_artifacts = 0
         vulnerable_scans = 0
         today_scans = 0
         today_vulnerabilities = 0
@@ -79,6 +84,8 @@ def get_dashboard_stats():
                 vulnerable_scans_xss += 1
             if summary.get('exposure_count', 0) > 0:
                 vulnerable_scans_exposure += 1
+            if summary.get('malware_artifact_count', 0) > 0:
+                vulnerable_scans_malware_artifacts += 1
             if summary.get('advisory_count', 0) > 0:
                 vulnerable_scans_dependencies += 1
                 total_dependency_advisories += summary.get('advisory_count', 0)
@@ -105,6 +112,7 @@ def get_dashboard_stats():
             {'name': 'XSS',              'value': vulnerable_scans_xss},
             {'name': 'Dependency CVEs',  'value': vulnerable_scans_dependencies},
             {'name': 'File Exposure',    'value': vulnerable_scans_exposure},
+            {'name': 'Malware Artifacts','value': vulnerable_scans_malware_artifacts},
         ]
 
         date_list = [
@@ -139,6 +147,24 @@ def get_dashboard_stats():
             for day in date_list
         ]
 
+        monitors_up = sum(1 for monitor in monitors if monitor.status == 'up')
+        monitors_down = sum(1 for monitor in monitors if monitor.status == 'down')
+        uptime_values = [value for value in (calculate_uptime_percent(monitor, hours=24) for monitor in monitors) if value is not None]
+        average_uptime_percent = round(sum(uptime_values) / len(uptime_values), 1) if uptime_values else None
+
+        recent_monitors = [
+            {
+                'id': monitor.public_id,
+                'name': monitor.name,
+                'target_url': monitor.target_url,
+                'status': monitor.status,
+                'last_checked_at': monitor.last_checked_at.isoformat() if monitor.last_checked_at else None,
+                'last_response_time_ms': monitor.last_response_time_ms,
+                'uptime_percent_24h': calculate_uptime_percent(monitor, hours=24),
+            }
+            for monitor in monitors[:5]
+        ]
+
         top_malicious_domains = [
             {'domain': domain, 'count': count}
             for domain, count in blocked_domain_counter.most_common(5)
@@ -149,10 +175,25 @@ def get_dashboard_stats():
                 for site in malicious_sites[:5]
             ]
 
+        recent_blocked_attempts = [
+            {
+                'id': b.id,
+                'url': b.url,
+                'ip_address': b.ip_address,
+                'timestamp': b.timestamp.isoformat() if b.timestamp else None,
+                'reason': b.reason,
+            }
+            for b in blocked_requests[:5]
+        ]
+
         stats = {
             'totalScans': len(scans),
             'vulnerableScans': vulnerable_scans,
             'blockedSites': len(malicious_sites),
+            'uptimeMonitors': len(monitors),
+            'uptimeUp': monitors_up,
+            'uptimeDown': monitors_down,
+            'averageUptimePercent': average_uptime_percent,
             'dependencyAdvisories': total_dependency_advisories,
             'today': {
                 'scans': today_scans,
@@ -164,7 +205,9 @@ def get_dashboard_stats():
             'vulnerabilityTypes': vulnerability_types,
             'scansByDay': scans_by_day,
             'blockedAttemptsByDay': blocked_attempts_by_day,
-            'topMaliciousDomains': top_malicious_domains
+            'topMaliciousDomains': top_malicious_domains,
+            'recentMonitors': recent_monitors,
+            'recentBlockedAttempts': recent_blocked_attempts,
         }
 
         return jsonify({

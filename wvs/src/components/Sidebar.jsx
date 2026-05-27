@@ -1,18 +1,20 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   Shield, BarChart2, Clock, Settings, LogOut,
-  AlertTriangle, Globe, User, Bell, X, Menu, ChevronDown, Zap, Sun, Moon, BadgeCheck,
+  AlertTriangle, Globe, User, Bell, X, Menu, ChevronDown,
+  Zap, Sun, Moon, BadgeCheck, Activity, ChevronRight,
 } from 'lucide-react';
 import { useTheme } from '../hooks/useTheme';
 import { getSessionUsername } from '../lib/auth';
 
 const NAV_ITEMS = [
-  { key: 'dashboard',     label: 'Dashboard',      icon: BarChart2 },
-  { key: 'scanners',      label: 'Scanners',        icon: Zap },
+  { key: 'dashboard',     label: 'Dashboard',       icon: BarChart2 },
+  { key: 'scanners',      label: 'Scanners',         icon: Zap },
+  { key: 'uptime',        label: 'Uptime',           icon: Activity },
   { key: 'targets',       label: 'Verified Targets', icon: BadgeCheck },
-  { key: 'history',       label: 'Scan History',   icon: Clock },
-  { key: 'blockedSites',  label: 'Blocked Sites',  icon: AlertTriangle },
-  { key: 'blockedAccess', label: 'Access Attempts',icon: Globe, adminOnly: true },
+  { key: 'history',       label: 'Scan History',     icon: Clock },
+  { key: 'blockedSites',  label: 'Blocked Sites',    icon: AlertTriangle },
+  { key: 'blockedAccess', label: 'Access Attempts',  icon: Globe, adminOnly: true },
 ];
 
 const NOTIFICATIONS = [
@@ -48,27 +50,33 @@ const Sidebar = ({ isAuthenticated, onLogout, navigateTo, currentPage, isAdmin =
       className="flex flex-col h-full"
       style={{
         background: 'var(--color-surface)',
-        borderRight: '1px solid var(--color-border-subtle)',
-        width: mobile ? '260px' : '220px',
+        borderRight: '1px solid var(--color-border)',
+        width: mobile ? '256px' : '216px',
       }}
     >
-      {/* Logo */}
+      {/* ── Logo ── */}
       <div
-        className="flex items-center gap-3 h-16 px-5 flex-shrink-0"
-        style={{ borderBottom: '1px solid var(--color-border-subtle)' }}
+        className="flex items-center gap-3 h-[60px] px-4 flex-shrink-0"
+        style={{ borderBottom: '1px solid var(--color-border)' }}
       >
         <button
           onClick={() => isAuthenticated && go('dashboard')}
-          className="flex items-center gap-2.5 focus-visible:outline-none"
+          className="flex items-center gap-2.5 focus-visible:outline-none group"
           aria-label="Go to dashboard"
         >
           <div
-            className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
-            style={{ background: 'var(--color-primary)' }}
+            className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 glow-pulse transition-all duration-200"
+            style={{
+              background: 'linear-gradient(135deg, #818cf8, #6366f1, #4f46e5)',
+              boxShadow: '0 0 18px rgba(99,102,241,0.5)',
+            }}
           >
-            <Shield size={16} className="text-white" />
+            <Shield size={14} className="text-white" />
           </div>
-          <span className="text-white font-semibold tracking-tight text-sm">
+          <span
+            className="font-bold tracking-tight text-sm gradient-text"
+            style={{ letterSpacing: '-0.02em' }}
+          >
             LaunchGuard
           </span>
         </button>
@@ -76,70 +84,83 @@ const Sidebar = ({ isAuthenticated, onLogout, navigateTo, currentPage, isAdmin =
         {mobile && (
           <button
             onClick={() => setMobileOpen(false)}
-            className="ml-auto w-7 h-7 rounded-md flex items-center justify-center cursor-pointer"
+            className="ml-auto w-7 h-7 rounded-md flex items-center justify-center cursor-pointer transition-colors duration-150"
             style={{ color: 'var(--color-text-dim)' }}
             aria-label="Close menu"
           >
-            <X size={15} />
+            <X size={14} />
           </button>
         )}
       </div>
 
-      {/* Nav items */}
+      {/* ── Nav items ── */}
       {isAuthenticated && (
-        <nav className="flex flex-col gap-0.5 p-3 flex-1 overflow-y-auto">
+        <nav className="flex flex-col gap-0.5 p-2 flex-1 overflow-y-auto">
           {NAV_ITEMS.filter((item) => !item.adminOnly || isAdmin).map(({ key, label, icon: Icon }) => {
             const active = currentPage === key;
             return (
               <button
                 key={key}
                 onClick={() => go(key)}
-                className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors duration-150 cursor-pointer w-full text-left"
-                style={{
-                  color:      active ? 'var(--color-text)'     : 'var(--color-text-muted)',
-                  background: active ? 'var(--color-elevated)' : 'transparent',
-                }}
+                className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-150 cursor-pointer w-full text-left group ${active ? 'nav-active-glow' : 'hover:bg-[var(--color-elevated)]'}`}
+                style={active ? {} : { color: 'var(--color-text-muted)' }}
                 aria-current={active ? 'page' : undefined}
               >
-                {React.createElement(Icon, { size: 16, className: 'flex-shrink-0' })}
+                <Icon
+                  size={15}
+                  className="flex-shrink-0 transition-colors duration-150"
+                  style={{ color: active ? 'var(--color-primary)' : 'var(--color-text-dim)' }}
+                />
                 <span className="truncate">{label}</span>
+                {active && (
+                  <span
+                    className="ml-auto w-1.5 h-1.5 rounded-full flex-shrink-0"
+                    style={{ background: 'var(--color-primary)', boxShadow: '0 0 6px rgba(99,102,241,0.8)' }}
+                  />
+                )}
               </button>
             );
           })}
         </nav>
       )}
 
-      {/* Bottom: notifications + settings + user */}
+      {/* ── Bottom section ── */}
       {isAuthenticated && (
         <div
-          className="p-3 flex flex-col gap-0.5 flex-shrink-0"
-          style={{ borderTop: '1px solid var(--color-border-subtle)' }}
+          className="p-2 flex flex-col gap-0.5 flex-shrink-0"
+          style={{ borderTop: '1px solid var(--color-border)' }}
         >
           {/* Notifications */}
           <div ref={notifRef} className="relative">
             <button
               onClick={() => { setNotifOpen(o => !o); setUserOpen(false); }}
-              className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm w-full transition-colors duration-150 cursor-pointer"
+              className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm w-full transition-all duration-150 cursor-pointer hover:bg-[var(--color-elevated)]"
               style={{ color: 'var(--color-text-muted)' }}
               aria-label="Notifications"
             >
-              <Bell size={16} className="flex-shrink-0" />
+              <Bell size={15} className="flex-shrink-0" style={{ color: 'var(--color-text-dim)' }} />
               <span className="flex-1 text-left truncate">Notifications</span>
               {NOTIFICATIONS.length > 0 && (
-                <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: 'var(--color-danger)' }} />
+                <span
+                  className="w-4 h-4 rounded-full flex items-center justify-center text-white flex-shrink-0"
+                  style={{ background: 'var(--color-danger)', fontSize: '9px', fontWeight: 700 }}
+                >
+                  {NOTIFICATIONS.length}
+                </span>
               )}
             </button>
 
             {notifOpen && (
               <div
-                className="absolute bottom-full mb-2 left-0 w-72 rounded-xl shadow-2xl overflow-hidden z-50"
-                style={{ background: 'var(--color-elevated)', border: '1px solid var(--color-border)' }}
+                className="absolute bottom-full mb-2 left-0 w-72 rounded-xl shadow-2xl overflow-hidden z-50 fade-up"
+                style={{ background: 'var(--color-overlay)', border: '1px solid var(--color-border-bright)' }}
               >
-                <div className="px-4 py-3" style={{ borderBottom: '1px solid var(--color-border)' }}>
+                <div className="px-4 py-3 flex items-center justify-between" style={{ borderBottom: '1px solid var(--color-border)' }}>
                   <p className="text-sm font-semibold" style={{ color: 'var(--color-text)' }}>Notifications</p>
+                  <span className="section-label">recent</span>
                 </div>
                 {NOTIFICATIONS.map(n => (
-                  <div key={n.id} className="flex items-start gap-3 px-4 py-3" style={{ borderBottom: '1px solid var(--color-border-subtle)' }}>
+                  <div key={n.id} className="flex items-start gap-3 px-4 py-3 hover:bg-[var(--color-elevated)] transition-colors duration-100" style={{ borderBottom: '1px solid var(--color-border-subtle)' }}>
                     <div
                       className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5"
                       style={{
@@ -147,11 +168,11 @@ const Sidebar = ({ isAuthenticated, onLogout, navigateTo, currentPage, isAdmin =
                         color:      n.type === 'alert' ? 'var(--color-danger)'     : 'var(--color-info)',
                       }}
                     >
-                      {n.type === 'alert' ? <AlertTriangle size={13} /> : <Bell size={13} />}
+                      {n.type === 'alert' ? <AlertTriangle size={12} /> : <Bell size={12} />}
                     </div>
-                    <div>
+                    <div className="flex-1 min-w-0">
                       <p className="text-sm" style={{ color: 'var(--color-text)' }}>{n.message}</p>
-                      <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-dim)' }}>{n.time}</p>
+                      <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-dim)', fontFamily: 'IBM Plex Mono, monospace' }}>{n.time}</p>
                     </div>
                   </div>
                 ))}
@@ -162,66 +183,74 @@ const Sidebar = ({ isAuthenticated, onLogout, navigateTo, currentPage, isAdmin =
           {/* Theme toggle */}
           <button
             onClick={toggleTheme}
-            className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm transition-colors duration-150 cursor-pointer w-full text-left"
+            className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-all duration-150 cursor-pointer w-full text-left hover:bg-[var(--color-elevated)]"
             style={{ color: 'var(--color-text-muted)' }}
             aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
           >
             {theme === 'dark'
-              ? <Sun size={16} className="flex-shrink-0" />
-              : <Moon size={16} className="flex-shrink-0" />}
-            <span className="truncate">{theme === 'dark' ? 'Light Mode' : 'Dark Mode'}</span>
+              ? <Sun size={15} className="flex-shrink-0" style={{ color: 'var(--color-text-dim)' }} />
+              : <Moon size={15} className="flex-shrink-0" style={{ color: 'var(--color-text-dim)' }} />}
+            <span className="truncate">{theme === 'dark' ? 'Light mode' : 'Dark mode'}</span>
           </button>
 
           {/* Settings */}
           <button
             onClick={() => go('settings')}
-            className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm transition-colors duration-150 cursor-pointer w-full text-left"
-            style={{
-              color:      currentPage === 'settings' ? 'var(--color-text)'     : 'var(--color-text-muted)',
-              background: currentPage === 'settings' ? 'var(--color-elevated)' : 'transparent',
-            }}
+            className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-all duration-150 cursor-pointer w-full text-left ${currentPage === 'settings' ? 'nav-active-glow' : 'hover:bg-[var(--color-elevated)]'}`}
+            style={currentPage === 'settings' ? {} : { color: 'var(--color-text-muted)' }}
           >
-            <Settings size={16} className="flex-shrink-0" />
+            <Settings size={15} className="flex-shrink-0" style={{ color: currentPage === 'settings' ? 'var(--color-primary)' : 'var(--color-text-dim)' }} />
             <span className="truncate">Settings</span>
           </button>
 
-          {/* User + logout */}
+          {/* User menu */}
           <div ref={userRef} className="relative">
             <button
               onClick={() => { setUserOpen(o => !o); setNotifOpen(false); }}
-              className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm w-full transition-colors duration-150 cursor-pointer"
+              className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm w-full transition-all duration-150 cursor-pointer hover:bg-[var(--color-elevated)]"
               style={{ color: 'var(--color-text-muted)' }}
               aria-label="User menu"
               aria-expanded={userOpen}
             >
               <div
-                className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0"
-                style={{ background: 'var(--color-primary-dim)', color: 'var(--color-primary)' }}
+                className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 text-white font-bold"
+                style={{
+                  background: 'linear-gradient(135deg, #6366f1, #4f46e5)',
+                  fontSize: '10px',
+                  letterSpacing: 0,
+                }}
               >
-                <User size={13} />
+                {(getSessionUsername() || 'U')[0].toUpperCase()}
               </div>
-              <span className="flex-1 text-left truncate text-sm">
+              <span className="flex-1 text-left truncate text-sm" style={{ color: 'var(--color-text)' }}>
                 {getSessionUsername() || 'Account'}
               </span>
               <ChevronDown
-                size={13}
+                size={12}
                 className="flex-shrink-0 transition-transform duration-200"
-                style={{ transform: userOpen ? 'rotate(180deg)' : 'rotate(0deg)' }}
+                style={{
+                  color: 'var(--color-text-dim)',
+                  transform: userOpen ? 'rotate(180deg)' : 'rotate(0deg)',
+                }}
               />
             </button>
 
             {userOpen && (
               <div
-                className="absolute bottom-full mb-2 left-0 w-44 rounded-xl shadow-2xl overflow-hidden z-50"
-                style={{ background: 'var(--color-elevated)', border: '1px solid var(--color-border)' }}
+                className="absolute bottom-full mb-2 left-0 w-48 rounded-xl shadow-2xl overflow-hidden z-50 fade-up"
+                style={{ background: 'var(--color-overlay)', border: '1px solid var(--color-border-bright)' }}
               >
+                <div className="px-4 py-2.5" style={{ borderBottom: '1px solid var(--color-border)' }}>
+                  <p className="text-xs font-semibold" style={{ color: 'var(--color-text)' }}>{getSessionUsername() || 'Account'}</p>
+                  <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-dim)' }}>Free plan</p>
+                </div>
                 <button
                   onClick={() => { setUserOpen(false); onLogout(); }}
-                  className="flex items-center gap-2.5 w-full px-4 py-2.5 text-sm text-left transition-colors duration-150 cursor-pointer"
+                  className="flex items-center gap-2.5 w-full px-4 py-2.5 text-sm text-left transition-colors duration-150 cursor-pointer hover:bg-[var(--color-elevated)]"
                   style={{ color: 'var(--color-danger)' }}
                 >
-                  <LogOut size={14} />
-                  Logout
+                  <LogOut size={13} />
+                  Sign out
                 </button>
               </div>
             )}
@@ -233,7 +262,7 @@ const Sidebar = ({ isAuthenticated, onLogout, navigateTo, currentPage, isAdmin =
 
   return (
     <>
-      {/* Desktop sidebar — always expanded */}
+      {/* Desktop sidebar */}
       <aside className="hidden md:flex flex-col h-screen sticky top-0 flex-shrink-0">
         <SidebarContent />
       </aside>
@@ -241,11 +270,15 @@ const Sidebar = ({ isAuthenticated, onLogout, navigateTo, currentPage, isAdmin =
       {/* Mobile hamburger */}
       <button
         onClick={() => setMobileOpen(true)}
-        className="md:hidden fixed top-4 left-4 z-40 w-9 h-9 rounded-lg flex items-center justify-center cursor-pointer shadow-lg"
-        style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', color: 'var(--color-text-muted)' }}
+        className="md:hidden fixed top-4 left-4 z-40 w-9 h-9 rounded-xl flex items-center justify-center cursor-pointer shadow-lg transition-all duration-150 active:scale-95"
+        style={{
+          background: 'var(--color-card)',
+          border: '1px solid var(--color-border)',
+          color: 'var(--color-text-muted)',
+        }}
         aria-label="Open menu"
       >
-        <Menu size={18} />
+        <Menu size={16} />
       </button>
 
       {/* Mobile drawer */}
@@ -253,7 +286,7 @@ const Sidebar = ({ isAuthenticated, onLogout, navigateTo, currentPage, isAdmin =
         <>
           <div
             className="fixed inset-0 z-40 md:hidden"
-            style={{ background: 'rgba(0,0,0,0.6)' }}
+            style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)' }}
             onClick={() => setMobileOpen(false)}
           />
           <aside className="fixed inset-y-0 left-0 z-50 md:hidden flex flex-col h-full shadow-2xl">

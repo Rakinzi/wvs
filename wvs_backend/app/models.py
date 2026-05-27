@@ -52,9 +52,9 @@ class ScanJob(db.Model):
     
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    username = db.Column(db.String(50), unique=True)
-    password = db.Column(db.String(255))
-    email = db.Column(db.String(100), unique=True)
+    username = db.Column(db.String(50), unique=True, nullable=False)
+    password = db.Column(db.String(255), nullable=False)
+    email = db.Column(db.String(100), unique=True, nullable=False)
     is_admin = db.Column(db.Boolean, default=False)
     created_on = db.Column(db.DateTime, default=utc_now)
     reset_token_hash = db.Column(db.String(64), nullable=True, index=True)
@@ -62,6 +62,7 @@ class User(db.Model):
     reset_requested_at = db.Column(db.DateTime, nullable=True)
     email_verified = db.Column(db.Boolean, default=False, nullable=False)
     verification_token_hash = db.Column(db.String(64), nullable=True, index=True)
+    verification_token_expires_at = db.Column(db.DateTime, nullable=True)
     
     def __repr__(self):
         return f'<User {self.username}>'
@@ -109,6 +110,7 @@ class VerifiedTarget(db.Model):
     normalized_domain = db.Column(db.String(255), nullable=False, index=True)
     verification_method = db.Column(db.String(50), nullable=False, default='meta_tag')
     verification_token_hash = db.Column(db.String(64), nullable=False, index=True)
+    verification_token = db.Column(db.String(128), nullable=True)
     verification_status = db.Column(db.String(30), nullable=False, default='pending', index=True)
     verified_at = db.Column(db.DateTime)
     token_expires_at = db.Column(db.DateTime, nullable=False)
@@ -124,9 +126,71 @@ class VerifiedTarget(db.Model):
             'normalized_domain': self.normalized_domain,
             'verification_method': self.verification_method,
             'verification_status': self.verification_status,
+            'verification_token': self.verification_token,
             'verified_at': self.verified_at.isoformat() if self.verified_at else None,
             'token_expires_at': self.token_expires_at.isoformat() if self.token_expires_at else None,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
             'user_id': self.user_id,
+        }
+
+
+class UptimeMonitor(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    public_id = db.Column(db.String(36), unique=True, nullable=False, default=lambda: str(uuid.uuid4()), index=True)
+    name = db.Column(db.String(120), nullable=False)
+    target_url = db.Column(db.String(500), nullable=False)
+    status = db.Column(db.String(30), nullable=False, default='pending', index=True)
+    check_interval_minutes = db.Column(db.Integer, nullable=False, default=5)
+    is_enabled = db.Column(db.Boolean, nullable=False, default=True, index=True)
+    last_checked_at = db.Column(db.DateTime)
+    last_up_at = db.Column(db.DateTime)
+    last_response_time_ms = db.Column(db.Integer)
+    consecutive_failures = db.Column(db.Integer, nullable=False, default=0)
+    created_at = db.Column(db.DateTime, default=utc_now, nullable=False)
+    updated_at = db.Column(db.DateTime, default=utc_now, onupdate=utc_now, nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    user = db.relationship('User', backref=db.backref('uptime_monitors', lazy=True))
+
+    def to_dict(self):
+        return {
+            'id': self.public_id,
+            'name': self.name,
+            'target_url': self.target_url,
+            'status': self.status,
+            'check_interval_minutes': self.check_interval_minutes,
+            'is_enabled': self.is_enabled,
+            'last_checked_at': self.last_checked_at.isoformat() if self.last_checked_at else None,
+            'last_up_at': self.last_up_at.isoformat() if self.last_up_at else None,
+            'last_response_time_ms': self.last_response_time_ms,
+            'consecutive_failures': self.consecutive_failures,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+            'user_id': self.user_id,
+        }
+
+
+class UptimeCheck(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    public_id = db.Column(db.String(36), unique=True, nullable=False, default=lambda: str(uuid.uuid4()), index=True)
+    status = db.Column(db.String(20), nullable=False, index=True)
+    status_code = db.Column(db.Integer)
+    response_time_ms = db.Column(db.Integer)
+    error_message = db.Column(db.Text)
+    checked_at = db.Column(db.DateTime, default=utc_now, nullable=False, index=True)
+    monitor_id = db.Column(db.Integer, db.ForeignKey('uptime_monitor.id'), nullable=False, index=True)
+    monitor = db.relationship(
+        'UptimeMonitor',
+        backref=db.backref('checks', lazy=True, cascade='all, delete-orphan', order_by='desc(UptimeCheck.checked_at)'),
+    )
+
+    def to_dict(self):
+        return {
+            'id': self.public_id,
+            'status': self.status,
+            'status_code': self.status_code,
+            'response_time_ms': self.response_time_ms,
+            'error_message': self.error_message,
+            'checked_at': self.checked_at.isoformat() if self.checked_at else None,
+            'monitor_id': self.monitor.public_id if self.monitor else None,
         }

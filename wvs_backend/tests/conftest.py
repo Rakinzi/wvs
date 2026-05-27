@@ -70,6 +70,21 @@ def app(tmp_path: Path):
         UX_SCAN_RATE_LIMIT = "10/h"
         SCAN_RESULT_RETENTION_DAYS = 90
         SCREENSHOT_RETENTION_DAYS = 30
+        UPTIME_MONITOR_ENABLED = True
+        UPTIME_MONITOR_DEFAULT_INTERVAL_MINUTES = 5
+        UPTIME_MONITOR_REQUEST_TIMEOUT_SECONDS = 5
+        UPTIME_MONITOR_HISTORY_LIMIT = 50
+        MALWARE_SCAN_ENABLED = True
+        MALWARE_MAX_ARTIFACTS = 3
+        MALWARE_MAX_DOWNLOAD_BYTES = 2 * 1024 * 1024
+        MALWARE_DOWNLOAD_TIMEOUT_SECONDS = 5
+        MALWARE_TEMP_DIR = str(reports_dir / "malware")
+        MALWARE_ALLOWED_EXTENSIONS = ".exe,.dll,.docm,.js,.zip,.pdf"
+        CLAMAV_ENABLED = False
+        CLAMAV_NETWORK_SOCKET = None
+        CLAMAV_UNIX_SOCKET = None
+        YARA_ENABLED = True
+        YARA_RULES_DIR = str(Path(__file__).resolve().parents[1] / "app" / "yara_rules")
 
         SMTP_HOST = "localhost"
         SMTP_PORT = 25
@@ -87,7 +102,7 @@ def app(tmp_path: Path):
         CELERY_TASK_TIME_LIMIT = 1800
         CELERY_TIMEZONE = "UTC"
         BROKER_CONNECTION_RETRY_ON_STARTUP = False
-        CELERY_IMPORTS = ("app.tasks.ssl_checks", "app.tasks.scan_jobs")
+        CELERY_IMPORTS = ("app.tasks.ssl_checks", "app.tasks.scan_jobs", "app.tasks.uptime")
         CELERY_BEAT_SCHEDULE = {}
 
         DNSBL_ENABLED = True

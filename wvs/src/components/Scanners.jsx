@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   AlertTriangle, Lock, Database,
   RefreshCw, CheckCircle, Search,
@@ -10,6 +10,16 @@ import { useVerifiedTargetsData } from '../hooks/useVerifiedTargetsData';
 import { apiJson } from '../lib/api';
 import Spinner from './Spinner';
 
+const V = {
+  primary: 'var(--color-primary)',
+  secure:  'var(--color-secure)',
+  warn:    'var(--color-warn)',
+  danger:  'var(--color-danger)',
+  info:    'var(--color-info)',
+  purple:  '#A78BFA',
+};
+
+/* Keep T as alias for backwards compat with scan result panels */
 const T = {
   bg:          'var(--color-bg)',
   surface:     'var(--color-surface)',
@@ -20,19 +30,14 @@ const T = {
   text:        'var(--color-text)',
   muted:       'var(--color-text-muted)',
   dim:         'var(--color-text-dim)',
-  primary:     'var(--color-primary)',
-  secure:      'var(--color-secure)',
-  warn:        'var(--color-warn)',
-  danger:      'var(--color-danger)',
-  info:        'var(--color-info)',
-  purple:      '#A78BFA',
+  ...V,
 };
 
 const SCANNERS = [
   {
     id: 'full',
     icon: Zap,
-    color: T.primary,
+    color: V.primary,
     title: 'Full Async Scan',
     subtitle: 'All checks · Async',
     desc: 'Runs SQLi, SSL/TLS, HTTP headers, malicious URL analysis, and optional ZAP alerts in a background job.',
@@ -41,7 +46,7 @@ const SCANNERS = [
   {
     id: 'sql',
     icon: Database,
-    color: T.danger,
+    color: V.danger,
     title: 'SQL Injection',
     subtitle: 'Sync · Form params',
     desc: 'Tests URL parameters and form inputs for SQL injection vulnerabilities using multiple payload types.',
@@ -49,7 +54,7 @@ const SCANNERS = [
   {
     id: 'ssl',
     icon: Lock,
-    color: T.secure,
+    color: V.secure,
     title: 'SSL / TLS',
     subtitle: 'Sync · Certificate',
     desc: 'Checks certificate validity, expiry, issuer trust, self-signing, and protocol version.',
@@ -57,7 +62,7 @@ const SCANNERS = [
   {
     id: 'wordpress',
     icon: Globe,
-    color: T.warn,
+    color: V.warn,
     title: 'WordPress',
     subtitle: 'Sync · CMS hardening',
     desc: 'Detects core version, exposed plugins, XML-RPC, REST user enumeration, and hardening issues.',
@@ -65,7 +70,7 @@ const SCANNERS = [
   {
     id: 'xss',
     icon: Code2,
-    color: T.purple,
+    color: V.purple,
     title: 'XSS Scanner',
     subtitle: 'Sync · Reflection & forms',
     desc: 'Tests URL parameters and HTML forms against 36 PortSwigger payloads including SVG, animation events, and WAF bypass vectors.',
@@ -74,7 +79,7 @@ const SCANNERS = [
   {
     id: 'tech',
     icon: Layers,
-    color: T.info,
+    color: V.info,
     title: 'Tech Fingerprint',
     subtitle: 'Sync · Stack detection',
     desc: 'Identifies the full technology stack — CMS, frameworks, servers, CDNs — and flags exposed version banners.',
@@ -89,14 +94,22 @@ const SCANNERS = [
     desc: 'Probes ~100 sensitive paths across all stacks — .env files, Git repos, SQL dumps, Spring Boot actuators, AWS credentials, CI configs, and more.',
     badge: 'New',
   },
+  {
+    id: 'malware',
+    icon: AlertTriangle,
+    color: '#DC2626',
+    title: 'Malware Analysis',
+    subtitle: 'Sync · Downloads',
+    desc: 'Discovers same-origin downloadable artifacts and analyzes them with local malware tooling such as ClamAV, YARA, PE metadata, and Office macro inspection.',
+    badge: 'New',
+  },
 ];
 
 const VulnBadge = ({ vulnerable, label }) => (
-  <span
-    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold"
+  <span className="badge"
     style={vulnerable
-      ? { background: '#F43F5E15', color: T.danger, border: `1px solid #F43F5E30` }
-      : { background: '#10B98115', color: T.secure, border: `1px solid #10B98130` }}
+      ? { background: 'var(--color-danger-dim)', color: 'var(--color-danger)', border: '1px solid rgba(239,68,68,0.2)' }
+      : { background: 'var(--color-secure-dim)', color: 'var(--color-secure)', border: '1px solid rgba(34,197,94,0.2)' }}
   >
     {vulnerable ? <AlertTriangle size={10} /> : <CheckCircle size={10} />}
     {label}
@@ -114,12 +127,12 @@ const FindingItem = ({ color, bg, icon, title, meta }) => (
 );
 
 const Recs = ({ items }) => (
-  <div className="rounded-lg p-3" style={{ background: `${T.info}08`, border: `1px solid ${T.info}20` }}>
-    <p className="text-xs font-semibold mb-2" style={{ color: T.info }}>Recommendations</p>
+  <div className="rounded-lg p-3" style={{ background: 'var(--color-info-dim)', border: '1px solid rgba(56,189,248,0.2)' }}>
+    <p className="text-xs font-semibold mb-2" style={{ color: 'var(--color-info)' }}>Recommendations</p>
     <ul className="flex flex-col gap-1">
       {items.map((r, i) => (
-        <li key={i} className="text-xs flex items-start gap-1.5" style={{ color: T.muted }}>
-          <span style={{ color: T.info }}>›</span> {r}
+        <li key={i} className="text-xs flex items-start gap-1.5" style={{ color: 'var(--color-text-muted)' }}>
+          <span style={{ color: 'var(--color-info)' }}>›</span> {r}
         </li>
       ))}
     </ul>
@@ -140,115 +153,79 @@ const ProgressBar = ({ value, color }) => (
 
 const StatusBadge = ({ status }) => {
   const styles = {
-    verified: { background: '#10B98115', color: T.secure, border: '1px solid #10B98130' },
-    pending: { background: '#F59E0B15', color: T.warn, border: '1px solid #F59E0B30' },
-    failed: { background: '#F43F5E15', color: T.danger, border: '1px solid #F43F5E30' },
-    expired: { background: '#F43F5E15', color: T.danger, border: '1px solid #F43F5E30' },
+    verified: { background: 'var(--color-secure-dim)', color: 'var(--color-secure)', border: '1px solid rgba(34,197,94,0.2)' },
+    pending:  { background: 'var(--color-warn-dim)',   color: 'var(--color-warn)',   border: '1px solid rgba(245,158,11,0.2)' },
+    failed:   { background: 'var(--color-danger-dim)', color: 'var(--color-danger)', border: '1px solid rgba(239,68,68,0.2)' },
+    expired:  { background: 'var(--color-danger-dim)', color: 'var(--color-danger)', border: '1px solid rgba(239,68,68,0.2)' },
   };
-  const style = styles[status] || { background: `${T.info}15`, color: T.info, border: `1px solid ${T.info}30` };
+  const style = styles[status] || { background: 'var(--color-info-dim)', color: 'var(--color-info)', border: '1px solid rgba(56,189,248,0.2)' };
   return (
-    <span className="px-2 py-0.5 rounded text-xs font-semibold" style={style}>
-      {status}
-    </span>
+    <span className="badge" style={style}>{status}</span>
   );
 };
 
 /* Scan URL input + button */
-const ScanInput = ({ accentColor, url, setUrl, onScan, isScanning }) => (
+const ScanInput = ({ url, setUrl, onScan, isScanning }) => (
   <div className="flex gap-2">
     <div className="relative flex-1">
-      <div
-        className="absolute left-3 top-1/2 -translate-y-1/2 w-1.5 h-1.5 rounded-full"
-        style={{ background: isScanning ? T.warn : accentColor }}
-      />
-      <input
-        type="url"
-        value={url}
+      <div className="absolute left-3 top-1/2 -translate-y-1/2 w-1.5 h-1.5 rounded-full"
+        style={{ background: isScanning ? 'var(--color-warn)' : 'var(--color-primary)' }} />
+      <input type="url" value={url}
         onChange={(e) => setUrl(e.target.value)}
         onKeyDown={(e) => e.key === 'Enter' && !isScanning && onScan()}
         placeholder="https://target.example.com"
-        className="w-full pl-7 pr-4 py-2.5 rounded-lg text-sm outline-none transition-all duration-150"
-        style={{
-          background: T.surface,
-          border: `1px solid ${T.border}`,
-          color: T.text,
-          fontFamily: 'IBM Plex Mono, monospace',
-          fontSize: '12px',
-        }}
-      />
+        className="input pl-7 font-mono" style={{ fontSize: '13px' }} />
     </div>
-    <button
-      onClick={onScan}
-      disabled={isScanning}
-      className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold transition-all duration-150 cursor-pointer whitespace-nowrap"
-      style={{
-        background: isScanning ? T.dim : accentColor,
-        color: '#fff',
-        opacity: isScanning ? 0.7 : 1,
-      }}
-    >
+    <button onClick={onScan} disabled={isScanning}
+      className="btn-primary whitespace-nowrap" style={{ opacity: isScanning ? 0.75 : 1 }}>
       {isScanning ? <><Spinner size="sm" /> Scanning…</> : <><Search size={13} /> Scan</>}
     </button>
   </div>
 );
 
 /* Full scan job status */
-const FullScanStatus = ({ job, navigateTo, onPoll }) => {
-  const timerRef = useRef(null);
-  const activeRef = useRef(false);
-
-  useEffect(() => {
-    const shouldPoll = job && ['queued', 'running'].includes(job.status);
-    if (shouldPoll && !activeRef.current) {
-      activeRef.current = true;
-      timerRef.current = setInterval(onPoll, 3000);
-    } else if (!shouldPoll && activeRef.current) {
-      activeRef.current = false;
-      clearInterval(timerRef.current);
-    }
-    return () => {
-      activeRef.current = false;
-      clearInterval(timerRef.current);
-    };
-  }, [job?.status, onPoll]);
-
+const FullScanStatus = ({ job, navigateTo }) => {
   if (!job) return null;
 
   const statusColor = job.status === 'completed' ? T.secure : job.status === 'failed' ? T.danger : T.warn;
   const fmt = (d) => new Date(d).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' });
   const progress = job.progress || null;
   const progressPercent = progress?.percent ?? (job.status === 'completed' ? 100 : 0);
+  const queuedForMs = job.created_at ? Date.now() - new Date(job.created_at).getTime() : 0;
+  const queueName = job.scan_type === 'product_readiness' || job.scan_type === 'full_launch_audit'
+    ? 'ux_scans'
+    : 'security_scans';
+  const queueWarning = job.status === 'queued' && queuedForMs > 15000;
   const progressMessage =
     progress?.message
     || (job.status === 'queued' ? 'Waiting for worker to pick up the job' : null);
   const logs = Array.isArray(progress?.logs) ? progress.logs.slice(-6).reverse() : [];
 
   return (
-    <div className="rounded-xl overflow-hidden mt-4" style={{ border: `1px solid ${T.border}` }}>
-      <div className="flex items-center justify-between px-4 py-3" style={{ background: T.surface }}>
-        <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: T.muted, fontFamily: 'IBM Plex Mono, monospace' }}>Job Status</p>
-        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-semibold"
-          style={{ background: `${statusColor}15`, color: statusColor }}>
+    <div className="rounded-xl overflow-hidden mt-4" style={{ border: '1px solid var(--color-border)' }}>
+      <div className="flex items-center justify-between px-4 py-3" style={{ background: 'var(--color-surface)' }}>
+        <p className="section-label">Job Status</p>
+        <span className="badge" style={{ background: `${statusColor}15`, color: statusColor }}>
           {['queued','running'].includes(job.status) && <Spinner size="sm" style={{ width: 10, height: 10 }} />}
           {job.status}
         </span>
       </div>
       <div className="p-4 flex flex-col gap-2">
-        <p className="text-xs" style={{ color: T.muted, fontFamily: 'IBM Plex Mono, monospace' }}>{job.url}</p>
-        <p className="text-xs" style={{ color: T.dim }}>{job.created_at ? fmt(job.created_at) : 'Pending…'}</p>
+        <p className="text-xs font-mono" style={{ color: 'var(--color-text-muted)' }}>{job.url}</p>
+        <p className="text-xs" style={{ color: 'var(--color-text-dim)' }}>{job.created_at ? fmt(job.created_at) : 'Pending…'}</p>
         {!['failed'].includes(job.status) && (
           <>
             <div className="mt-1 flex items-center justify-between gap-3">
-              <p className="text-xs font-medium" style={{ color: T.text }}>
+              <p className="text-xs font-medium" style={{ color: 'var(--color-text)' }}>
                 {progressMessage || 'Preparing status…'}
               </p>
-              <span className="text-xs" style={{ color: statusColor, fontFamily: 'IBM Plex Mono, monospace' }}>
+              <span className="text-xs font-mono" style={{ color: statusColor }}>
                 {progressPercent}%
               </span>
             </div>
             <ProgressBar value={progressPercent} color={statusColor} />
             {progress?.current_step_label && (
-              <p className="text-xs" style={{ color: T.dim }}>
+              <p className="text-xs" style={{ color: 'var(--color-text-dim)' }}>
                 Current step: {progress.current_step_label}
                 {progress?.step_index && progress?.total_steps
                   ? ` (${progress.step_index}/${progress.total_steps})`
@@ -257,19 +234,28 @@ const FullScanStatus = ({ job, navigateTo, onPoll }) => {
             )}
           </>
         )}
-        {job.status === 'failed' && <p className="text-xs mt-1" style={{ color: T.danger }}>{job.error_message || 'Scan failed'}</p>}
-        {logs.length > 0 && (
-          <div className="mt-2 rounded-lg p-3 flex flex-col gap-2" style={{ background: T.surface, border: `1px solid ${T.border}` }}>
-            <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: T.muted, fontFamily: 'IBM Plex Mono, monospace' }}>
-              Activity
+        {job.status === 'failed' && <p className="text-xs mt-1" style={{ color: 'var(--color-danger)' }}>{job.error_message || 'Scan failed'}</p>}
+        {queueWarning && (
+          <div className="mt-2 rounded-lg p-3" style={{ background: 'var(--color-warn-dim)', border: '1px solid rgba(245,158,11,0.2)' }}>
+            <p className="text-xs font-semibold" style={{ color: 'var(--color-warn)' }}>
+              This job is still queued.
             </p>
+            <p className="text-xs mt-1" style={{ color: 'var(--color-text-muted)' }}>
+              The backend worker is probably not consuming the <span className="font-mono" style={{ color: 'var(--color-text)' }}>{queueName}</span> queue yet.
+            </p>
+          </div>
+        )}
+        {logs.length > 0 && (
+          <div className="mt-2 rounded-lg p-3 flex flex-col gap-2"
+            style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)' }}>
+            <p className="section-label">Activity</p>
             {logs.map((entry, index) => (
               <div key={`${entry.timestamp || index}-${entry.message || index}`} className="flex items-start gap-2">
                 <span className="mt-1 w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: statusColor }} />
                 <div className="min-w-0">
-                  <p className="text-xs" style={{ color: T.text }}>{entry.message}</p>
+                  <p className="text-xs" style={{ color: 'var(--color-text)' }}>{entry.message}</p>
                   {entry.timestamp && (
-                    <p className="text-xs" style={{ color: T.dim, fontFamily: 'IBM Plex Mono, monospace' }}>
+                    <p className="text-xs font-mono" style={{ color: 'var(--color-text-dim)' }}>
                       {new Date(entry.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
                     </p>
                   )}
@@ -279,15 +265,12 @@ const FullScanStatus = ({ job, navigateTo, onPoll }) => {
           </div>
         )}
         {job.status === 'completed' && job.result_id ? (
-          <button
-            onClick={() => navigateTo('report', job.result_id)}
-            className="mt-1 flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold cursor-pointer"
-            style={{ background: T.primary, color: '#fff' }}
-          >
+          <button onClick={() => navigateTo('report', job.result_id)}
+            className="btn-primary mt-1 justify-center">
             View Report <ArrowRight size={13} />
           </button>
         ) : !['completed','failed'].includes(job.status) && (
-          <p className="text-xs mt-1" style={{ color: T.dim }}>Processing in background — auto-refreshing every 3s</p>
+          <p className="text-xs mt-1" style={{ color: 'var(--color-text-dim)' }}>Processing in background — auto-refreshing every 3s</p>
         )}
       </div>
     </div>
@@ -309,14 +292,14 @@ const Scanners = ({ navigateTo }) => {
     fullScanEnableAiReview, setFullScanEnableAiReview, sqlScanUrl, setSqlScanUrl,
     sslScanUrl, setSslScanUrl, wordpressScanUrl, setWordpressScanUrl,
     xssScanUrl, setXssScanUrl, techScanUrl, setTechScanUrl,
-    exposureScanUrl, setExposureScanUrl,
+    exposureScanUrl, setExposureScanUrl, malwareScanUrl, setMalwareScanUrl,
     isFullScanSubmitting, isSqlScanning, isSslScanning, isWordpressScanning,
-    isXssScanning, isTechScanning, isExposureScanning,
+    isXssScanning, isTechScanning, isExposureScanning, isMalwareScanning,
     fullScanJob, setFullScanJob, sqlScanResult, sslScanResult, wordpressScanResult,
-    xssScanResult, techScanResult, exposureScanResult,
-    fullScanError, sqlError, sslError, wordpressError, xssError, techError, exposureError,
+    xssScanResult, techScanResult, exposureScanResult, malwareScanResult,
+    fullScanError, sqlError, sslError, wordpressError, xssError, techError, exposureError, malwareError,
     handleFullScan, handleSqlScan, handleSslScan, handleWordpressScan,
-    handleXssScan, handleTechScan, handleExposureScan,
+    handleXssScan, handleTechScan, handleExposureScan, handleMalwareScan,
   } = useScansData();
   const {
     targets,
@@ -332,14 +315,6 @@ const Scanners = ({ navigateTo }) => {
 
   const fmt = (d) => new Date(d).toLocaleDateString() + ' ' +
     new Date(d).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-
-  const pollFullScanJob = useCallback(async () => {
-    if (!fullScanJob) return;
-    try {
-      const { data } = await apiJson(`/scan/jobs/${fullScanJob.id}`, { auth: true });
-      if (data.status === 'success') setFullScanJob(data.job);
-    } catch { /* ignore */ }
-  }, [fullScanJob, setFullScanJob]);
 
   const active = SCANNERS.find(s => s.id === activeId);
 
@@ -379,54 +354,46 @@ const Scanners = ({ navigateTo }) => {
   };
 
   return (
-    <div className="min-h-screen" style={{ background: T.bg }}>
+    <div className="min-h-screen" style={{ background: 'var(--color-bg)' }}>
 
-      {/* ── Page header ── */}
-      <div
-        className="sticky top-0 z-10 px-6 lg:px-10 py-4"
-        style={{ background: `${T.surface}E8`, borderBottom: `1px solid ${T.border}`, backdropFilter: 'blur(12px)' }}
-      >
-        <h1 className="text-lg font-semibold tracking-tight" style={{ color: T.text }}>Security Scanners</h1>
-        <p className="text-xs mt-0.5" style={{ color: T.dim }}>Run targeted vulnerability checks on any URL</p>
+      {/* Page header */}
+      <div className="page-header px-6 lg:px-10 py-4">
+        <h1 className="text-base font-bold" style={{ color: 'var(--color-text)', letterSpacing: '-0.025em' }}>Security Scanners</h1>
+        <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-dim)' }}>Run targeted vulnerability checks on any URL</p>
       </div>
 
-      <div className="px-6 lg:px-10 py-8">
+      <div className="px-6 lg:px-10 py-6">
         <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-6 items-start">
 
-          {/* ── Left: scanner picker ── */}
-          <div className="lg:sticky lg:top-24 flex flex-col gap-2">
+          {/* Left: scanner picker */}
+          <div className="lg:sticky lg:top-20 flex flex-col gap-1.5">
             {SCANNERS.map((s) => {
               const Icon = s.icon;
-              const active = s.id === activeId;
+              const isActive = s.id === activeId;
               return (
-                <button
-                  key={s.id}
-                  onClick={() => setActiveId(s.id)}
-                  className="flex items-center gap-3 p-4 rounded-xl text-left transition-all duration-150 cursor-pointer w-full"
+                <button key={s.id} onClick={() => setActiveId(s.id)}
+                  className="flex items-center gap-3 p-3.5 rounded-xl text-left transition-all duration-150 cursor-pointer w-full"
                   style={{
-                    background: active ? T.elev : T.card,
-                    border: `1px solid ${active ? s.color + '50' : T.border}`,
-                  }}
-                >
-                  <div
-                    className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0"
-                    style={{ background: active ? `${s.color}20` : `${s.color}10` }}
-                  >
-                    <Icon size={16} style={{ color: s.color }} />
+                    background: isActive ? 'var(--color-elevated)' : 'var(--color-card)',
+                    border: `1px solid ${isActive ? s.color + '40' : 'var(--color-border)'}`,
+                  }}>
+                  <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+                    style={{ background: `${s.color}${isActive ? '20' : '12'}` }}>
+                    <Icon size={14} style={{ color: s.color }} />
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <p className="text-sm font-semibold truncate" style={{ color: active ? T.text : T.muted }}>{s.title}</p>
+                      <p className="text-xs font-semibold truncate" style={{ color: isActive ? 'var(--color-text)' : 'var(--color-text-muted)' }}>{s.title}</p>
                       {s.badge && (
-                        <span className="text-xs px-1.5 py-0.5 rounded font-medium flex-shrink-0"
-                          style={{ background: `${T.primary}20`, color: T.primary }}>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded font-semibold flex-shrink-0"
+                          style={{ background: 'var(--color-primary-dim)', color: 'var(--color-primary)' }}>
                           {s.badge}
                         </span>
                       )}
                     </div>
-                    <p className="text-xs mt-0.5" style={{ color: T.dim, fontFamily: 'IBM Plex Mono, monospace' }}>{s.subtitle}</p>
+                    <p className="text-[11px] mt-0.5 font-mono" style={{ color: 'var(--color-text-dim)' }}>{s.subtitle}</p>
                   </div>
-                  <ChevronRight size={14} style={{ color: active ? s.color : T.dim, flexShrink: 0 }} />
+                  <ChevronRight size={12} style={{ color: isActive ? s.color : 'var(--color-text-dim)', flexShrink: 0 }} />
                 </button>
               );
             })}
@@ -436,138 +403,103 @@ const Scanners = ({ navigateTo }) => {
           <div className="flex flex-col gap-5">
 
             {/* Scanner description header */}
-            <div
-              className="rounded-xl p-5 flex items-start gap-4"
-              style={{ background: T.card, border: `1px solid ${T.border}` }}
-            >
-              <div
-                className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0"
-                style={{ background: `${active.color}18`, border: `1px solid ${active.color}30` }}
-              >
+            <div className="card p-5 flex items-start gap-4">
+              <div className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0"
+                style={{ background: `${active.color}18`, border: `1px solid ${active.color}30` }}>
                 <active.icon size={22} style={{ color: active.color }} />
               </div>
               <div className="flex-1">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <h2 className="text-base font-bold" style={{ color: T.text }}>{active.title}</h2>
+                  <h2 className="text-base font-bold" style={{ color: 'var(--color-text)' }}>{active.title}</h2>
                   {active.badge && (
-                    <span className="text-xs px-2 py-0.5 rounded font-medium"
-                      style={{ background: `${T.primary}20`, color: T.primary }}>
+                    <span className="badge" style={{ background: 'var(--color-primary-dim)', color: 'var(--color-primary)' }}>
                       {active.badge}
                     </span>
                   )}
                 </div>
-                <p className="text-xs mt-1 leading-relaxed" style={{ color: T.muted }}>{active.desc}</p>
+                <p className="text-xs mt-1 leading-relaxed" style={{ color: 'var(--color-text-muted)' }}>{active.desc}</p>
               </div>
             </div>
 
             {/* ── FULL SCAN ── */}
             {activeId === 'full' && (
-              <div className="rounded-xl overflow-hidden" style={{ background: T.card, border: `1px solid ${T.border}` }}>
-                <div className="px-5 py-4" style={{ borderBottom: `1px solid ${T.border}` }}>
-                  <p className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: T.muted, fontFamily: 'IBM Plex Mono, monospace' }}>Target URL</p>
-                  <ScanInput accentColor={T.primary} url={fullScanUrl} setUrl={setFullScanUrl} onScan={handleFullScan} isScanning={isFullScanSubmitting} />
+              <div className="card overflow-hidden">
+                <div className="px-5 py-4" style={{ borderBottom: '1px solid var(--color-border)' }}>
+                  <p className="section-label mb-3">Target URL</p>
+                  <ScanInput url={fullScanUrl} setUrl={setFullScanUrl} onScan={handleFullScan} isScanning={isFullScanSubmitting} />
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
-                    <label className="flex flex-col gap-1">
-                      <span className="text-xs" style={{ color: T.dim }}>Scan Profile</span>
-                      <select
-                        value={fullScanProfile}
-                        onChange={(e) => setFullScanProfile(e.target.value)}
-                        className="px-3 py-2 rounded-lg text-sm"
-                        style={{ background: T.surface, border: `1px solid ${T.border}`, color: T.text }}
-                      >
+                    <label className="flex flex-col gap-1.5">
+                      <span className="text-xs font-medium" style={{ color: 'var(--color-text-muted)' }}>Scan Profile</span>
+                      <select value={fullScanProfile} onChange={(e) => setFullScanProfile(e.target.value)} className="input text-sm cursor-pointer">
                         <option value="security_only">Security Scan</option>
                         <option value="product_readiness">Product Readiness Scan</option>
                         <option value="full_launch_audit">Full Launch Audit</option>
                       </select>
                     </label>
-                    <label className="flex flex-col gap-1">
-                      <span className="text-xs" style={{ color: T.dim }}>Verified Target ID</span>
-                      <input
-                        value={fullScanVerifiedTargetId}
-                        onChange={(e) => setFullScanVerifiedTargetId(e.target.value)}
+                    <label className="flex flex-col gap-1.5">
+                      <span className="text-xs font-medium" style={{ color: 'var(--color-text-muted)' }}>Verified Target ID</span>
+                      <input value={fullScanVerifiedTargetId} onChange={(e) => setFullScanVerifiedTargetId(e.target.value)}
                         placeholder="Required when verified targets are enforced"
-                        className="px-3 py-2 rounded-lg text-sm"
-                        style={{ background: T.surface, border: `1px solid ${T.border}`, color: T.text, fontFamily: 'IBM Plex Mono, monospace' }}
-                      />
+                        className="input text-sm font-mono" />
                     </label>
                   </div>
                   {fullScanProfile !== 'security_only' && (
                     <div className="mt-3 flex flex-col gap-3">
-                      <label className="flex flex-col gap-1">
-                        <span className="text-xs" style={{ color: T.dim }}>Page Paths</span>
-                        <textarea
-                          value={fullScanPagePaths}
-                          onChange={(e) => setFullScanPagePaths(e.target.value)}
-                          rows={4}
-                          placeholder={"/\n/signup\n/pricing"}
-                          className="px-3 py-2 rounded-lg text-sm"
-                          style={{ background: T.surface, border: `1px solid ${T.border}`, color: T.text, fontFamily: 'IBM Plex Mono, monospace' }}
-                        />
+                      <label className="flex flex-col gap-1.5">
+                        <span className="text-xs font-medium" style={{ color: 'var(--color-text-muted)' }}>Page Paths</span>
+                        <textarea value={fullScanPagePaths} onChange={(e) => setFullScanPagePaths(e.target.value)}
+                          rows={4} placeholder={"/\n/signup\n/pricing"}
+                          className="input text-sm font-mono" style={{ resize: 'vertical' }} />
                       </label>
-                      <label className="flex items-center gap-2 text-xs" style={{ color: T.muted }}>
-                        <input
-                          type="checkbox"
-                          checked={fullScanEnableAiReview}
-                          onChange={(e) => setFullScanEnableAiReview(e.target.checked)}
-                        />
+                      <label className="flex items-center gap-2 text-xs cursor-pointer" style={{ color: 'var(--color-text-muted)' }}>
+                        <input type="checkbox" checked={fullScanEnableAiReview} onChange={(e) => setFullScanEnableAiReview(e.target.checked)} />
                         Enable AI visual review when configured
                       </label>
-                      <div className="rounded-lg p-3" style={{ background: T.surface, border: `1px solid ${T.border}` }}>
+                      <div className="rounded-xl p-4" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border-subtle)' }}>
                         <div className="flex items-center gap-2 mb-3">
-                          <Shield size={14} style={{ color: T.primary }} />
-                          <p className="text-xs font-semibold" style={{ color: T.text }}>Verified Target</p>
+                          <Shield size={14} style={{ color: 'var(--color-primary)' }} />
+                          <p className="text-xs font-semibold" style={{ color: 'var(--color-text)' }}>Verified Target</p>
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                          <input
-                            value={newTargetUrl}
-                            onChange={(e) => setNewTargetUrl(e.target.value)}
-                            placeholder="https://example.com"
-                            className="px-3 py-2 rounded-lg text-sm"
-                            style={{ background: T.card, border: `1px solid ${T.border}`, color: T.text }}
-                          />
-                          <select
-                            value={newTargetMethod}
-                            onChange={(e) => setNewTargetMethod(e.target.value)}
-                            className="px-3 py-2 rounded-lg text-sm"
-                            style={{ background: T.card, border: `1px solid ${T.border}`, color: T.text }}
-                          >
+                          <input value={newTargetUrl} onChange={(e) => setNewTargetUrl(e.target.value)}
+                            placeholder="https://example.com" className="input text-sm" />
+                          <select value={newTargetMethod} onChange={(e) => setNewTargetMethod(e.target.value)}
+                            className="input text-sm cursor-pointer">
                             <option value="meta_tag">Meta Tag</option>
                             <option value="well_known_file">Well-Known File</option>
                           </select>
                         </div>
                         <div className="flex flex-wrap gap-2 mt-3">
-                          <button onClick={handleCreateTarget} className="px-3 py-2 rounded-lg text-xs font-semibold cursor-pointer" style={{ background: T.primary, color: '#fff' }}>
+                          <button onClick={handleCreateTarget} className="btn-primary text-xs">
                             Create Verification Token
                           </button>
-                          <button onClick={handleVerifyTarget} disabled={!fullScanVerifiedTargetId || !verificationToken} className="px-3 py-2 rounded-lg text-xs font-semibold cursor-pointer disabled:opacity-60" style={{ background: T.secure, color: '#fff' }}>
+                          <button onClick={handleVerifyTarget} disabled={!fullScanVerifiedTargetId || !verificationToken}
+                            className="btn-secondary text-xs disabled:opacity-50">
                             Verify Ownership
                           </button>
-                          <button onClick={handleRegenerate} disabled={!fullScanVerifiedTargetId} className="px-3 py-2 rounded-lg text-xs font-semibold cursor-pointer disabled:opacity-60" style={{ background: T.warn, color: '#fff' }}>
-                            <RotateCcw size={11} className="inline mr-1" /> Regenerate
+                          <button onClick={handleRegenerate} disabled={!fullScanVerifiedTargetId}
+                            className="btn-secondary text-xs disabled:opacity-50">
+                            <RotateCcw size={11} /> Regenerate
                           </button>
                         </div>
                         {verificationToken && (
-                          <div className="mt-3 rounded-lg p-3" style={{ background: T.card, border: `1px solid ${T.border}` }}>
-                            <p className="text-xs mb-1" style={{ color: T.dim }}>Verification Token</p>
-                            <p className="text-xs font-mono break-all" style={{ color: T.text }}>{verificationToken}</p>
+                          <div className="mt-3 rounded-lg p-3" style={{ background: 'var(--color-card)', border: '1px solid var(--color-border)' }}>
+                            <p className="section-label mb-1">Verification Token</p>
+                            <p className="text-xs font-mono break-all mt-1" style={{ color: 'var(--color-text)' }}>{verificationToken}</p>
                             {verificationInstructions?.tag && (
-                              <pre className="mt-2 text-xs whitespace-pre-wrap break-words" style={{ color: T.info }}>{verificationInstructions.tag}</pre>
+                              <pre className="mt-2 text-xs whitespace-pre-wrap break-words" style={{ color: 'var(--color-info)' }}>{verificationInstructions.tag}</pre>
                             )}
                             {verificationInstructions?.path && (
-                              <p className="mt-2 text-xs" style={{ color: T.muted }}>
-                                Upload a file to <span style={{ color: T.text, fontFamily: 'IBM Plex Mono, monospace' }}>{verificationInstructions.path}</span> containing the token above.
+                              <p className="mt-2 text-xs" style={{ color: 'var(--color-text-muted)' }}>
+                                Upload a file to <span className="font-mono" style={{ color: 'var(--color-text)' }}>{verificationInstructions.path}</span> containing the token above.
                               </p>
                             )}
                           </div>
                         )}
                         <div className="mt-3">
-                          <label className="text-xs" style={{ color: T.dim }}>Select Existing Verified Target</label>
-                          <select
-                            value={fullScanVerifiedTargetId}
-                            onChange={(e) => setFullScanVerifiedTargetId(e.target.value)}
-                            className="mt-1 w-full px-3 py-2 rounded-lg text-sm"
-                            style={{ background: T.card, border: `1px solid ${T.border}`, color: T.text }}
-                          >
+                          <label className="text-xs font-medium" style={{ color: 'var(--color-text-muted)' }}>Select Existing Verified Target</label>
+                          <select value={fullScanVerifiedTargetId} onChange={(e) => setFullScanVerifiedTargetId(e.target.value)}
+                            className="input text-sm cursor-pointer mt-1.5">
                             <option value="">None selected</option>
                             {targets.map((target) => (
                               <option key={target.id} value={target.id}>
@@ -577,18 +509,20 @@ const Scanners = ({ navigateTo }) => {
                           </select>
                         </div>
                         {targetsLoading ? (
-                          <p className="text-xs mt-3" style={{ color: T.dim }}>Loading targets…</p>
+                          <p className="text-xs mt-3" style={{ color: 'var(--color-text-dim)' }}>Loading targets…</p>
                         ) : targets.length > 0 && (
                           <div className="mt-3 flex flex-col gap-2">
                             {targets.slice(0, 5).map((target) => (
-                              <div key={target.id} className="flex items-center justify-between gap-3 p-2 rounded-lg" style={{ background: T.card, border: `1px solid ${T.border}` }}>
+                              <div key={target.id} className="flex items-center justify-between gap-3 p-2.5 rounded-lg"
+                                style={{ background: 'var(--color-card)', border: '1px solid var(--color-border)' }}>
                                 <div className="min-w-0">
-                                  <p className="text-xs font-mono truncate" style={{ color: T.text }}>{target.normalized_domain}</p>
-                                  <p className="text-xs truncate" style={{ color: T.dim }}>{target.verification_method}</p>
+                                  <p className="text-xs font-mono truncate" style={{ color: 'var(--color-text)' }}>{target.normalized_domain}</p>
+                                  <p className="text-xs truncate" style={{ color: 'var(--color-text-dim)' }}>{target.verification_method}</p>
                                 </div>
                                 <div className="flex items-center gap-2">
                                   <StatusBadge status={target.verification_status} />
-                                  <button onClick={() => deleteTarget(target.id)} className="cursor-pointer" style={{ color: T.danger }}>
+                                  <button onClick={() => deleteTarget(target.id)} className="cursor-pointer p-1 rounded"
+                                    style={{ color: 'var(--color-danger)' }}>
                                     <Trash2 size={12} />
                                   </button>
                                 </div>
@@ -597,24 +531,24 @@ const Scanners = ({ navigateTo }) => {
                           </div>
                         )}
                         {(targetActionError || targetsError) && (
-                          <p className="text-xs mt-3" style={{ color: T.danger }}>
-                            {targetActionError || targetsError}
+                          <p className="text-xs mt-3 flex items-center gap-1.5" style={{ color: 'var(--color-danger)' }}>
+                            <AlertTriangle size={11} /> {targetActionError || targetsError}
                           </p>
                         )}
                       </div>
                     </div>
                   )}
                   {fullScanError && (
-                    <p className="mt-2 text-xs flex items-center gap-1.5" style={{ color: T.danger }}>
+                    <p className="mt-2 text-xs flex items-center gap-1.5" style={{ color: 'var(--color-danger)' }}>
                       <AlertTriangle size={11} /> {fullScanError}
                     </p>
                   )}
                 </div>
                 <div className="px-5 py-4">
                   {fullScanJob ? (
-                    <FullScanStatus job={fullScanJob} navigateTo={navigateTo} onPoll={pollFullScanJob} />
+                    <FullScanStatus job={fullScanJob} navigateTo={navigateTo} />
                   ) : (
-                    <p className="text-xs text-center py-6" style={{ color: T.dim }}>
+                    <p className="text-xs text-center py-6" style={{ color: 'var(--color-text-dim)' }}>
                       Submit a URL above to queue a security scan, product-readiness scan, or full launch audit
                     </p>
                   )}
@@ -624,12 +558,12 @@ const Scanners = ({ navigateTo }) => {
 
             {/* ── SQL SCAN ── */}
             {activeId === 'sql' && (
-              <div className="rounded-xl overflow-hidden" style={{ background: T.card, border: `1px solid ${T.border}` }}>
-                <div className="px-5 py-4" style={{ borderBottom: `1px solid ${T.border}` }}>
-                  <p className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: T.muted, fontFamily: 'IBM Plex Mono, monospace' }}>Target URL</p>
-                  <ScanInput accentColor={T.danger} url={sqlScanUrl} setUrl={setSqlScanUrl} onScan={handleSqlScan} isScanning={isSqlScanning} />
+              <div className="card overflow-hidden">
+                <div className="px-5 py-4" style={{ borderBottom: '1px solid var(--color-border)' }}>
+                  <p className="section-label mb-3">Target URL</p>
+                  <ScanInput url={sqlScanUrl} setUrl={setSqlScanUrl} onScan={handleSqlScan} isScanning={isSqlScanning} />
                   {sqlError && (
-                    <p className="mt-2 text-xs flex items-center gap-1.5" style={{ color: T.danger }}>
+                    <p className="mt-2 text-xs flex items-center gap-1.5" style={{ color: 'var(--color-danger)' }}>
                       <AlertTriangle size={11} /> {sqlError}
                     </p>
                   )}
@@ -637,12 +571,12 @@ const Scanners = ({ navigateTo }) => {
                 {sqlScanResult ? (
                   <div className="px-5 py-4 flex flex-col gap-4">
                     <div className="flex items-center justify-between">
-                      <p className="text-xs" style={{ color: T.muted, fontFamily: 'IBM Plex Mono, monospace' }}>{sqlScanResult.url}</p>
+                      <p className="text-xs font-mono" style={{ color: 'var(--color-text-muted)' }}>{sqlScanResult.url}</p>
                       <VulnBadge vulnerable={sqlScanResult.vulnerable} label={sqlScanResult.vulnerable ? 'Vulnerable' : 'Secure'} />
                     </div>
                     {sqlScanResult.vulnerable ? (
                       <>
-                        <p className="text-xs font-semibold" style={{ color: T.danger }}>
+                        <p className="text-xs font-semibold" style={{ color: 'var(--color-danger)' }}>
                           {sqlScanResult.findings.length} injection {sqlScanResult.findings.length === 1 ? 'vector' : 'vectors'} found
                         </p>
                         <div className="flex flex-col gap-2">
@@ -654,26 +588,26 @@ const Scanners = ({ navigateTo }) => {
                         <Recs items={sqlScanResult.recommendations} />
                       </>
                     ) : (
-                      <div className="flex items-center gap-3 px-4 py-4 rounded-lg" style={{ background: '#10B98108', border: '1px solid #10B98120' }}>
-                        <CheckCircle size={18} style={{ color: T.secure }} />
-                        <p className="text-sm font-medium" style={{ color: T.secure }}>No SQL injection vulnerabilities detected</p>
+                      <div className="flex items-center gap-3 px-4 py-4 rounded-lg"
+                        style={{ background: 'var(--color-secure-dim)', border: '1px solid rgba(34,197,94,0.2)' }}>
+                        <CheckCircle size={18} style={{ color: 'var(--color-secure)' }} />
+                        <p className="text-sm font-medium" style={{ color: 'var(--color-secure)' }}>No SQL injection vulnerabilities detected</p>
                       </div>
                     )}
                     <div className="flex justify-end">
                       <button onClick={() => sqlScanResult?.scan_id && navigateTo('report', sqlScanResult.scan_id)}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer"
-                        style={{ background: T.surface, color: T.primary, border: `1px solid ${T.border}` }}>
+                        className="btn-secondary text-xs">
                         View Report <ArrowRight size={11} />
                       </button>
                     </div>
                   </div>
                 ) : !isSqlScanning && (
-                  <p className="text-xs text-center py-6" style={{ color: T.dim }}>Enter a URL and scan to check for SQL injection</p>
+                  <p className="text-xs text-center py-6" style={{ color: 'var(--color-text-dim)' }}>Enter a URL and scan to check for SQL injection</p>
                 )}
                 {isSqlScanning && (
                   <div className="flex items-center gap-3 px-5 py-4">
                     <Spinner size="sm" color={T.danger} />
-                    <p className="text-sm" style={{ color: T.muted }}>Testing injection vectors…</p>
+                    <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>Testing injection vectors…</p>
                   </div>
                 )}
               </div>
@@ -681,12 +615,12 @@ const Scanners = ({ navigateTo }) => {
 
             {/* ── SSL SCAN ── */}
             {activeId === 'ssl' && (
-              <div className="rounded-xl overflow-hidden" style={{ background: T.card, border: `1px solid ${T.border}` }}>
-                <div className="px-5 py-4" style={{ borderBottom: `1px solid ${T.border}` }}>
-                  <p className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: T.muted, fontFamily: 'IBM Plex Mono, monospace' }}>Target URL</p>
-                  <ScanInput accentColor={T.secure} url={sslScanUrl} setUrl={setSslScanUrl} onScan={handleSslScan} isScanning={isSslScanning} />
+              <div className="card overflow-hidden">
+                <div className="px-5 py-4" style={{ borderBottom: '1px solid var(--color-border)' }}>
+                  <p className="section-label mb-3">Target URL</p>
+                  <ScanInput url={sslScanUrl} setUrl={setSslScanUrl} onScan={handleSslScan} isScanning={isSslScanning} />
                   {sslError && (
-                    <p className="mt-2 text-xs flex items-center gap-1.5" style={{ color: T.danger }}>
+                    <p className="mt-2 text-xs flex items-center gap-1.5" style={{ color: 'var(--color-danger)' }}>
                       <AlertTriangle size={11} /> {sslError}
                     </p>
                   )}
@@ -694,7 +628,7 @@ const Scanners = ({ navigateTo }) => {
                 {sslScanResult ? (
                   <div className="px-5 py-4 flex flex-col gap-4">
                     <div className="flex items-center justify-between">
-                      <p className="text-xs" style={{ color: T.muted, fontFamily: 'IBM Plex Mono, monospace' }}>{sslScanResult.url}</p>
+                      <p className="text-xs font-mono" style={{ color: 'var(--color-text-muted)' }}>{sslScanResult.url}</p>
                       <VulnBadge vulnerable={!sslScanResult.findings?.valid} label={sslScanResult.findings?.valid ? 'Valid Certificate' : 'Invalid Certificate'} />
                     </div>
                     {sslScanResult.findings?.valid ? (
@@ -705,9 +639,9 @@ const Scanners = ({ navigateTo }) => {
                               { label: 'Expires', val: fmt(sslScanResult.findings.expires) },
                               { label: 'Protocol', val: sslScanResult.findings.protocol },
                             ].map(({ label, val }) => (
-                              <div key={label} className="p-3 rounded-lg" style={{ background: T.surface }}>
-                                <p className="text-xs mb-1" style={{ color: T.dim }}>{label}</p>
-                                <p className="text-xs font-semibold" style={{ color: T.text, fontFamily: 'IBM Plex Mono, monospace' }}>{val}</p>
+                              <div key={label} className="p-3 rounded-lg" style={{ background: 'var(--color-surface)' }}>
+                                <p className="text-xs mb-1" style={{ color: 'var(--color-text-dim)' }}>{label}</p>
+                                <p className="text-xs font-semibold font-mono" style={{ color: 'var(--color-text)' }}>{val}</p>
                               </div>
                             ))}
                           </div>
@@ -724,19 +658,18 @@ const Scanners = ({ navigateTo }) => {
                     )}
                     <div className="flex justify-end">
                       <button onClick={() => sslScanResult?.scan_id && navigateTo('report', sslScanResult.scan_id)}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer"
-                        style={{ background: T.surface, color: T.primary, border: `1px solid ${T.border}` }}>
+                        className="btn-secondary text-xs">
                         View Report <ArrowRight size={11} />
                       </button>
                     </div>
                   </div>
                 ) : !isSslScanning && (
-                  <p className="text-xs text-center py-6" style={{ color: T.dim }}>Enter a URL and scan to check SSL/TLS configuration</p>
+                  <p className="text-xs text-center py-6" style={{ color: 'var(--color-text-dim)' }}>Enter a URL and scan to check SSL/TLS configuration</p>
                 )}
                 {isSslScanning && (
                   <div className="flex items-center gap-3 px-5 py-4">
                     <Spinner size="sm" color={T.secure} />
-                    <p className="text-sm" style={{ color: T.muted }}>Verifying certificate chain…</p>
+                    <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>Verifying certificate chain…</p>
                   </div>
                 )}
               </div>
@@ -744,12 +677,12 @@ const Scanners = ({ navigateTo }) => {
 
             {/* ── WORDPRESS SCAN ── */}
             {activeId === 'wordpress' && (
-              <div className="rounded-xl overflow-hidden" style={{ background: T.card, border: `1px solid ${T.border}` }}>
-                <div className="px-5 py-4" style={{ borderBottom: `1px solid ${T.border}` }}>
-                  <p className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: T.muted, fontFamily: 'IBM Plex Mono, monospace' }}>Target URL</p>
-                  <ScanInput accentColor={T.warn} url={wordpressScanUrl} setUrl={setWordpressScanUrl} onScan={handleWordpressScan} isScanning={isWordpressScanning} />
+              <div className="card overflow-hidden">
+                <div className="px-5 py-4" style={{ borderBottom: '1px solid var(--color-border)' }}>
+                  <p className="section-label mb-3">Target URL</p>
+                  <ScanInput url={wordpressScanUrl} setUrl={setWordpressScanUrl} onScan={handleWordpressScan} isScanning={isWordpressScanning} />
                   {wordpressError && (
-                    <p className="mt-2 text-xs flex items-center gap-1.5" style={{ color: T.danger }}>
+                    <p className="mt-2 text-xs flex items-center gap-1.5" style={{ color: 'var(--color-danger)' }}>
                       <AlertTriangle size={11} /> {wordpressError}
                     </p>
                   )}
@@ -757,15 +690,16 @@ const Scanners = ({ navigateTo }) => {
                 {wordpressScanResult ? (
                   <div className="px-5 py-4 flex flex-col gap-4">
                     <div className="flex items-center justify-between">
-                      <p className="text-xs" style={{ color: T.muted, fontFamily: 'IBM Plex Mono, monospace' }}>{wordpressScanResult.url}</p>
+                      <p className="text-xs font-mono" style={{ color: 'var(--color-text-muted)' }}>{wordpressScanResult.url}</p>
                       <VulnBadge
                         vulnerable={(wordpressScanResult.summary?.wordpress_issue_count || 0) > 0}
                         label={(wordpressScanResult.summary?.wordpress_issue_count || 0) > 0 ? 'Issues Found' : 'No Issues'} />
                     </div>
                     {!wordpressScanResult.findings?.is_wordpress ? (
-                      <div className="flex items-center gap-3 px-4 py-4 rounded-lg" style={{ background: `${T.info}08`, border: `1px solid ${T.info}20` }}>
-                        <Globe size={16} style={{ color: T.info }} />
-                        <p className="text-sm" style={{ color: T.info }}>Not a WordPress site — no CMS signatures detected.</p>
+                      <div className="flex items-center gap-3 px-4 py-4 rounded-lg"
+                        style={{ background: 'var(--color-info-dim)', border: '1px solid rgba(56,189,248,0.2)' }}>
+                        <Globe size={16} style={{ color: 'var(--color-info)' }} />
+                        <p className="text-sm" style={{ color: 'var(--color-info)' }}>Not a WordPress site — no CMS signatures detected.</p>
                       </div>
                     ) : (
                       <>
@@ -775,10 +709,10 @@ const Scanners = ({ navigateTo }) => {
                             { label: 'Plugins', val: wordpressScanResult.findings.plugins?.length || 0, sub: `${(wordpressScanResult.findings.plugins || []).filter(p => p.outdated).length} outdated` },
                             { label: 'Themes', val: wordpressScanResult.findings.themes?.length || 0, sub: 'detected' },
                           ].map((item, i) => (
-                            <div key={i} className="p-3 rounded-lg" style={{ background: T.surface }}>
-                              <p className="text-xs mb-1" style={{ color: T.dim }}>{item.label}</p>
-                              <p className="text-sm font-bold" style={{ color: T.text, fontFamily: 'IBM Plex Mono, monospace' }}>{item.val}</p>
-                              <p className="text-xs mt-0.5" style={{ color: T.dim }}>{item.sub}</p>
+                            <div key={i} className="p-3 rounded-lg" style={{ background: 'var(--color-surface)' }}>
+                              <p className="text-xs mb-1" style={{ color: 'var(--color-text-dim)' }}>{item.label}</p>
+                              <p className="text-sm font-bold font-mono" style={{ color: 'var(--color-text)' }}>{item.val}</p>
+                              <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-dim)' }}>{item.sub}</p>
                             </div>
                           ))}
                         </div>
@@ -794,16 +728,18 @@ const Scanners = ({ navigateTo }) => {
                             title="No WordPress hardening issues detected" />
                         )}
                         {(wordpressScanResult.findings.plugins || []).length > 0 && (
-                          <div className="rounded-lg p-3" style={{ background: T.surface }}>
-                            <p className="text-xs font-semibold mb-2" style={{ color: T.muted }}>Detected Plugins</p>
+                          <div className="rounded-lg p-3" style={{ background: 'var(--color-surface)' }}>
+                            <p className="text-xs font-semibold mb-2" style={{ color: 'var(--color-text-muted)' }}>Detected Plugins</p>
                             <div className="flex flex-col gap-1.5">
                               {wordpressScanResult.findings.plugins.slice(0, 8).map((p, i) => (
                                 <div key={i} className="flex items-center justify-between text-xs">
-                                  <span style={{ color: T.text, fontFamily: 'IBM Plex Mono, monospace' }}>
+                                  <span className="font-mono" style={{ color: 'var(--color-text)' }}>
                                     {p.name || p.slug}{p.version && ` v${p.version}`}
                                   </span>
-                                  <span className="px-2 py-0.5 rounded font-semibold"
-                                    style={p.outdated ? { background: '#F43F5E15', color: T.danger } : { background: '#10B98115', color: T.secure }}>
+                                  <span className="badge"
+                                    style={p.outdated
+                                      ? { background: 'var(--color-danger-dim)', color: 'var(--color-danger)' }
+                                      : { background: 'var(--color-secure-dim)', color: 'var(--color-secure)' }}>
                                     {p.outdated ? 'Outdated' : 'OK'}
                                   </span>
                                 </div>
@@ -816,31 +752,31 @@ const Scanners = ({ navigateTo }) => {
                     )}
                     <div className="flex justify-end">
                       <button onClick={() => wordpressScanResult?.scan_id && navigateTo('report', wordpressScanResult.scan_id)}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer"
-                        style={{ background: T.surface, color: T.primary, border: `1px solid ${T.border}` }}>
+                        className="btn-secondary text-xs">
                         View Report <ArrowRight size={11} />
                       </button>
                     </div>
                   </div>
                 ) : !isWordpressScanning && (
-                  <p className="text-xs text-center py-6" style={{ color: T.dim }}>Enter a WordPress site URL to start CMS security analysis</p>
+                  <p className="text-xs text-center py-6" style={{ color: 'var(--color-text-dim)' }}>Enter a WordPress site URL to start CMS security analysis</p>
                 )}
                 {isWordpressScanning && (
                   <div className="flex items-center gap-3 px-5 py-4">
                     <Spinner size="sm" color={T.warn} />
-                    <p className="text-sm" style={{ color: T.muted }}>Probing WordPress installation…</p>
+                    <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>Probing WordPress installation…</p>
                   </div>
                 )}
               </div>
             )}
+
             {/* ── XSS SCAN ── */}
             {activeId === 'xss' && (
-              <div className="rounded-xl overflow-hidden" style={{ background: T.card, border: `1px solid ${T.border}` }}>
-                <div className="px-5 py-4" style={{ borderBottom: `1px solid ${T.border}` }}>
-                  <p className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: T.muted, fontFamily: 'IBM Plex Mono, monospace' }}>Target URL</p>
-                  <ScanInput accentColor={T.purple} url={xssScanUrl} setUrl={setXssScanUrl} onScan={handleXssScan} isScanning={isXssScanning} />
+              <div className="card overflow-hidden">
+                <div className="px-5 py-4" style={{ borderBottom: '1px solid var(--color-border)' }}>
+                  <p className="section-label mb-3">Target URL</p>
+                  <ScanInput url={xssScanUrl} setUrl={setXssScanUrl} onScan={handleXssScan} isScanning={isXssScanning} />
                   {xssError && (
-                    <p className="mt-2 text-xs flex items-center gap-1.5" style={{ color: T.danger }}>
+                    <p className="mt-2 text-xs flex items-center gap-1.5" style={{ color: 'var(--color-danger)' }}>
                       <AlertTriangle size={11} /> {xssError}
                     </p>
                   )}
@@ -848,7 +784,7 @@ const Scanners = ({ navigateTo }) => {
                 {xssScanResult ? (
                   <div className="px-5 py-4 flex flex-col gap-4">
                     <div className="flex items-center justify-between">
-                      <p className="text-xs" style={{ color: T.muted, fontFamily: 'IBM Plex Mono, monospace' }}>{xssScanResult.url}</p>
+                      <p className="text-xs font-mono" style={{ color: 'var(--color-text-muted)' }}>{xssScanResult.url}</p>
                       <VulnBadge vulnerable={xssScanResult.vulnerable} label={xssScanResult.vulnerable ? 'Vulnerable' : 'Secure'} />
                     </div>
                     <div className="grid grid-cols-2 gap-3">
@@ -856,9 +792,9 @@ const Scanners = ({ navigateTo }) => {
                         { label: 'Reflected XSS', val: xssScanResult.findings.reflected_xss_count ?? 0 },
                         { label: 'CSP Present', val: xssScanResult.findings.csp_present ? 'Yes' : 'No' },
                       ].map(({ label, val }) => (
-                        <div key={label} className="p-3 rounded-lg" style={{ background: T.surface }}>
-                          <p className="text-xs mb-1" style={{ color: T.dim }}>{label}</p>
-                          <p className="text-sm font-bold" style={{ color: T.text, fontFamily: 'IBM Plex Mono, monospace' }}>{val}</p>
+                        <div key={label} className="p-3 rounded-lg" style={{ background: 'var(--color-surface)' }}>
+                          <p className="text-xs mb-1" style={{ color: 'var(--color-text-dim)' }}>{label}</p>
+                          <p className="text-sm font-bold font-mono" style={{ color: 'var(--color-text)' }}>{val}</p>
                         </div>
                       ))}
                     </div>
@@ -875,27 +811,27 @@ const Scanners = ({ navigateTo }) => {
                         ))}
                       </div>
                     ) : (
-                      <div className="flex items-center gap-3 px-4 py-4 rounded-lg" style={{ background: '#10B98108', border: '1px solid #10B98120' }}>
-                        <CheckCircle size={18} style={{ color: T.secure }} />
-                        <p className="text-sm font-medium" style={{ color: T.secure }}>No reflected XSS found in tested parameters</p>
+                      <div className="flex items-center gap-3 px-4 py-4 rounded-lg"
+                        style={{ background: 'var(--color-secure-dim)', border: '1px solid rgba(34,197,94,0.2)' }}>
+                        <CheckCircle size={18} style={{ color: 'var(--color-secure)' }} />
+                        <p className="text-sm font-medium" style={{ color: 'var(--color-secure)' }}>No reflected XSS found in tested parameters</p>
                       </div>
                     )}
                     {xssScanResult.recommendations?.length > 0 && <Recs items={xssScanResult.recommendations} />}
                     <div className="flex justify-end">
                       <button onClick={() => xssScanResult?.scan_id && navigateTo('report', xssScanResult.scan_id)}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer"
-                        style={{ background: T.surface, color: T.primary, border: `1px solid ${T.border}` }}>
+                        className="btn-secondary text-xs">
                         View Report <ArrowRight size={11} />
                       </button>
                     </div>
                   </div>
                 ) : !isXssScanning && (
-                  <p className="text-xs text-center py-6" style={{ color: T.dim }}>Enter a URL to test for cross-site scripting vulnerabilities</p>
+                  <p className="text-xs text-center py-6" style={{ color: 'var(--color-text-dim)' }}>Enter a URL to test for cross-site scripting vulnerabilities</p>
                 )}
                 {isXssScanning && (
                   <div className="flex items-center gap-3 px-5 py-4">
                     <Spinner size="sm" color={T.purple} />
-                    <p className="text-sm" style={{ color: T.muted }}>Injecting XSS payloads into parameters and forms…</p>
+                    <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>Injecting XSS payloads into parameters and forms…</p>
                   </div>
                 )}
               </div>
@@ -903,12 +839,12 @@ const Scanners = ({ navigateTo }) => {
 
             {/* ── TECH FINGERPRINT ── */}
             {activeId === 'tech' && (
-              <div className="rounded-xl overflow-hidden" style={{ background: T.card, border: `1px solid ${T.border}` }}>
-                <div className="px-5 py-4" style={{ borderBottom: `1px solid ${T.border}` }}>
-                  <p className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: T.muted, fontFamily: 'IBM Plex Mono, monospace' }}>Target URL</p>
-                  <ScanInput accentColor={T.info} url={techScanUrl} setUrl={setTechScanUrl} onScan={handleTechScan} isScanning={isTechScanning} />
+              <div className="card overflow-hidden">
+                <div className="px-5 py-4" style={{ borderBottom: '1px solid var(--color-border)' }}>
+                  <p className="section-label mb-3">Target URL</p>
+                  <ScanInput url={techScanUrl} setUrl={setTechScanUrl} onScan={handleTechScan} isScanning={isTechScanning} />
                   {techError && (
-                    <p className="mt-2 text-xs flex items-center gap-1.5" style={{ color: T.danger }}>
+                    <p className="mt-2 text-xs flex items-center gap-1.5" style={{ color: 'var(--color-danger)' }}>
                       <AlertTriangle size={11} /> {techError}
                     </p>
                   )}
@@ -916,30 +852,30 @@ const Scanners = ({ navigateTo }) => {
                 {techScanResult ? (
                   <div className="px-5 py-4 flex flex-col gap-4">
                     <div className="flex items-center justify-between">
-                      <p className="text-xs" style={{ color: T.muted, fontFamily: 'IBM Plex Mono, monospace' }}>{techScanResult.url}</p>
+                      <p className="text-xs font-mono" style={{ color: 'var(--color-text-muted)' }}>{techScanResult.url}</p>
                       <VulnBadge
                         vulnerable={(techScanResult.findings.issues || []).some(i => i.severity !== 'Info')}
                         label={(techScanResult.findings.issues || []).some(i => i.severity !== 'Info') ? 'Issues Found' : 'Clean'} />
                     </div>
                     {Object.keys(techScanResult.technologies || {}).length > 0 ? (
-                      <div className="rounded-lg overflow-hidden" style={{ border: `1px solid ${T.border}` }}>
-                        <div className="px-3 py-2" style={{ background: T.surface, borderBottom: `1px solid ${T.border}` }}>
-                          <p className="text-xs font-semibold" style={{ color: T.muted }}>Detected Stack</p>
+                      <div className="rounded-lg overflow-hidden" style={{ border: '1px solid var(--color-border)' }}>
+                        <div className="px-3 py-2" style={{ background: 'var(--color-surface)', borderBottom: '1px solid var(--color-border)' }}>
+                          <p className="text-xs font-semibold" style={{ color: 'var(--color-text-muted)' }}>Detected Stack</p>
                         </div>
                         <div>
                           {Object.entries(techScanResult.technologies).map(([category, techs], idx, arr) => (
                             <div key={category} className="flex items-start gap-3 px-3 py-2.5"
-                              style={{ borderBottom: idx < arr.length - 1 ? `1px solid ${T.border}` : 'none' }}>
-                              <p className="text-xs w-32 flex-shrink-0 font-medium capitalize" style={{ color: T.dim }}>
+                              style={{ borderBottom: idx < arr.length - 1 ? '1px solid var(--color-border)' : 'none' }}>
+                              <p className="text-xs w-32 flex-shrink-0 font-medium capitalize" style={{ color: 'var(--color-text-dim)' }}>
                                 {category.replace(/-/g, ' ')}
                               </p>
                               <div className="flex flex-wrap gap-1.5">
                                 {(Array.isArray(techs) ? techs : [techs]).map((t, i) => {
                                   const version = techScanResult.versions?.[t];
                                   return (
-                                    <span key={i} className="text-xs px-2 py-0.5 rounded font-mono flex items-center gap-1"
-                                      style={{ background: `${T.info}15`, color: T.info, border: `1px solid ${T.info}25` }}>
-                                      {t}{version && <span style={{ color: T.dim, fontSize: '10px' }}>v{version}</span>}
+                                    <span key={i} className="badge"
+                                      style={{ background: 'var(--color-info-dim)', color: 'var(--color-info)' }}>
+                                      {t}{version && <span style={{ color: 'var(--color-text-dim)', fontSize: '10px' }}>v{version}</span>}
                                     </span>
                                   );
                                 })}
@@ -949,23 +885,22 @@ const Scanners = ({ navigateTo }) => {
                         </div>
                       </div>
                     ) : (
-                      <p className="text-xs text-center py-3" style={{ color: T.dim }}>No technology signatures detected</p>
+                      <p className="text-xs text-center py-3" style={{ color: 'var(--color-text-dim)' }}>No technology signatures detected</p>
                     )}
                     {(techScanResult.findings.packages || []).length > 0 && (
-                      <div className="rounded-lg overflow-hidden" style={{ border: `1px solid ${T.border}` }}>
-                        <div className="px-3 py-2" style={{ background: T.surface, borderBottom: `1px solid ${T.border}` }}>
-                          <p className="text-xs font-semibold" style={{ color: T.muted }}>Detected Packages</p>
+                      <div className="rounded-lg overflow-hidden" style={{ border: '1px solid var(--color-border)' }}>
+                        <div className="px-3 py-2" style={{ background: 'var(--color-surface)', borderBottom: '1px solid var(--color-border)' }}>
+                          <p className="text-xs font-semibold" style={{ color: 'var(--color-text-muted)' }}>Detected Packages</p>
                         </div>
                         <div>
                           {(techScanResult.findings.packages || []).map((pkg, idx, arr) => (
                             <div key={`${pkg.name}-${pkg.version}`} className="flex items-center justify-between gap-3 px-3 py-2.5"
-                              style={{ borderBottom: idx < arr.length - 1 ? `1px solid ${T.border}` : 'none' }}>
+                              style={{ borderBottom: idx < arr.length - 1 ? '1px solid var(--color-border)' : 'none' }}>
                               <div className="min-w-0">
-                                <p className="text-xs font-mono" style={{ color: T.text }}>{pkg.name}</p>
-                                <p className="text-[11px]" style={{ color: T.dim }}>{pkg.source}</p>
+                                <p className="text-xs font-mono" style={{ color: 'var(--color-text)' }}>{pkg.name}</p>
+                                <p className="text-[11px]" style={{ color: 'var(--color-text-dim)' }}>{pkg.source}</p>
                               </div>
-                              <span className="text-xs px-2 py-0.5 rounded font-mono"
-                                style={{ background: `${T.primary}15`, color: T.primary, border: `1px solid ${T.primary}25` }}>
+                              <span className="badge" style={{ background: 'var(--color-primary-dim)', color: 'var(--color-primary)' }}>
                                 {pkg.version}
                               </span>
                             </div>
@@ -975,7 +910,7 @@ const Scanners = ({ navigateTo }) => {
                     )}
                     {(techScanResult.findings.advisories || []).length > 0 && (
                       <div className="flex flex-col gap-2">
-                        <p className="text-xs font-semibold" style={{ color: T.muted }}>Known CVEs / CWEs</p>
+                        <p className="text-xs font-semibold" style={{ color: 'var(--color-text-muted)' }}>Known CVEs / CWEs</p>
                         {techScanResult.findings.advisories.map((advisory, i) => (
                           <FindingItem key={`${advisory.package}-${advisory.id}-${i}`}
                             color={advisory.severity === 'Critical' || advisory.severity === 'High' ? T.danger : T.warn}
@@ -1008,19 +943,18 @@ const Scanners = ({ navigateTo }) => {
                     {techScanResult.recommendations?.length > 0 && <Recs items={techScanResult.recommendations} />}
                     <div className="flex justify-end">
                       <button onClick={() => techScanResult?.scan_id && navigateTo('report', techScanResult.scan_id)}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer"
-                        style={{ background: T.surface, color: T.primary, border: `1px solid ${T.border}` }}>
+                        className="btn-secondary text-xs">
                         View Report <ArrowRight size={11} />
                       </button>
                     </div>
                   </div>
                 ) : !isTechScanning && (
-                  <p className="text-xs text-center py-6" style={{ color: T.dim }}>Enter a URL to fingerprint the technology stack</p>
+                  <p className="text-xs text-center py-6" style={{ color: 'var(--color-text-dim)' }}>Enter a URL to fingerprint the technology stack</p>
                 )}
                 {isTechScanning && (
                   <div className="flex items-center gap-3 px-5 py-4">
                     <Spinner size="sm" color={T.info} />
-                    <p className="text-sm" style={{ color: T.muted }}>Fingerprinting technology stack…</p>
+                    <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>Fingerprinting technology stack…</p>
                   </div>
                 )}
               </div>
@@ -1028,12 +962,12 @@ const Scanners = ({ navigateTo }) => {
 
             {/* ── EXPOSURE SCAN ── */}
             {activeId === 'exposure' && (
-              <div className="rounded-xl overflow-hidden" style={{ background: T.card, border: `1px solid ${T.border}` }}>
-                <div className="px-5 py-4" style={{ borderBottom: `1px solid ${T.border}` }}>
-                  <p className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: T.muted, fontFamily: 'IBM Plex Mono, monospace' }}>Target URL</p>
-                  <ScanInput accentColor="#F97316" url={exposureScanUrl} setUrl={setExposureScanUrl} onScan={handleExposureScan} isScanning={isExposureScanning} />
+              <div className="card overflow-hidden">
+                <div className="px-5 py-4" style={{ borderBottom: '1px solid var(--color-border)' }}>
+                  <p className="section-label mb-3">Target URL</p>
+                  <ScanInput url={exposureScanUrl} setUrl={setExposureScanUrl} onScan={handleExposureScan} isScanning={isExposureScanning} />
                   {exposureError && (
-                    <p className="mt-2 text-xs flex items-center gap-1.5" style={{ color: '#F97316' }}>
+                    <p className="mt-2 text-xs flex items-center gap-1.5" style={{ color: 'var(--color-warn)' }}>
                       <AlertTriangle size={11} /> {exposureError}
                     </p>
                   )}
@@ -1041,10 +975,9 @@ const Scanners = ({ navigateTo }) => {
                 {exposureScanResult ? (
                   <div className="px-5 py-4 flex flex-col gap-4">
                     <div className="flex items-center justify-between">
-                      <p className="text-xs" style={{ color: T.muted, fontFamily: 'IBM Plex Mono, monospace' }}>{exposureScanResult.url}</p>
+                      <p className="text-xs font-mono" style={{ color: 'var(--color-text-muted)' }}>{exposureScanResult.url}</p>
                       <VulnBadge vulnerable={exposureScanResult.vulnerable} label={exposureScanResult.vulnerable ? 'Exposed' : 'Clean'} />
                     </div>
-                    {/* Stats bar */}
                     {(() => {
                       const issues = exposureScanResult.findings.issues || [];
                       const counts = { Critical: 0, High: 0, Medium: 0, Low: 0 };
@@ -1052,14 +985,14 @@ const Scanners = ({ navigateTo }) => {
                       return (
                         <div className="grid grid-cols-4 gap-2">
                           {[
-                            { label: 'Critical', count: counts.Critical, color: '#F43F5E' },
-                            { label: 'High',     count: counts.High,     color: '#F59E0B' },
+                            { label: 'Critical', count: counts.Critical, color: T.danger },
+                            { label: 'High',     count: counts.High,     color: T.warn },
                             { label: 'Medium',   count: counts.Medium,   color: T.info },
                             { label: 'Low',      count: counts.Low,      color: T.muted },
                           ].map(({ label, count, color }) => (
-                            <div key={label} className="p-2 rounded-lg text-center" style={{ background: T.surface }}>
-                              <p className="text-lg font-bold font-mono" style={{ color: count > 0 ? color : T.dim }}>{count}</p>
-                              <p className="text-xs" style={{ color: T.dim }}>{label}</p>
+                            <div key={label} className="p-2 rounded-lg text-center" style={{ background: 'var(--color-surface)' }}>
+                              <p className="text-lg font-bold font-mono" style={{ color: count > 0 ? color : 'var(--color-text-dim)' }}>{count}</p>
+                              <p className="text-xs" style={{ color: 'var(--color-text-dim)' }}>{label}</p>
                             </div>
                           ))}
                         </div>
@@ -1068,7 +1001,7 @@ const Scanners = ({ navigateTo }) => {
                     {(exposureScanResult.findings.issues || []).length > 0 ? (
                       <div className="flex flex-col gap-2">
                         {exposureScanResult.findings.issues.map((issue, i) => {
-                          const color = issue.severity === 'Critical' ? '#F43F5E' : issue.severity === 'High' ? '#F59E0B' : issue.severity === 'Medium' ? T.info : T.muted;
+                          const color = issue.severity === 'Critical' ? T.danger : issue.severity === 'High' ? T.warn : issue.severity === 'Medium' ? T.info : T.muted;
                           const bg = issue.severity === 'Critical' ? '#F43F5E08' : issue.severity === 'High' ? '#F59E0B08' : `${T.info}08`;
                           return (
                             <FindingItem key={i} color={color} bg={bg}
@@ -1080,27 +1013,96 @@ const Scanners = ({ navigateTo }) => {
                         })}
                       </div>
                     ) : (
-                      <div className="flex items-center gap-3 px-4 py-4 rounded-lg" style={{ background: '#10B98108', border: '1px solid #10B98120' }}>
-                        <CheckCircle size={18} style={{ color: T.secure }} />
-                        <p className="text-sm font-medium" style={{ color: T.secure }}>No sensitive files exposed at common paths</p>
+                      <div className="flex items-center gap-3 px-4 py-4 rounded-lg"
+                        style={{ background: 'var(--color-secure-dim)', border: '1px solid rgba(34,197,94,0.2)' }}>
+                        <CheckCircle size={18} style={{ color: 'var(--color-secure)' }} />
+                        <p className="text-sm font-medium" style={{ color: 'var(--color-secure)' }}>No sensitive files exposed at common paths</p>
                       </div>
                     )}
                     {exposureScanResult.recommendations?.length > 0 && <Recs items={exposureScanResult.recommendations} />}
                     <div className="flex justify-end">
                       <button onClick={() => exposureScanResult?.scan_id && navigateTo('report', exposureScanResult.scan_id)}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer"
-                        style={{ background: T.surface, color: T.primary, border: `1px solid ${T.border}` }}>
+                        className="btn-secondary text-xs">
                         View Report <ArrowRight size={11} />
                       </button>
                     </div>
                   </div>
                 ) : !isExposureScanning && (
-                  <p className="text-xs text-center py-6" style={{ color: T.dim }}>Enter a URL to probe for exposed sensitive files</p>
+                  <p className="text-xs text-center py-6" style={{ color: 'var(--color-text-dim)' }}>Enter a URL to probe for exposed sensitive files</p>
                 )}
                 {isExposureScanning && (
                   <div className="flex items-center gap-3 px-5 py-4">
-                    <Spinner size="sm" color="#F97316" />
-                    <p className="text-sm" style={{ color: T.muted }}>Probing sensitive file paths across all stacks…</p>
+                    <Spinner size="sm" color={T.warn} />
+                    <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>Probing sensitive file paths across all stacks…</p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ── MALWARE ANALYSIS ── */}
+            {activeId === 'malware' && (
+              <div className="card overflow-hidden">
+                <div className="px-5 py-4" style={{ borderBottom: '1px solid var(--color-border)' }}>
+                  <p className="section-label mb-3">Target URL</p>
+                  <ScanInput url={malwareScanUrl} setUrl={setMalwareScanUrl} onScan={handleMalwareScan} isScanning={isMalwareScanning} />
+                  {malwareError && (
+                    <p className="mt-2 text-xs flex items-center gap-1.5" style={{ color: 'var(--color-danger)' }}>
+                      <AlertTriangle size={11} /> {malwareError}
+                    </p>
+                  )}
+                </div>
+                {malwareScanResult ? (
+                  <div className="px-5 py-4 flex flex-col gap-4">
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs font-mono" style={{ color: 'var(--color-text-muted)' }}>{malwareScanResult.url}</p>
+                      <VulnBadge vulnerable={malwareScanResult.vulnerable} label={malwareScanResult.vulnerable ? 'Risk Detected' : 'No Indicators'} />
+                    </div>
+                    {(malwareScanResult.findings.artifacts || []).length > 0 && (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        {(malwareScanResult.findings.artifacts || []).slice(0, 4).map((artifact, index) => (
+                          <div key={`${artifact.sha256 || index}-${index}`} className="p-3 rounded-lg"
+                            style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)' }}>
+                            <p className="text-xs font-semibold truncate" style={{ color: 'var(--color-text)' }}>{artifact.artifact_type || 'artifact'}</p>
+                            <p className="text-xs mt-1 truncate font-mono" style={{ color: 'var(--color-text-dim)' }}>{artifact.artifact_url}</p>
+                            {artifact.sha256 && <p className="text-xs mt-1 truncate font-mono" style={{ color: 'var(--color-text-dim)' }}>{artifact.sha256}</p>}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {(malwareScanResult.findings.issues || []).length > 0 ? (
+                      <div className="flex flex-col gap-2">
+                        {(malwareScanResult.findings.issues || []).map((issue, i) => (
+                          <FindingItem key={i}
+                            color={issue.severity === 'Critical' ? T.danger : T.warn}
+                            bg={issue.severity === 'Critical' ? '#F43F5E08' : '#F59E0B08'}
+                            icon={AlertTriangle}
+                            title={issue.name || issue.title}
+                            meta={`${issue.artifact_type || 'artifact'}${issue.artifact_url ? ` · ${issue.artifact_url}` : ''}`}
+                          />
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-3 px-4 py-4 rounded-lg"
+                        style={{ background: 'var(--color-secure-dim)', border: '1px solid rgba(34,197,94,0.2)' }}>
+                        <CheckCircle size={18} style={{ color: 'var(--color-secure)' }} />
+                        <p className="text-sm font-medium" style={{ color: 'var(--color-secure)' }}>No malware indicators detected in discovered same-origin downloads</p>
+                      </div>
+                    )}
+                    {malwareScanResult.recommendations?.length > 0 && <Recs items={malwareScanResult.recommendations} />}
+                    <div className="flex justify-end">
+                      <button onClick={() => malwareScanResult?.scan_id && navigateTo('report', malwareScanResult.scan_id)}
+                        className="btn-secondary text-xs">
+                        View Report <ArrowRight size={11} />
+                      </button>
+                    </div>
+                  </div>
+                ) : !isMalwareScanning && (
+                  <p className="text-xs text-center py-6" style={{ color: 'var(--color-text-dim)' }}>Enter a URL to inspect same-origin downloadable artifacts for malware indicators</p>
+                )}
+                {isMalwareScanning && (
+                  <div className="flex items-center gap-3 px-5 py-4">
+                    <Spinner size="sm" color={T.danger} />
+                    <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>Discovering and analyzing downloadable artifacts…</p>
                   </div>
                 )}
               </div>

@@ -82,6 +82,34 @@ cd wvs_backend
 uv run playwright install chromium
 ```
 
+## Docker
+
+The repository includes a Docker Compose setup for the full stack:
+
+- `frontend`: Vite production build served by Nginx
+- `backend`: Flask API served by Gunicorn
+- `worker-security`: Celery worker for security scans
+- `worker-ux`: Celery worker for Playwright-backed UX scans
+- `beat`: Celery beat scheduler
+- `redis`: Celery broker/result backend and rate-limit storage
+- `db`: MySQL persistence
+- `zap`: OWASP ZAP daemon for active web-app scanning
+
+Create a local env file, then start the stack:
+
+```bash
+cp .env.docker.example .env.docker
+docker compose --env-file .env.docker up --build
+```
+
+Open:
+
+- Frontend: `http://localhost:8080`
+- Backend API: `http://localhost:5001`
+
+The backend image installs Chromium for Playwright and Lighthouse. Reports,
+screenshots, request caches, and database files are stored in Docker volumes.
+
 ## Tests
 
 Backend tests:

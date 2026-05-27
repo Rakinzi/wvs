@@ -7,28 +7,6 @@ import {
 import { useBlockedSitesData } from '../hooks/useBlockedSitesData';
 import Spinner from './Spinner';
 
-const T = {
-  bg:          'var(--color-bg)',
-  surface:     'var(--color-surface)',
-  card:        'var(--color-card)',
-  elev:        'var(--color-elevated)',
-  border:      'var(--color-border)',
-  borderSubtle:'var(--color-border-subtle)',
-  borderBright:'var(--color-border-bright)',
-  text:        'var(--color-text)',
-  muted:       'var(--color-text-muted)',
-  dim:         'var(--color-text-dim)',
-  primary:     'var(--color-primary)',
-  secure:      'var(--color-secure)',
-  secureDim:   'var(--color-secure-dim)',
-  danger:      'var(--color-danger)',
-  dangerDim:   'var(--color-danger-dim)',
-  warn:        'var(--color-warn)',
-  warnDim:     'var(--color-warn-dim)',
-  info:        'var(--color-info)',
-  infoDim:     'var(--color-info-dim)',
-};
-
 const fmtSource = (s) => ({ scan: 'Security Scan', api_scan: 'API Scan', manual: 'Manual', ai: 'AI Detection', external: 'External' }[s] || s);
 const fmt = (d) => {
   const dt = new Date(d);
@@ -40,24 +18,26 @@ const Pagination = ({ page, totalPages, setPage, perPage, total }) => {
   if (totalPages <= 1) return null;
   return (
     <div className="flex items-center justify-between px-5 py-3.5"
-      style={{ borderTop: `1px solid ${T.border}`, background: T.surface }}>
-      <p className="text-xs font-mono" style={{ color: T.dim }}>
+      style={{ borderTop: '1px solid var(--color-border)', background: 'var(--color-surface)' }}>
+      <p className="text-xs font-mono" style={{ color: 'var(--color-text-dim)' }}>
         {(page - 1) * perPage + 1}–{Math.min(page * perPage, total)} of {total}
       </p>
       <div className="flex items-center gap-1">
         <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}
-          className="px-2.5 py-1.5 rounded-lg text-xs cursor-pointer disabled:opacity-30"
-          style={{ background: T.card, color: T.muted, border: `1px solid ${T.border}` }}>‹</button>
+          className="btn-secondary px-2.5 py-1.5 text-xs disabled:opacity-30">‹</button>
         {[...Array(Math.min(totalPages, 5))].map((_, i) => (
           <button key={i} onClick={() => setPage(i + 1)}
-            className="px-2.5 py-1.5 rounded-lg text-xs cursor-pointer"
-            style={{ background: page === i + 1 ? T.primary : T.card, color: page === i + 1 ? '#fff' : T.muted, border: `1px solid ${page === i + 1 ? T.primary : T.border}` }}>
+            className="px-2.5 py-1.5 rounded-lg text-xs cursor-pointer transition-colors"
+            style={{
+              background: page === i + 1 ? 'var(--color-primary)' : 'var(--color-card)',
+              color: page === i + 1 ? '#fff' : 'var(--color-text-muted)',
+              border: `1px solid ${page === i + 1 ? 'var(--color-primary)' : 'var(--color-border)'}`,
+            }}>
             {i + 1}
           </button>
         ))}
         <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages}
-          className="px-2.5 py-1.5 rounded-lg text-xs cursor-pointer disabled:opacity-30"
-          style={{ background: T.card, color: T.muted, border: `1px solid ${T.border}` }}>›</button>
+          className="btn-secondary px-2.5 py-1.5 text-xs disabled:opacity-30">›</button>
       </div>
     </div>
   );
@@ -95,36 +75,29 @@ const BlockedSites = ({ navigateTo }) => {
   };
 
   return (
-    <div className="min-h-screen" style={{ background: T.bg }}>
+    <div className="min-h-screen" style={{ background: 'var(--color-bg)' }}>
 
-      {/* Sticky header */}
-      <div className="sticky top-0 z-20 px-6 lg:px-10 py-4 flex items-center justify-between"
-        style={{ background: `${T.surface}E0`, backdropFilter: 'blur(12px)', borderBottom: `1px solid ${T.border}` }}>
+      {/* Page header */}
+      <div className="page-header px-6 lg:px-10 py-4 flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <button onClick={() => navigateTo('dashboard')}
-            className="flex items-center gap-1.5 text-xs font-medium cursor-pointer px-3 py-1.5 rounded-lg"
-            style={{ color: T.muted, background: T.card, border: `1px solid ${T.border}` }}>
+          <button onClick={() => navigateTo('dashboard')} className="btn-secondary flex items-center gap-1.5 text-xs">
             <ArrowLeft size={13} /> Back
           </button>
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: T.dangerDim, border: `1px solid ${T.danger}30` }}>
-              <ShieldOff size={15} style={{ color: T.danger }} />
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: 'var(--color-danger-dim)' }}>
+              <ShieldOff size={15} style={{ color: 'var(--color-danger)' }} />
             </div>
             <div>
-              <h1 className="text-base font-bold leading-tight" style={{ color: T.text }}>Blocked Sites</h1>
-              <p className="text-xs" style={{ color: T.dim }}>{blockedSites.length} domains on blocklist</p>
+              <h1 className="text-base font-bold leading-tight" style={{ color: 'var(--color-text)' }}>Blocked Sites</h1>
+              <p className="text-xs" style={{ color: 'var(--color-text-dim)' }}>{blockedSites.length} domains on blocklist</p>
             </div>
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={fetchBlockedSites}
-            className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium cursor-pointer"
-            style={{ background: T.card, color: T.muted, border: `1px solid ${T.border}` }}>
+          <button onClick={fetchBlockedSites} className="btn-secondary flex items-center gap-2 text-xs">
             <RefreshCw size={12} /> Refresh
           </button>
-          <button onClick={() => setShowAdd(true)}
-            className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold text-white cursor-pointer"
-            style={{ background: T.danger }}>
+          <button onClick={() => setShowAdd(true)} className="btn-primary" style={{ background: 'var(--color-danger)', boxShadow: 'none' }}>
             <Plus size={12} /> Block Site
           </button>
         </div>
@@ -132,39 +105,36 @@ const BlockedSites = ({ navigateTo }) => {
 
       <div className="px-6 lg:px-10 py-6 flex flex-col gap-5">
 
-        {/* Success banner */}
         {successMessage && (
-          <div className="flex items-center gap-3 px-4 py-3 rounded-xl" style={{ background: T.secureDim, border: `1px solid ${T.secure}30`, color: T.secure }}>
+          <div className="flex items-center gap-3 px-4 py-3 rounded-xl"
+            style={{ background: 'var(--color-secure-dim)', border: '1px solid rgba(34,197,94,0.2)', color: 'var(--color-secure)' }}>
             <CheckCircle size={14} /> {successMessage}
           </div>
         )}
 
         {/* Table card */}
-        <div className="rounded-xl overflow-hidden" style={{ background: T.card, border: `1px solid ${T.border}` }}>
+        <div className="card overflow-hidden">
 
           {/* Toolbar */}
           <div className="px-5 py-3.5 flex flex-col sm:flex-row sm:items-center gap-3"
-            style={{ borderBottom: `1px solid ${T.border}`, background: T.surface }}>
+            style={{ borderBottom: '1px solid var(--color-border)', background: 'var(--color-surface)' }}>
             <div className="relative flex-1">
-              <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: T.dim }} />
+              <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--color-text-dim)' }} />
               <input value={q} onChange={e => { setQ(e.target.value); setPage(1); }}
                 placeholder="Search domains or reasons…"
-                className="w-full pl-9 pr-4 py-2 rounded-lg text-xs outline-none font-mono"
-                style={{ background: T.card, border: `1px solid ${T.border}`, color: T.text }} />
+                className="input pl-9 text-xs font-mono" />
             </div>
             <div className="relative flex-shrink-0">
-              <button onClick={() => setFilterOpen(o => !o)}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium cursor-pointer"
-                style={{ background: T.card, color: T.muted, border: `1px solid ${T.border}` }}>
+              <button onClick={() => setFilterOpen(o => !o)} className="btn-secondary flex items-center gap-1.5 text-xs">
                 <Filter size={12} /> {src === 'all' ? 'All Sources' : fmtSource(src)} <ChevronDown size={11} />
               </button>
               {filterOpen && (
                 <div className="absolute right-0 mt-1.5 w-44 rounded-xl overflow-hidden z-30 shadow-2xl"
-                  style={{ background: T.elev, border: `1px solid ${T.border}` }}>
+                  style={{ background: 'var(--color-overlay)', border: '1px solid var(--color-border-bright)' }}>
                   {sources.map(s => (
                     <button key={s} onClick={() => { setSrc(s); setFilterOpen(false); setPage(1); }}
-                      className="flex items-center gap-2 w-full px-4 py-2.5 text-xs text-left cursor-pointer transition-colors"
-                      style={{ color: src === s ? T.primary : T.muted, background: src === s ? `${T.primary}12` : 'transparent' }}>
+                      className="flex items-center gap-2 w-full px-4 py-2.5 text-xs text-left cursor-pointer transition-colors hover:bg-[var(--color-elevated)]"
+                      style={{ color: src === s ? 'var(--color-primary)' : 'var(--color-text-muted)', background: src === s ? 'var(--color-primary-dim)' : 'transparent' }}>
                       {s === 'all' ? 'All Sources' : fmtSource(s)}
                     </button>
                   ))}
@@ -173,63 +143,63 @@ const BlockedSites = ({ navigateTo }) => {
             </div>
           </div>
 
-          {/* Body */}
           {loading ? (
             <div className="flex items-center justify-center py-20">
               <Spinner size="md" label="Loading blocked sites…" />
             </div>
           ) : error ? (
             <div className="flex flex-col items-center gap-3 py-16">
-              <AlertTriangle size={20} style={{ color: T.danger }} />
-              <p className="text-sm" style={{ color: T.muted }}>{error}</p>
+              <AlertTriangle size={20} style={{ color: 'var(--color-danger)' }} />
+              <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>{error}</p>
             </div>
           ) : current.length === 0 ? (
             <div className="flex flex-col items-center gap-4 py-20">
-              <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ background: T.surface }}>
-                <Globe size={22} style={{ color: T.dim }} />
+              <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ background: 'var(--color-elevated)' }}>
+                <Globe size={22} style={{ color: 'var(--color-text-dim)' }} />
               </div>
-              <p className="text-sm font-medium" style={{ color: T.text }}>No blocked sites</p>
-              <p className="text-xs" style={{ color: T.muted }}>Sites flagged as malicious will appear here.</p>
+              <p className="text-sm font-medium" style={{ color: 'var(--color-text)' }}>No blocked sites</p>
+              <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Sites flagged as malicious will appear here.</p>
             </div>
           ) : (
             <>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr style={{ background: T.surface, borderBottom: `1px solid ${T.border}` }}>
+                    <tr style={{ background: 'var(--color-surface)', borderBottom: '1px solid var(--color-border)' }}>
                       {['Domain', 'Reason', 'Source', 'Date Added', ''].map(h => (
-                        <th key={h} className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-widest" style={{ color: T.dim }}>{h}</th>
+                        <th key={h} className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-widest" style={{ color: 'var(--color-text-dim)' }}>{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
                     {current.map((site) => (
-                      <tr key={site.id} className="transition-colors"
-                        style={{ borderBottom: `1px solid ${T.borderSubtle}` }}>
+                      <tr key={site.id} className="transition-colors hover:bg-[var(--color-elevated)]"
+                        style={{ borderBottom: '1px solid var(--color-border-subtle)' }}>
                         <td className="px-5 py-4">
                           <div className="flex items-center gap-2.5">
-                            <div className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: T.dangerDim }}>
-                              <AlertOctagon size={12} style={{ color: T.danger }} />
+                            <div className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0"
+                              style={{ background: 'var(--color-danger-dim)' }}>
+                              <AlertOctagon size={12} style={{ color: 'var(--color-danger)' }} />
                             </div>
                             <div>
-                              <p className="text-xs font-mono font-medium" style={{ color: T.text }}>{site.domain}</p>
+                              <p className="text-xs font-mono font-medium" style={{ color: 'var(--color-text)' }}>{site.domain}</p>
                               <a href={`https://${site.domain}`} target="_blank" rel="noopener noreferrer"
-                                className="text-xs flex items-center gap-0.5" style={{ color: T.dim }}>
+                                className="text-xs flex items-center gap-0.5" style={{ color: 'var(--color-text-dim)' }}>
                                 <ExternalLink size={9} /> view
                               </a>
                             </div>
                           </div>
                         </td>
                         <td className="px-5 py-4 max-w-xs">
-                          <p className="text-xs truncate" style={{ color: T.muted }}>{site.reason || '—'}</p>
+                          <p className="text-xs truncate" style={{ color: 'var(--color-text-muted)' }}>{site.reason || '—'}</p>
                         </td>
                         <td className="px-5 py-4">
-                          <span className="px-2 py-0.5 rounded-md text-xs font-semibold" style={{ background: T.infoDim, color: T.info }}>
+                          <span className="badge" style={{ background: 'var(--color-info-dim)', color: 'var(--color-info)' }}>
                             {fmtSource(site.source)}
                           </span>
                         </td>
                         <td className="px-5 py-4">
-                          <div className="flex items-center gap-1.5 text-xs font-mono" style={{ color: T.dim }}>
+                          <div className="flex items-center gap-1.5 text-xs font-mono" style={{ color: 'var(--color-text-dim)' }}>
                             <Calendar size={10} />
                             {site.created_at ? fmt(site.created_at) : '—'}
                           </div>
@@ -237,7 +207,7 @@ const BlockedSites = ({ navigateTo }) => {
                         <td className="px-5 py-4 text-right">
                           <button onClick={() => setConfirmDelete(site)}
                             className="w-7 h-7 rounded-lg flex items-center justify-center cursor-pointer ml-auto transition-colors"
-                            style={{ background: T.dangerDim, color: T.danger }} title="Remove">
+                            style={{ background: 'var(--color-danger-dim)', color: 'var(--color-danger)' }} title="Remove">
                             <Trash2 size={12} />
                           </button>
                         </td>
@@ -254,37 +224,40 @@ const BlockedSites = ({ navigateTo }) => {
 
       {/* Add modal */}
       {showAdd && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.8)' }}>
-          <div className="w-full max-w-md rounded-2xl overflow-hidden shadow-2xl" style={{ background: T.card, border: `1px solid ${T.border}` }}>
-            <div className="flex items-center justify-between px-6 py-4" style={{ borderBottom: `1px solid ${T.border}`, background: T.surface }}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(8px)' }}
+          onClick={e => e.target === e.currentTarget && setShowAdd(false)}>
+          <div className="w-full max-w-md rounded-2xl overflow-hidden shadow-2xl fade-up"
+            style={{ background: 'var(--color-card)', border: '1px solid var(--color-border-bright)' }}>
+            <div className="flex items-center justify-between px-6 py-4"
+              style={{ borderBottom: '1px solid var(--color-border)', background: 'var(--color-surface)' }}>
               <div className="flex items-center gap-2">
-                <ShieldOff size={15} style={{ color: T.danger }} />
-                <h3 className="text-sm font-semibold" style={{ color: T.text }}>Block a Site</h3>
+                <ShieldOff size={14} style={{ color: 'var(--color-danger)' }} />
+                <h3 className="text-sm font-semibold" style={{ color: 'var(--color-text)' }}>Block a Site</h3>
               </div>
-              <button onClick={() => setShowAdd(false)} className="cursor-pointer transition-colors" style={{ color: T.dim }}><X size={15} /></button>
+              <button onClick={() => setShowAdd(false)}
+                className="w-6 h-6 flex items-center justify-center rounded-md cursor-pointer hover:bg-[var(--color-elevated)]"
+                style={{ color: 'var(--color-text-dim)' }}>
+                <X size={14} />
+              </button>
             </div>
             <form onSubmit={handleAdd} className="px-6 py-5 flex flex-col gap-4">
               <div>
-                <label className="text-xs font-medium mb-1.5 block" style={{ color: T.muted }}>URL *</label>
+                <label className="text-xs font-medium mb-1.5 block" style={{ color: 'var(--color-text-muted)' }}>URL *</label>
                 <input type="text" value={newUrl} onChange={e => setNewUrl(e.target.value)}
                   placeholder="https://malicious-site.com"
-                  className="w-full px-3 py-2.5 rounded-lg text-xs font-mono outline-none"
-                  style={{ background: T.surface, border: `1px solid ${T.border}`, color: T.text }} required />
+                  className="input text-xs font-mono" required />
               </div>
               <div>
-                <label className="text-xs font-medium mb-1.5 block" style={{ color: T.muted }}>Reason (optional)</label>
+                <label className="text-xs font-medium mb-1.5 block" style={{ color: 'var(--color-text-muted)' }}>Reason (optional)</label>
                 <input type="text" value={newReason} onChange={e => setNewReason(e.target.value)}
                   placeholder="Phishing, malware, etc."
-                  className="w-full px-3 py-2.5 rounded-lg text-xs outline-none"
-                  style={{ background: T.surface, border: `1px solid ${T.border}`, color: T.text }} />
+                  className="input text-xs" />
               </div>
               <div className="flex justify-end gap-2 pt-1">
-                <button type="button" onClick={() => setShowAdd(false)}
-                  className="px-4 py-2.5 rounded-lg text-xs cursor-pointer"
-                  style={{ background: T.surface, color: T.muted, border: `1px solid ${T.border}` }}>Cancel</button>
+                <button type="button" onClick={() => setShowAdd(false)} className="btn-secondary">Cancel</button>
                 <button type="submit" disabled={addingUrl}
-                  className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-semibold text-white cursor-pointer"
-                  style={{ background: T.danger, opacity: addingUrl ? 0.7 : 1 }}>
+                  className="btn-primary" style={{ background: 'var(--color-danger)', boxShadow: 'none', opacity: addingUrl ? 0.75 : 1 }}>
                   {addingUrl ? <Spinner size="sm" /> : <Plus size={12} />}
                   {addingUrl ? 'Adding…' : 'Block Site'}
                 </button>
@@ -296,23 +269,26 @@ const BlockedSites = ({ navigateTo }) => {
 
       {/* Confirm delete modal */}
       {confirmDelete && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.8)' }}>
-          <div className="w-full max-w-sm rounded-2xl overflow-hidden shadow-2xl" style={{ background: T.card, border: `1px solid ${T.border}` }}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(8px)' }}
+          onClick={e => e.target === e.currentTarget && setConfirmDelete(null)}>
+          <div className="w-full max-w-sm rounded-2xl overflow-hidden shadow-2xl fade-up"
+            style={{ background: 'var(--color-card)', border: '1px solid var(--color-border-bright)' }}>
             <div className="px-6 py-6 flex flex-col items-center gap-4">
-              <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ background: T.dangerDim }}>
-                <Trash2 size={20} style={{ color: T.danger }} />
+              <div className="w-12 h-12 rounded-xl flex items-center justify-center"
+                style={{ background: 'var(--color-danger-dim)' }}>
+                <Trash2 size={20} style={{ color: 'var(--color-danger)' }} />
               </div>
               <div className="text-center">
-                <h3 className="text-sm font-semibold mb-1.5" style={{ color: T.text }}>Remove from blocklist?</h3>
-                <p className="text-xs font-mono" style={{ color: T.muted }}>{confirmDelete.domain}</p>
+                <h3 className="text-sm font-semibold mb-1.5" style={{ color: 'var(--color-text)' }}>Remove from blocklist?</h3>
+                <p className="text-xs font-mono" style={{ color: 'var(--color-text-muted)' }}>{confirmDelete.domain}</p>
               </div>
               <div className="flex gap-2 w-full">
-                <button onClick={() => setConfirmDelete(null)}
-                  className="flex-1 py-2.5 rounded-lg text-sm cursor-pointer"
-                  style={{ background: T.surface, color: T.muted, border: `1px solid ${T.border}` }}>Cancel</button>
+                <button onClick={() => setConfirmDelete(null)} className="btn-secondary flex-1 justify-center">Cancel</button>
                 <button onClick={() => { removeBlockedSite(confirmDelete.id); setConfirmDelete(null); }}
-                  className="flex-1 py-2.5 rounded-lg text-sm font-semibold text-white cursor-pointer"
-                  style={{ background: T.danger }}>Remove</button>
+                  className="btn-primary flex-1 justify-center" style={{ background: 'var(--color-danger)', boxShadow: 'none' }}>
+                  Remove
+                </button>
               </div>
             </div>
           </div>

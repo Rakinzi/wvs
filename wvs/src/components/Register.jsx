@@ -1,55 +1,92 @@
-import React, { useState, useEffect } from 'react';
-import { Shield, Lock, User, Mail, AlertTriangle, Eye, EyeOff, CheckCircle, ArrowLeft, ArrowRight } from 'lucide-react';
+import React, { useState, useEffect, useContext } from 'react';
+import { Shield, Lock, User, Mail, AlertTriangle, Eye, EyeOff, ArrowRight, CheckCircle, ShieldCheck, Zap, BarChart2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { apiJson, ApiError } from '../lib/api';
+import { ThemeContext } from '../hooks/useTheme';
+import { AuthLayout } from './Login';
 import Spinner from './Spinner';
 
-const Field = ({ id, name, label, type = 'text', icon: Icon, value, onChange, error, placeholder, extra }) => (
-  <div className="flex flex-col gap-1.5">
-    <label htmlFor={id} className="text-xs font-medium" style={{ color: 'var(--color-text-muted)' }}>
-      {label}
-    </label>
-    <div className="relative">
-      <Icon size={15} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--color-text-dim)' }} />
+const features = [
+  { icon: ShieldCheck, title: 'Automated scanning',    desc: 'Run OWASP-grade scans on any target, on demand or on a schedule.' },
+  { icon: Zap,         title: 'Instant alerts',        desc: 'Get notified the moment a new vulnerability is discovered.' },
+  { icon: BarChart2,   title: 'Actionable reports',    desc: 'Export detailed PDF reports with severity ratings and remediation steps.' },
+  { icon: Shield,      title: 'Continuous protection', desc: 'Uptime monitoring and exposure tracking, 24/7.' },
+];
+
+const RegisterHero = ({ isDark }) => {
+  const txt  = isDark ? 'rgba(255,255,255,0.88)' : 'rgba(10,10,20,0.88)';
+  const dim  = isDark ? 'rgba(255,255,255,0.38)' : 'rgba(10,10,20,0.38)';
+  const card = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(10,10,20,0.04)';
+  const bdr  = isDark ? 'rgba(255,255,255,0.09)' : 'rgba(10,10,20,0.09)';
+  const iconBg = isDark ? 'rgba(99,102,241,0.15)' : 'rgba(99,102,241,0.1)';
+
+  return (
+    <>
+      <div>
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(99,102,241,0.14)', border: '1px solid rgba(99,102,241,0.28)', borderRadius: 100, padding: '3px 11px', marginBottom: 16 }}>
+          <div style={{ width: 5, height: 5, borderRadius: '50%', background: '#6366f1', boxShadow: '0 0 6px #6366f1' }} />
+          <span style={{ fontSize: 10.5, fontWeight: 600, color: '#a5b4fc', letterSpacing: '0.07em', textTransform: 'uppercase' }}>Free to get started</span>
+        </div>
+        <h2 style={{ fontSize: 28, fontWeight: 700, lineHeight: 1.22, color: txt, letterSpacing: '-0.03em', margin: '0 0 10px' }}>
+          Everything you need to<br /><span style={{ color: '#6366f1' }}>ship securely.</span>
+        </h2>
+        <p style={{ fontSize: 13, color: dim, lineHeight: 1.65, maxWidth: 340, margin: 0 }}>
+          LaunchGuard gives your team a complete security toolkit — from discovery to remediation.
+        </p>
+      </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {features.map(({ icon: Icon, title, desc }) => (
+          <div key={title} style={{ display: 'flex', alignItems: 'flex-start', gap: 14, background: card, border: `1px solid ${bdr}`, borderRadius: 13, padding: '14px 16px' }}>
+            <div style={{ width: 34, height: 34, borderRadius: 9, background: iconBg, border: '1px solid rgba(99,102,241,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 1 }}>
+              <Icon size={15} color="#6366f1" />
+            </div>
+            <div>
+              <p style={{ fontSize: 13, fontWeight: 600, color: txt, margin: '0 0 3px' }}>{title}</p>
+              <p style={{ fontSize: 12, color: dim, margin: 0, lineHeight: 1.55 }}>{desc}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', background: card, border: `1px solid ${bdr}`, borderRadius: 12 }}>
+        <CheckCircle size={15} color="#22c55e" style={{ flexShrink: 0 }} />
+        <p style={{ fontSize: 12, color: dim, margin: 0 }}>No credit card required · Free plan available · Cancel anytime</p>
+      </div>
+    </>
+  );
+};
+
+const InputField = ({ id, name, label, type = 'text', icon: Icon, value, onChange, error, placeholder, rightEl }) => (
+  <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+    <label htmlFor={id} style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-text-muted)' }}>{label}</label>
+    <div style={{ position: 'relative' }}>
+      <Icon size={14} style={{ position: 'absolute', left: 11, top: '50%', transform: 'translateY(-50%)', color: 'var(--color-text-muted)', pointerEvents: 'none' }} />
       <input
-        id={id}
-        name={name}
-        type={type}
-        value={value}
-        onChange={onChange}
-        placeholder={placeholder}
-        autoComplete={id}
-        className="w-full pl-9 py-2.5 rounded-lg text-sm outline-none transition-all duration-150"
-        style={{
-          background: 'var(--color-card)',
-          border: `1px solid ${error ? 'var(--color-danger)' : 'var(--color-border)'}`,
-          color: 'var(--color-text)',
-          paddingRight: extra ? '2.5rem' : '1rem',
-        }}
-        aria-invalid={!!error}
-        aria-describedby={error ? `${id}-error` : undefined}
+        id={id} name={name} type={type} value={value} onChange={onChange} placeholder={placeholder}
+        autoComplete={id} className="input"
+        style={{ paddingLeft: '2.1rem', paddingRight: rightEl ? '2.4rem' : undefined, borderColor: error ? 'var(--color-danger)' : undefined }}
+        aria-invalid={!!error} aria-describedby={error ? `${id}-err` : undefined}
       />
-      {extra}
+      {rightEl}
     </div>
-    {error && (
-      <p id={`${id}-error`} className="text-xs" style={{ color: 'var(--color-danger)' }} role="alert">
-        {error}
-      </p>
-    )}
+    {error && <p id={`${id}-err`} role="alert" style={{ fontSize: 11.5, color: 'var(--color-danger)', margin: 0 }}>{error}</p>}
   </div>
 );
 
 const Register = () => {
-  const [formData, setFormData] = useState({ username: '', email: '', password: '', confirmPassword: '' });
-  const [errors, setErrors]       = useState({});
-  const [isLoading, setIsLoading] = useState(false);
+  const [formData, setFormData]         = useState({ username: '', email: '', password: '', confirmPassword: '' });
+  const [errors, setErrors]             = useState({});
+  const [isLoading, setIsLoading]       = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [success, setSuccess]     = useState(false);
-  const [visible, setVisible]     = useState(false);
-  const navigate = useNavigate();
+  const [success, setSuccess]           = useState(false);
+  const [visible, setVisible]           = useState(false);
+  const navigate  = useNavigate();
+  const { theme } = useContext(ThemeContext) || {};
+  const isDark    = theme !== 'light';
 
   useEffect(() => {
-    document.title = 'Register — LaunchGuard';
+    document.title = 'Create Account — LaunchGuard';
     requestAnimationFrame(() => setVisible(true));
   }, []);
 
@@ -61,13 +98,16 @@ const Register = () => {
 
   const validate = () => {
     const e = {};
-    if (!formData.username.trim())       e.username = 'Username is required';
-    else if (formData.username.length < 4) e.username = 'At least 4 characters';
-    if (!formData.email.trim())          e.email = 'Email is required';
-    else if (!/\S+@\S+\.\S+/.test(formData.email)) e.email = 'Invalid email address';
-    if (!formData.password)              e.password = 'Password is required';
-    else if (formData.password.length < 8) e.password = 'At least 8 characters';
-    if (formData.password !== formData.confirmPassword) e.confirmPassword = 'Passwords do not match';
+    if (!formData.username.trim())                              e.username = 'Username is required';
+    else if (formData.username.length < 4)                     e.username = 'At least 4 characters';
+    if (!formData.email.trim())                                e.email = 'Email is required';
+    else if (!/\S+@\S+\.\S+/.test(formData.email))            e.email = 'Invalid email address';
+    if (!formData.password)                                    e.password = 'Password is required';
+    else if (formData.password.length < 8)                     e.password = 'At least 8 characters';
+    else if (!/[a-z]/.test(formData.password))                 e.password = 'Include a lowercase letter';
+    else if (!/[A-Z]/.test(formData.password))                 e.password = 'Include an uppercase letter';
+    else if (!/[0-9]/.test(formData.password))                 e.password = 'Include a number';
+    if (formData.password !== formData.confirmPassword)        e.confirmPassword = 'Passwords do not match';
     return e;
   };
 
@@ -77,11 +117,7 @@ const Register = () => {
     if (Object.keys(errs).length) { setErrors(errs); return; }
     setIsLoading(true);
     try {
-      await apiJson('/register', {
-        method: 'POST',
-        json: true,
-        body: { username: formData.username, email: formData.email, password: formData.password },
-      });
+      await apiJson('/register', { method: 'POST', json: true, body: { username: formData.username, email: formData.email, password: formData.password } });
       setSuccess(true);
     } catch (err) {
       setErrors({ form: err instanceof ApiError ? err.message : 'Failed to connect to server' });
@@ -90,140 +126,79 @@ const Register = () => {
     }
   };
 
+  const eyeBtn = (
+    <button type="button" onClick={() => setShowPassword(v => !v)}
+      style={{ position: 'absolute', right: 11, top: '50%', transform: 'translateY(-50%)', color: 'var(--color-text-muted)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex' }}
+      aria-label={showPassword ? 'Hide password' : 'Show password'}>
+      {showPassword ? <EyeOff size={14} /> : <Eye size={14} />}
+    </button>
+  );
+
   return (
-    <div
-      className="min-h-screen flex items-center justify-center px-4 py-8"
-      style={{ background: 'var(--color-bg)' }}
-    >
-      <div
-        className="absolute inset-0 pointer-events-none"
-        style={{
-          backgroundImage:
-            'linear-gradient(var(--color-border-subtle) 1px, transparent 1px), linear-gradient(90deg, var(--color-border-subtle) 1px, transparent 1px)',
-          backgroundSize: '48px 48px',
-          opacity: 0.4,
-        }}
-      />
+    <AuthLayout visible={visible} isDark={isDark} heroContent={<RegisterHero isDark={isDark} />}>
+      {/* Logo */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 36 }}>
+        <div style={{ width: 34, height: 34, borderRadius: 9, background: 'linear-gradient(135deg, #6366f1, #4f46e5)', boxShadow: '0 0 18px rgba(99,102,241,0.32)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          <Shield size={17} color="white" />
+        </div>
+        <span style={{ fontSize: 14.5, fontWeight: 700, color: 'var(--color-text)', letterSpacing: '-0.02em' }}>LaunchGuard</span>
+      </div>
 
-      <div
-        className="relative w-full max-w-md transition-all duration-500"
-        style={{ opacity: visible ? 1 : 0, transform: visible ? 'translateY(0)' : 'translateY(16px)' }}
-      >
-        <div
-          className="rounded-2xl overflow-hidden"
-          style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', boxShadow: '0 24px 64px rgba(0,0,0,0.5)' }}
-        >
-          {/* Header */}
-          <div
-            className="px-8 pt-8 pb-6 flex flex-col items-center gap-3"
-            style={{ borderBottom: '1px solid var(--color-border-subtle)' }}
-          >
-            <div
-              className="w-14 h-14 rounded-2xl flex items-center justify-center"
-              style={{ background: 'var(--color-primary)', boxShadow: '0 0 32px #3B82F640' }}
-            >
-              <Shield size={26} className="text-white" />
-            </div>
-            <div className="text-center">
-              <h1 className="text-xl font-semibold" style={{ color: 'var(--color-text)' }}>Create Account</h1>
-              <p className="text-sm mt-0.5" style={{ color: 'var(--color-text-muted)' }}>Join LaunchGuard</p>
-            </div>
+      {success ? (
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14, padding: '24px 0', textAlign: 'center' }}>
+          <div style={{ width: 52, height: 52, borderRadius: '50%', background: 'var(--color-secure-dim)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Mail size={22} style={{ color: 'var(--color-secure)' }} />
           </div>
-
-          <div className="px-8 py-7">
-            {success ? (
-              <div className="flex flex-col items-center gap-4 py-4 text-center">
-                <div className="w-14 h-14 rounded-full flex items-center justify-center" style={{ background: 'var(--color-secure-dim)' }}>
-                  <Mail size={24} style={{ color: 'var(--color-secure)' }} />
-                </div>
-                <div>
-                  <p className="font-semibold text-sm" style={{ color: 'var(--color-text)' }}>Account created — check your email</p>
-                  <p className="text-xs mt-1 leading-relaxed" style={{ color: 'var(--color-text-muted)' }}>
-                    We sent a verification link to <strong>{formData.email}</strong>. Click it to activate your account, then log in.
-                  </p>
-                </div>
-                <button onClick={() => navigate('/login')} className="text-sm font-medium cursor-pointer" style={{ color: 'var(--color-primary)' }}>
-                  Go to login
-                </button>
-              </div>
-            ) : (
-              <form onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
-                <Field
-                  id="username" name="username" label="Username" icon={User}
-                  value={formData.username} onChange={handleChange} error={errors.username}
-                  placeholder="Choose a username"
-                />
-                <Field
-                  id="email" name="email" label="Email" type="email" icon={Mail}
-                  value={formData.email} onChange={handleChange} error={errors.email}
-                  placeholder="your@email.com"
-                />
-                <Field
-                  id="password" name="password" label="Password"
-                  type={showPassword ? 'text' : 'password'} icon={Lock}
-                  value={formData.password} onChange={handleChange} error={errors.password}
-                  placeholder="Min. 8 characters"
-                  extra={
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(v => !v)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 cursor-pointer"
-                      style={{ color: 'var(--color-text-dim)' }}
-                      aria-label={showPassword ? 'Hide password' : 'Show password'}
-                    >
-                      {showPassword ? <EyeOff size={14} /> : <Eye size={14} />}
-                    </button>
-                  }
-                />
-                <Field
-                  id="confirmPassword" name="confirmPassword" label="Confirm password"
-                  type={showPassword ? 'text' : 'password'} icon={Lock}
-                  value={formData.confirmPassword} onChange={handleChange} error={errors.confirmPassword}
-                  placeholder="Repeat password"
-                />
-
-                {errors.form && (
-                  <div
-                    className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm"
-                    role="alert"
-                    style={{ background: 'var(--color-danger-dim)', color: 'var(--color-danger)', border: '1px solid #EF444430' }}
-                  >
-                    <AlertTriangle size={14} className="flex-shrink-0" />
-                    {errors.form}
-                  </div>
-                )}
-
-                <button
-                  type="submit"
-                  disabled={isLoading}
-                  className="flex items-center justify-center gap-2 w-full py-2.5 rounded-lg text-sm font-semibold text-white transition-all duration-150 cursor-pointer mt-1"
-                  style={{ background: isLoading ? 'var(--color-primary-dim)' : 'var(--color-primary)', opacity: isLoading ? 0.7 : 1 }}
-                >
-                  {isLoading ? (
-                    <><Spinner size="sm" /> Creating account…</>
-                  ) : (
-                    <>Create Account <ArrowRight size={15} /></>
-                  )}
-                </button>
-              </form>
-            )}
-
-            <p className="text-sm text-center mt-5" style={{ color: 'var(--color-text-dim)' }}>
-              Already have an account?{' '}
-              <button
-                type="button"
-                onClick={() => navigate('/login')}
-                className="font-medium cursor-pointer"
-                style={{ color: 'var(--color-primary)' }}
-              >
-                <ArrowLeft size={12} className="inline mr-0.5" />
-                Sign in
-              </button>
+          <div>
+            <p style={{ fontSize: 15, fontWeight: 700, color: 'var(--color-text)', margin: '0 0 6px' }}>Account created!</p>
+            <p style={{ fontSize: 13, color: 'var(--color-text-muted)', margin: 0, lineHeight: 1.6 }}>
+              We sent a verification link to <strong style={{ color: 'var(--color-text)' }}>{formData.email}</strong>. Click it to activate your account.
             </p>
           </div>
+          <button onClick={() => navigate('/login')} className="btn-primary justify-center" style={{ width: '100%', padding: '10px 0', fontSize: 14, marginTop: 4 }}>
+            Go to sign in <ArrowRight size={14} />
+          </button>
         </div>
-      </div>
-    </div>
+      ) : (
+        <>
+          <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--color-text)', letterSpacing: '-0.03em', margin: '0 0 5px' }}>Create your account</h1>
+          <p style={{ fontSize: 13.5, color: 'var(--color-text-muted)', margin: '0 0 24px', lineHeight: 1.5 }}>Start securing your products today</p>
+
+          <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 12 }} noValidate>
+            <InputField id="username" name="username" label="Username" icon={User}
+              value={formData.username} onChange={handleChange} error={errors.username} placeholder="Choose a username" />
+            <InputField id="email" name="email" label="Email" type="email" icon={Mail}
+              value={formData.email} onChange={handleChange} error={errors.email} placeholder="you@example.com" />
+            <InputField id="password" name="password" label="Password" type={showPassword ? 'text' : 'password'} icon={Lock}
+              value={formData.password} onChange={handleChange} error={errors.password} placeholder="8+ chars, Aa, 0-9" rightEl={eyeBtn} />
+            <InputField id="confirmPassword" name="confirmPassword" label="Confirm password" type={showPassword ? 'text' : 'password'} icon={Lock}
+              value={formData.confirmPassword} onChange={handleChange} error={errors.confirmPassword} placeholder="Repeat password" />
+
+            {errors.form && (
+              <div role="alert" style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '9px 11px', borderRadius: 9, background: 'var(--color-danger-dim)', border: '1px solid rgba(239,68,68,0.2)', color: 'var(--color-danger)', fontSize: 13 }}>
+                <AlertTriangle size={13} style={{ flexShrink: 0 }} />{errors.form}
+              </div>
+            )}
+
+            <button type="submit" disabled={isLoading} className="btn-primary w-full justify-center"
+              style={{ marginTop: 4, padding: '10px 0', fontSize: 14, opacity: isLoading ? 0.75 : 1 }}>
+              {isLoading ? <><Spinner size="sm" /> Creating account…</> : <>Create account <ArrowRight size={14} /></>}
+            </button>
+          </form>
+
+          <p style={{ fontSize: 13, textAlign: 'center', marginTop: 22, color: 'var(--color-text-dim)' }}>
+            Already have an account?{' '}
+            <button type="button" onClick={() => navigate('/login')}
+              style={{ fontWeight: 600, color: 'var(--color-primary)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
+              Sign in
+            </button>
+          </p>
+          <p style={{ fontSize: 11, color: 'var(--color-text-dim)', textAlign: 'center', marginTop: 28 }}>
+            By creating an account you agree to our Terms of Service
+          </p>
+        </>
+      )}
+    </AuthLayout>
   );
 };
 

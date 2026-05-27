@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { apiJson, ApiError } from '../lib/api';
 
 const normalizeUrl = (value) => {
@@ -8,42 +8,152 @@ const normalizeUrl = (value) => {
   return value;
 };
 
+function useLocalStorage(key, defaultValue) {
+  const [value, setValue] = useState(() => {
+    try {
+      const stored = localStorage.getItem(key);
+      return stored !== null ? JSON.parse(stored) : defaultValue;
+    } catch {
+      return defaultValue;
+    }
+  });
+
+  const set = useCallback((next) => {
+    setValue(prev => {
+      const resolved = typeof next === 'function' ? next(prev) : next;
+      try {
+        if (resolved === null || resolved === undefined) {
+          localStorage.removeItem(key);
+        } else {
+          localStorage.setItem(key, JSON.stringify(resolved));
+        }
+      } catch { /* storage full — degrade gracefully */ }
+      return resolved;
+    });
+  }, [key]);
+
+  return [value, set];
+}
+
+const TERMINAL_JOB_STATUSES = ['completed', 'failed'];
+const ACTIVE_JOB_STATUSES = ['queued', 'running'];
+
+const toTimestamp = (value) => {
+  if (!value) return 0;
+  const parsed = new Date(value).getTime();
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
+const chooseLatestJob = (storedJob, jobs) => {
+  if (!Array.isArray(jobs) || jobs.length === 0) {
+    return storedJob ?? null;
+  }
+
+  const latestActiveJob = jobs.find((job) => ACTIVE_JOB_STATUSES.includes(job.status)) || null;
+  const latestJob = jobs[0] || null;
+
+  if (!storedJob) {
+    return latestActiveJob || latestJob;
+  }
+
+  const storedJobTimestamp = toTimestamp(storedJob.created_at);
+  const latestActiveTimestamp = toTimestamp(latestActiveJob?.created_at);
+  const latestJobTimestamp = toTimestamp(latestJob?.created_at);
+
+  if (latestActiveJob && latestActiveJob.id !== storedJob.id && latestActiveTimestamp >= storedJobTimestamp) {
+    return latestActiveJob;
+  }
+
+  if (TERMINAL_JOB_STATUSES.includes(storedJob.status) && latestJob && latestJob.id !== storedJob.id && latestJobTimestamp >= storedJobTimestamp) {
+    return latestJob;
+  }
+
+  return storedJob;
+};
+
 export const useScansData = ({ onScanComplete } = {}) => {
-  const [fullScanUrl, setFullScanUrl] = useState('');
-  const [fullScanProfile, setFullScanProfile] = useState('security_only');
-  const [fullScanPagePaths, setFullScanPagePaths] = useState('');
-  const [fullScanVerifiedTargetId, setFullScanVerifiedTargetId] = useState('');
-  const [fullScanEnableAiReview, setFullScanEnableAiReview] = useState(false);
-  const [sqlScanUrl, setSqlScanUrl] = useState('');
-  const [sslScanUrl, setSslScanUrl] = useState('');
-  const [wordpressScanUrl, setWordpressScanUrl] = useState('');
-  const [xssScanUrl, setXssScanUrl] = useState('');
-  const [techScanUrl, setTechScanUrl] = useState('');
-  const [exposureScanUrl, setExposureScanUrl] = useState('');
+  // URL inputs — persist so user doesn't re-type after navigation
+  const [fullScanUrl, setFullScanUrl]               = useLocalStorage('scan_url_full', '');
+  const [fullScanProfile, setFullScanProfile]       = useLocalStorage('scan_profile', 'security_only');
+  const [fullScanPagePaths, setFullScanPagePaths]   = useLocalStorage('scan_page_paths', '');
+  const [fullScanVerifiedTargetId, setFullScanVerifiedTargetId] = useLocalStorage('scan_verified_target_id', '');
+  const [fullScanEnableAiReview, setFullScanEnableAiReview]     = useLocalStorage('scan_ai_review', false);
+  const [sqlScanUrl, setSqlScanUrl]                 = useLocalStorage('scan_url_sql', '');
+  const [sslScanUrl, setSslScanUrl]                 = useLocalStorage('scan_url_ssl', '');
+  const [wordpressScanUrl, setWordpressScanUrl]     = useLocalStorage('scan_url_wordpress', '');
+  const [xssScanUrl, setXssScanUrl]                 = useLocalStorage('scan_url_xss', '');
+  const [techScanUrl, setTechScanUrl]               = useLocalStorage('scan_url_tech', '');
+  const [exposureScanUrl, setExposureScanUrl]       = useLocalStorage('scan_url_exposure', '');
+  const [malwareScanUrl, setMalwareScanUrl]         = useLocalStorage('scan_url_malware', '');
 
+  // In-flight flags — not persisted (always false on load)
   const [isFullScanSubmitting, setIsFullScanSubmitting] = useState(false);
-  const [isSqlScanning, setIsSqlScanning] = useState(false);
-  const [isSslScanning, setIsSslScanning] = useState(false);
-  const [isWordpressScanning, setIsWordpressScanning] = useState(false);
-  const [isXssScanning, setIsXssScanning] = useState(false);
-  const [isTechScanning, setIsTechScanning] = useState(false);
-  const [isExposureScanning, setIsExposureScanning] = useState(false);
+  const [isSqlScanning, setIsSqlScanning]               = useState(false);
+  const [isSslScanning, setIsSslScanning]               = useState(false);
+  const [isWordpressScanning, setIsWordpressScanning]   = useState(false);
+  const [isXssScanning, setIsXssScanning]               = useState(false);
+  const [isTechScanning, setIsTechScanning]             = useState(false);
+  const [isExposureScanning, setIsExposureScanning]     = useState(false);
+  const [isMalwareScanning, setIsMalwareScanning]       = useState(false);
 
-  const [fullScanJob, setFullScanJob] = useState(null);
-  const [sqlScanResult, setSqlScanResult] = useState(null);
-  const [sslScanResult, setSslScanResult] = useState(null);
-  const [wordpressScanResult, setWordpressScanResult] = useState(null);
-  const [xssScanResult, setXssScanResult] = useState(null);
-  const [techScanResult, setTechScanResult] = useState(null);
-  const [exposureScanResult, setExposureScanResult] = useState(null);
+  // Results — persisted so navigating away and back shows last result
+  const [fullScanJob, setFullScanJob]               = useLocalStorage('scan_job_full', null);
+  const [sqlScanResult, setSqlScanResult]           = useLocalStorage('scan_result_sql', null);
+  const [sslScanResult, setSslScanResult]           = useLocalStorage('scan_result_ssl', null);
+  const [wordpressScanResult, setWordpressScanResult] = useLocalStorage('scan_result_wordpress', null);
+  const [xssScanResult, setXssScanResult]           = useLocalStorage('scan_result_xss', null);
+  const [techScanResult, setTechScanResult]         = useLocalStorage('scan_result_tech', null);
+  const [exposureScanResult, setExposureScanResult] = useLocalStorage('scan_result_exposure', null);
+  const [malwareScanResult, setMalwareScanResult]   = useLocalStorage('scan_result_malware', null);
 
-  const [fullScanError, setFullScanError] = useState(null);
-  const [sqlError, setSqlError] = useState(null);
-  const [sslError, setSslError] = useState(null);
-  const [wordpressError, setWordpressError] = useState(null);
-  const [xssError, setXssError] = useState(null);
-  const [techError, setTechError] = useState(null);
-  const [exposureError, setExposureError] = useState(null);
+  // Error state — not persisted
+  const [fullScanError, setFullScanError]     = useState(null);
+  const [sqlError, setSqlError]               = useState(null);
+  const [sslError, setSslError]               = useState(null);
+  const [wordpressError, setWordpressError]   = useState(null);
+  const [xssError, setXssError]               = useState(null);
+  const [techError, setTechError]             = useState(null);
+  const [exposureError, setExposureError]     = useState(null);
+  const [malwareError, setMalwareError]       = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    apiJson('/scan/jobs?limit=5', { auth: true })
+      .then(({ data }) => {
+        if (cancelled || data.status !== 'success') {
+          return;
+        }
+        const resolvedJob = chooseLatestJob(fullScanJob, data.jobs || []);
+        if (resolvedJob && resolvedJob.id !== fullScanJob?.id) {
+          setFullScanJob(resolvedJob);
+          return;
+        }
+        if (!resolvedJob && fullScanJob) {
+          setFullScanJob(null);
+        }
+      })
+      .catch(() => {});
+
+    return () => {
+      cancelled = true;
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Poll the full scan job whenever it's in-progress (survives tab switches and reloads)
+  useEffect(() => {
+    if (!fullScanJob || !ACTIVE_JOB_STATUSES.includes(fullScanJob.status)) return;
+
+    const poll = () => {
+      apiJson(`/scan/jobs/${fullScanJob.id}`, { auth: true })
+        .then(({ data }) => { if (data.status === 'success') setFullScanJob(data.job); })
+        .catch(() => {});
+    };
+
+    poll(); // immediate fetch on mount / status change
+    const id = setInterval(poll, 3000);
+    return () => clearInterval(id);
+  }, [fullScanJob?.id, fullScanJob?.status]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleFullScan = useCallback(async () => {
     if (!fullScanUrl) { setFullScanError('Please enter a URL to scan'); return; }
@@ -252,19 +362,48 @@ export const useScansData = ({ onScanComplete } = {}) => {
     }
   }, [exposureScanUrl, onScanComplete]);
 
+  const handleMalwareScan = useCallback(async () => {
+    if (!malwareScanUrl) { setMalwareError('Please enter a URL to scan'); return; }
+    try {
+      setIsMalwareScanning(true);
+      setMalwareError(null);
+      const { data } = await apiJson('/scan/malware', {
+        method: 'POST', auth: true, json: true,
+        body: { url: normalizeUrl(malwareScanUrl) }
+      });
+      if (data.status === 'success') {
+        setMalwareScanResult({
+          url: data.url,
+          scan_id: data.scan_id,
+          timestamp: new Date().toISOString(),
+          vulnerable: data.vulnerable,
+          findings: data.findings || {},
+          recommendations: data.recommendations || [],
+        });
+        onScanComplete?.();
+      } else {
+        throw new Error(data.message || 'Failed to perform malware analysis');
+      }
+    } catch (error) {
+      setMalwareError(error instanceof ApiError ? error.message : 'Failed to perform scan. Please try again.');
+    } finally {
+      setIsMalwareScanning(false);
+    }
+  }, [malwareScanUrl, onScanComplete]);
+
   return {
     fullScanUrl, setFullScanUrl, fullScanProfile, setFullScanProfile,
     fullScanPagePaths, setFullScanPagePaths, fullScanVerifiedTargetId, setFullScanVerifiedTargetId,
     fullScanEnableAiReview, setFullScanEnableAiReview, sqlScanUrl, setSqlScanUrl,
     sslScanUrl, setSslScanUrl, wordpressScanUrl, setWordpressScanUrl,
     xssScanUrl, setXssScanUrl, techScanUrl, setTechScanUrl,
-    exposureScanUrl, setExposureScanUrl,
+    exposureScanUrl, setExposureScanUrl, malwareScanUrl, setMalwareScanUrl,
     isFullScanSubmitting, isSqlScanning, isSslScanning, isWordpressScanning,
-    isXssScanning, isTechScanning, isExposureScanning,
+    isXssScanning, isTechScanning, isExposureScanning, isMalwareScanning,
     fullScanJob, setFullScanJob, sqlScanResult, sslScanResult, wordpressScanResult,
-    xssScanResult, techScanResult, exposureScanResult,
-    fullScanError, sqlError, sslError, wordpressError, xssError, techError, exposureError,
+    xssScanResult, techScanResult, exposureScanResult, malwareScanResult,
+    fullScanError, sqlError, sslError, wordpressError, xssError, techError, exposureError, malwareError,
     handleFullScan, handleSqlScan, handleSslScan, handleWordpressScan,
-    handleXssScan, handleTechScan, handleExposureScan,
+    handleXssScan, handleTechScan, handleExposureScan, handleMalwareScan,
   };
 };

@@ -124,6 +124,15 @@ def _serialize_task_progress(job: ScanJob) -> dict | None:
     }
 
 
+def _safe_commit() -> bool:
+    try:
+        db.session.commit()
+        return True
+    except Exception:
+        db.session.rollback()
+        return False
+
+
 def _sync_scan_job_status(job: ScanJob) -> ScanJob:
     if job.status not in {"queued", "running"} or not job.task_id:
         return job
@@ -137,7 +146,7 @@ def _sync_scan_job_status(job: ScanJob) -> ScanJob:
         if not job.error_message:
             progress = _serialize_task_progress(job) or {}
             job.error_message = progress.get("message") or "Scan job failed in Celery worker."
-        db.session.commit()
+        _safe_commit()
         return job
 
     if task_state in {"PENDING", "RECEIVED", "STARTED"}:
@@ -146,15 +155,24 @@ def _sync_scan_job_status(job: ScanJob) -> ScanJob:
     if task_state == "PROGRESS":
         if job.status != "running":
             job.status = "running"
-            db.session.commit()
+            _safe_commit()
         return job
 
     if task_state == "RETRY":
-        job.status = "failed"
-        job.completed_at = utc_now()
-        if not job.error_message:
-            job.error_message = "Scan worker restarted while task was retrying."
-        db.session.commit()
+        job.status = "queued"
+        job.completed_at = None
+        job.error_message = None
+        current_findings = job.findings if isinstance(job.findings, dict) else {}
+        progress = current_findings.get("_progress", {}) if isinstance(current_findings, dict) else {}
+        job.findings = {
+            **current_findings,
+            "_progress": {
+                **progress,
+                "task_state": "RETRY",
+                "message": "Worker restarted. Waiting for Celery to retry this scan.",
+            },
+        }
+        _safe_commit()
         return job
 
     if task_state == "SUCCESS":
@@ -162,7 +180,7 @@ def _sync_scan_job_status(job: ScanJob) -> ScanJob:
             job.status = "completed"
             if not job.completed_at:
                 job.completed_at = utc_now()
-            db.session.commit()
+            _safe_commit()
         return job
 
     if task_state in {"FAILURE", "REVOKED"}:
@@ -170,7 +188,7 @@ def _sync_scan_job_status(job: ScanJob) -> ScanJob:
         job.completed_at = utc_now()
         if not job.error_message:
             job.error_message = _resolve_job_failure_message(task_result)
-        db.session.commit()
+        _safe_commit()
         return job
 
     try:
@@ -182,7 +200,7 @@ def _sync_scan_job_status(job: ScanJob) -> ScanJob:
         job.completed_at = utc_now()
         if not job.error_message:
             job.error_message = _resolve_job_failure_message(task_result)
-        db.session.commit()
+        _safe_commit()
 
     return job
 
@@ -201,6 +219,17 @@ def _publicize_scan_assets(scan_id: str, payload):
                 if isinstance(screenshot_path, str) and screenshot_path:
                     evidence["screenshot_url"] = _asset_url(scan_id, os.path.basename(screenshot_path))
                 cloned[key] = _publicize_scan_assets(scan_id, evidence)
+            elif key == "screenshots" and isinstance(value, dict) and "screenshots" in value:
+                # Convert screenshot_scanner paths {desktop: path, mobile: path} → URLs
+                raw = value.get("screenshots") or {}
+                cloned[key] = {
+                    "status": value.get("status"),
+                    "screenshots": {
+                        vp: _asset_url(scan_id, os.path.basename(path))
+                        for vp, path in raw.items()
+                        if isinstance(path, str) and path
+                    },
+                }
             else:
                 cloned[key] = _publicize_scan_assets(scan_id, value)
         return cloned
@@ -662,14 +691,15 @@ def get_scan_history():
         
         results = []
         for scan in scans:
-            summary = scan.findings.get('summary') or build_scan_summary(scan.findings)
+            findings = scan.findings or {}
+            summary = findings.get('summary') or build_scan_summary(findings)
             results.append({
                 'id': scan.public_id,
                 'url': scan.url,
                 'timestamp': scan.timestamp.isoformat(),
-                'scan_profile': _infer_scan_profile(scan.findings or {}),
-                'has_vulnerabilities': summary['vulnerable'],
-                'issue_count': summary['total_issues'],
+                'scan_profile': _infer_scan_profile(findings),
+                'has_vulnerabilities': summary.get('vulnerable', False),
+                'issue_count': summary.get('total_issues', 0),
             })
         
         return jsonify({
@@ -823,6 +853,53 @@ def check_exposure():
             'findings': results,
             'recommendations': results.get('recommendations', []),
             'vulnerable': has_critical,
+            'summary': findings['summary'],
+        }), 200
+
+    except (ValueError, ValidationError) as exc:
+        return jsonify({'status': 'error', 'message': str(exc)}), 400
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+@bp.route('/scan/malware', methods=['POST'])
+@jwt_required()
+@limiter.limit("10 per hour")
+def check_malware():
+    try:
+        current_user = get_current_user()
+        if not current_user:
+            return jsonify({'error': 'User not found'}), 404
+        payload = ScanRequestPayload.model_validate(request.get_json(silent=True) or {})
+        url = normalize_target_url(payload.url)
+
+        scanner = SecurityScanner()
+        results = scanner.check_malware_analysis(url)
+
+        findings = {
+            'url': url,
+            'sqli': [],
+            'ssl': {'valid': True},
+            'headers': {'status': 'not_run', 'issues': []},
+            'wordpress': {'status': 'not_run', 'is_wordpress': False, 'issues': []},
+            'zap': {'enabled': False, 'status': 'not_run', 'issues': []},
+            'malicious': {'is_malicious': False},
+            'malware_analysis': results,
+            'timestamp': utc_now_isoformat()
+        }
+        findings['summary'] = build_scan_summary(findings)
+        findings['sections'] = build_scan_sections(findings)
+
+        scan = persist_scan(current_user, findings, prefix="malware_scan")
+        has_high_risk = any(str(i.get('severity') or '').title() in ('Critical', 'High') for i in (results.get('issues') or []))
+
+        return jsonify({
+            'status': 'success',
+            'scan_id': scan.public_id,
+            'url': url,
+            'findings': results,
+            'recommendations': results.get('recommendations', []),
+            'vulnerable': has_high_risk,
             'summary': findings['summary'],
         }), 200
 

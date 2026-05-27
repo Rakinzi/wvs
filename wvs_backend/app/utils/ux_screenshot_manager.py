@@ -32,11 +32,18 @@ def collect_screenshot_paths(data) -> set[str]:
 
     def walk(value):
         if isinstance(value, dict):
+            # evidence.screenshot_path (UX/visual AI findings)
             evidence = value.get("evidence")
             if isinstance(evidence, dict):
                 path = evidence.get("screenshot_path")
                 if isinstance(path, str) and path:
                     found.add(path)
+            # screenshots.screenshots.{desktop,mobile} (screenshot scanner)
+            shots = value.get("screenshots")
+            if isinstance(shots, dict):
+                for path in shots.values():
+                    if isinstance(path, str) and path:
+                        found.add(path)
             for child in value.values():
                 walk(child)
         elif isinstance(value, list):

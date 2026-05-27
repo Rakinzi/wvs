@@ -104,9 +104,11 @@ def build_scan_summary(findings: dict[str, Any]) -> dict[str, Any]:
     xss_findings = findings.get("xss", {}) or {}
     tech_findings = findings.get("tech", {}) or {}
     exposure_findings = findings.get("exposure", {}) or {}
+    secrets_findings = findings.get("secrets", {}) or {}
     dns_findings = findings.get("dns", {}) or {}
     redirect_findings = findings.get("redirect", {}) or {}
     takeover_findings = findings.get("takeover", {}) or {}
+    malware_analysis_findings = findings.get("malware_analysis", {}) or {}
     accessibility_findings = findings.get("accessibility", {}) or {}
     responsive_findings = findings.get("responsive_ux", {}) or {}
     performance_findings = findings.get("performance_ux", {}) or {}
@@ -121,9 +123,11 @@ def build_scan_summary(findings: dict[str, Any]) -> dict[str, Any]:
     tech_packages = tech_findings.get("packages", []) or []
     tech_advisories = tech_findings.get("advisories", []) or []
     exposure_issues = exposure_findings.get("issues", []) or []
+    secrets_issues = secrets_findings.get("issues", []) or []
     dns_issues = dns_findings.get("issues", []) or []
     redirect_issues = redirect_findings.get("issues", []) or []
     takeover_issues = takeover_findings.get("issues", []) or []
+    malware_analysis_issues = malware_analysis_findings.get("issues", []) or []
     accessibility_issues = accessibility_findings.get("issues", []) or []
     responsive_issues = responsive_findings.get("issues", []) or []
     performance_issues = performance_findings.get("issues", []) or []
@@ -146,6 +150,8 @@ def build_scan_summary(findings: dict[str, Any]) -> dict[str, Any]:
         or bool(actionable_tech_issues)
         or bool(tech_advisories)
         or bool([i for i in exposure_issues if i.get("severity") in ("Critical", "High")])
+        or bool([i for i in secrets_issues if i.get("severity") in ("Critical", "High")])
+        or bool([i for i in malware_analysis_issues if str(i.get("severity") or "").title() in ("Critical", "High")])
         or bool([i for i in dns_issues if i.get("severity") in ("High", "Critical")])
         or bool(redirect_issues)
         or bool(takeover_issues)
@@ -155,8 +161,8 @@ def build_scan_summary(findings: dict[str, Any]) -> dict[str, Any]:
     total_issues = (
         len(sqli_findings) + len(header_issues) + len(wordpress_issues) +
         len(zap_issues) + len(xss_issues) + len(actionable_tech_issues) + len(tech_advisories) +
-        len(exposure_issues) + len(dns_issues) + len(redirect_issues) + len(takeover_issues) +
-        len(accessibility_issues) + len(responsive_issues) + len(performance_issues) + len(form_issues)
+        len(exposure_issues) + len(secrets_issues) + len(dns_issues) + len(redirect_issues) + len(takeover_issues) +
+        len(malware_analysis_issues) + len(accessibility_issues) + len(responsive_issues) + len(performance_issues) + len(form_issues)
     )
     if ssl_findings.get("valid") is False:
         total_issues += 1
@@ -181,6 +187,8 @@ def build_scan_summary(findings: dict[str, Any]) -> dict[str, Any]:
         "package_count": len(tech_packages),
         "advisory_count": len(tech_advisories),
         "exposure_count": len(exposure_issues),
+        "secrets_count": len(secrets_issues),
+        "malware_artifact_count": len(malware_analysis_issues),
         "dns_issue_count": len(dns_issues),
         "redirect_count": len(redirect_issues),
         "takeover_count": len(takeover_issues),
@@ -246,6 +254,8 @@ def build_scan_sections(findings: dict[str, Any]) -> dict[str, dict[str, Any]]:
 
     xss_findings = findings.get("xss", {}) or {}
     exposure_findings = findings.get("exposure", {}) or {}
+    secrets_findings = findings.get("secrets", {}) or {}
+    malware_analysis_findings = findings.get("malware_analysis", {}) or {}
     dns_findings = findings.get("dns", {}) or {}
     redirect_findings = findings.get("redirect", {}) or {}
     takeover_findings = findings.get("takeover", {}) or {}
@@ -332,6 +342,14 @@ def build_scan_sections(findings: dict[str, Any]) -> dict[str, dict[str, Any]]:
             "top_findings": (exposure_findings.get("issues", []) or [])[:5],
             "recommendations": exposure_findings.get("recommendations", []) or [],
         },
+        "secrets": {
+            "label": "Hardcoded Secrets & API Keys",
+            "status": secrets_findings.get("status", "not_run"),
+            "issue_count": len(secrets_findings.get("issues", []) or []),
+            "severity_counts": _severity_counts(secrets_findings.get("issues", []) or []),
+            "top_findings": (secrets_findings.get("issues", []) or [])[:5],
+            "recommendations": secrets_findings.get("recommendations", []) or [],
+        },
         "malicious": {
             "label": "Malicious Content Analysis",
             "status": "issues_found" if malicious_issues else "ok",
@@ -343,6 +361,14 @@ def build_scan_sections(findings: dict[str, Any]) -> dict[str, dict[str, Any]]:
                 "Block access to this domain in your organization",
                 "If this is your website, investigate potential compromise",
             ] if malicious_issues else [],
+        },
+        "malware_analysis": {
+            "label": "Downloaded Artifact Malware Analysis",
+            "status": malware_analysis_findings.get("status", "not_run"),
+            "issue_count": len(malware_analysis_findings.get("issues", []) or []),
+            "severity_counts": _severity_counts(malware_analysis_findings.get("issues", []) or []),
+            "top_findings": (malware_analysis_findings.get("issues", []) or [])[:5],
+            "recommendations": malware_analysis_findings.get("recommendations", []) or [],
         },
         "dns": {
             "label": "DNS Security (SPF / DMARC / DKIM)",
@@ -419,6 +445,7 @@ def build_best_practices(findings: dict[str, Any]) -> list[str]:
     xss_findings = findings.get("xss", {}) or {}
     header_findings = findings.get("headers", {}) or {}
     exposure_findings = findings.get("exposure", {}) or {}
+    malware_analysis_findings = findings.get("malware_analysis", {}) or {}
 
     practices: list[str] = []
 
@@ -443,6 +470,8 @@ def build_best_practices(findings: dict[str, Any]) -> list[str]:
 
     if (exposure_findings.get("issues") or []):
         practices.append("Keep source, backup, env, and debug artifacts out of the web root, and validate deployment bundles before publish.")
+    if (malware_analysis_findings.get("issues") or []):
+        practices.append("Only publish signed, verified release artifacts from a trusted CI pipeline and malware-scan downloads before every release.")
     if (findings.get("accessibility", {}) or {}).get("issues"):
         practices.append("Run mobile accessibility checks on every release candidate and treat missing labels and inaccessible controls as launch blockers.")
     if (findings.get("responsive_ux", {}) or {}).get("issues"):

@@ -22,8 +22,6 @@ class AuthRegisterPayload(BaseModel):
     @field_validator("password")
     @classmethod
     def validate_password(cls, value: str) -> str:
-        if len(value) < 10:
-            raise ValueError("Password must be at least 10 characters long")
         if not re.search(r"[a-z]", value):
             raise ValueError("Password must include a lowercase letter")
         if not re.search(r"[A-Z]", value):
@@ -114,3 +112,19 @@ class VerifiedTargetCreatePayload(BaseModel):
         if normalized not in {"meta_tag", "well_known_file"}:
             raise ValueError("Verification method must be meta_tag or well_known_file")
         return normalized
+
+
+class UptimeMonitorCreatePayload(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    name: str = Field(min_length=2, max_length=120)
+    target_url: str = Field(min_length=8, max_length=2048)
+    check_interval_minutes: int = Field(default=5, ge=1, le=1440)
+
+
+class UptimeMonitorUpdatePayload(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    name: str | None = Field(default=None, min_length=2, max_length=120)
+    check_interval_minutes: int | None = Field(default=None, ge=1, le=1440)
+    is_enabled: bool | None = None

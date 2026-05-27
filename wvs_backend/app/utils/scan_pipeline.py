@@ -46,18 +46,22 @@ def build_full_scan(url: str, progress_callback=None) -> dict:
     scanner = SecurityScanner()
     findings = {
         'url': url,
-        'timestamp': utc_now_isoformat()
+        'timestamp': utc_now_isoformat(),
+        'scan_profile': 'full_scan',
     }
     steps = [
+        ('screenshots', 'site screenshots', scanner.capture_screenshots),
         ('sqli', 'SQL injection', scanner.check_sql_injection),
         ('ssl', 'SSL/TLS', scanner.check_ssl),
         ('headers', 'security headers', scanner.check_headers),
         ('wordpress', 'WordPress', scanner.check_wordpress),
         ('zap', 'OWASP ZAP', scanner.check_zap),
         ('malicious', 'malicious reputation', scanner.malicious_detector.analyze_url),
+        ('malware_analysis', 'malware analysis', scanner.check_malware_analysis),
         ('xss', 'XSS', scanner.check_xss),
         ('tech', 'technology stack', scanner.check_tech),
         ('exposure', 'exposed files', scanner.check_exposure),
+        ('secrets', 'hardcoded secrets', scanner.check_secrets),
         ('dns', 'DNS', scanner.check_dns),
         ('redirect', 'open redirects', scanner.check_redirect),
         ('takeover', 'subdomain takeover', scanner.check_takeover),

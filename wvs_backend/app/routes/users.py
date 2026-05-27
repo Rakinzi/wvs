@@ -21,6 +21,19 @@ from app.utils.time_utils import utc_now
 bp = Blueprint('users', __name__)
 
 
+def _validation_error_payload(exc: ValidationError) -> dict:
+    try:
+        errors = exc.errors(include_context=False)
+    except TypeError:
+        errors = exc.errors()
+        for error in errors:
+            if "ctx" in error:
+                error["ctx"] = {key: str(value) for key, value in error["ctx"].items()}
+
+    first_error = errors[0]["msg"] if errors else "Invalid request payload"
+    return {"error": first_error, "errors": errors}
+
+
 def _hash_reset_token(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
@@ -209,11 +222,16 @@ def confirm_email_verification():
 
     token_hash = _hash_reset_token(token)
     user = User.query.filter_by(verification_token_hash=token_hash).first()
-    if not user:
+    if (
+        not user
+        or not user.verification_token_expires_at
+        or user.verification_token_expires_at < utc_now()
+    ):
         return jsonify({'error': 'Invalid or expired verification link'}), 400
 
     user.email_verified = True
     user.verification_token_hash = None
+    user.verification_token_expires_at = None
     db.session.commit()
     return jsonify({'message': 'Email verified successfully'}), 200
 
@@ -228,6 +246,7 @@ def resend_verification_email():
 
     raw_token = secrets.token_urlsafe(32)
     user.verification_token_hash = _hash_reset_token(raw_token)
+    user.verification_token_expires_at = utc_now() + timedelta(hours=24)
     db.session.commit()
 
     try:
@@ -257,6 +276,7 @@ def register():
         user = User(username=username, email=email)
         user.set_password(password)
         user.verification_token_hash = _hash_reset_token(raw_token)
+        user.verification_token_expires_at = utc_now() + timedelta(hours=24)
 
         db.session.add(user)
         db.session.commit()
@@ -268,7 +288,7 @@ def register():
 
         return jsonify({'message': 'Account created. Check your email to verify your address.'}), 201
     except ValidationError as exc:
-        return jsonify({'error': exc.errors()}), 400
+        return jsonify(_validation_error_payload(exc)), 400
     except Exception:
         db.session.rollback()
         current_app.logger.exception("Failed to register user")
@@ -300,7 +320,7 @@ def login():
         set_access_cookies(response, access_token)
         return response, 200
     except ValidationError as exc:
-        return jsonify({'error': exc.errors()}), 400
+        return jsonify(_validation_error_payload(exc)), 400
     except Exception:
         current_app.logger.exception("Failed to authenticate user")
         return jsonify({'error': 'Unable to complete sign in at this time'}), 500
@@ -329,7 +349,11 @@ def forgot_password():
                 minutes=current_app.config["RESET_PASSWORD_TOKEN_TTL_MINUTES"]
             )
             db.session.commit()
-            _send_reset_email(user.email, user.username, _build_reset_link(token))
+            try:
+                _send_reset_email(user.email, user.username, _build_reset_link(token))
+            except Exception:
+                current_app.logger.exception("Failed to send password reset email")
+                return jsonify({'error': 'Could not send reset email. Please try again later.'}), 503
 
         return jsonify(
             {
@@ -337,7 +361,7 @@ def forgot_password():
             }
         ), 200
     except ValidationError as exc:
-        return jsonify({'error': exc.errors()}), 400
+        return jsonify(_validation_error_payload(exc)), 400
     except Exception:
         db.session.rollback()
         current_app.logger.exception("Failed to process forgot password request")
@@ -367,7 +391,7 @@ def reset_password():
 
         return jsonify({'message': 'Password reset successfully'}), 200
     except ValidationError as exc:
-        return jsonify({'error': exc.errors()}), 400
+        return jsonify(_validation_error_payload(exc)), 400
     except Exception:
         db.session.rollback()
         current_app.logger.exception("Failed to reset password")

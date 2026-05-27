@@ -7,7 +7,7 @@ from .wordpress_scanner import WordPressScanner
 from .zap_scanner import ZAPScanner
 from .xss_scanner import XSSScanner
 from .tech_scanner import TechScanner
-from .exposure_scanner import ExposureScanner
+from .exposure_scanner import ExposureScanner, SecretScanner
 from .dns_scanner import DNSScanner
 from .redirect_scanner import OpenRedirectScanner
 from .takeover_scanner import SubdomainTakeoverScanner
@@ -16,6 +16,8 @@ from .responsive_scanner import ResponsiveScanner
 from .performance_ux_scanner import PerformanceUXScanner
 from .form_usability_scanner import FormUsabilityScanner
 from .visual_ai_scanner import VisualAIScanner
+from .malware_scanner import MalwareAnalysisScanner
+from .screenshot_scanner import ScreenshotScanner
 
 class SecurityScanner:
     def __init__(self):
@@ -29,6 +31,7 @@ class SecurityScanner:
         self.xss_scanner = XSSScanner()
         self.tech_scanner = TechScanner()
         self.exposure_scanner = ExposureScanner()
+        self.secret_scanner = SecretScanner()
         self.dns_scanner = DNSScanner()
         self.redirect_scanner = OpenRedirectScanner()
         self.takeover_scanner = SubdomainTakeoverScanner()
@@ -37,6 +40,8 @@ class SecurityScanner:
         self.performance_ux_scanner = PerformanceUXScanner()
         self.form_usability_scanner = FormUsabilityScanner()
         self.visual_ai_scanner = VisualAIScanner()
+        self.malware_scanner = MalwareAnalysisScanner()
+        self.screenshot_scanner = ScreenshotScanner()
 
     def check_sql_injection(self, url):
         return self.sql_scanner.scan(url)
@@ -62,6 +67,9 @@ class SecurityScanner:
     def check_exposure(self, url):
         return self.exposure_scanner.scan(url)
 
+    def check_secrets(self, url):
+        return self.secret_scanner.scan(url)
+
     def check_dns(self, url):
         return self.dns_scanner.check(url)
 
@@ -85,6 +93,12 @@ class SecurityScanner:
 
     def check_visual_ai(self, url, page_paths=None, enabled=False, page_type=None):
         return self.visual_ai_scanner.scan(url, page_paths=page_paths, enabled=enabled, page_type=page_type)
+
+    def check_malware_analysis(self, url):
+        return self.malware_scanner.scan(url)
+
+    def capture_screenshots(self, url):
+        return self.screenshot_scanner.scan(url)
 
     def check_ai(self, url):
         if self.ai_scanner is None:

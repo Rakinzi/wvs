@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import json
 from typing import Any
+
+from sqlalchemy import func
+from sqlalchemy import update as sa_update
 
 from app import celery, db
 from app.models import ScanJob
@@ -28,19 +32,28 @@ def run_full_scan_job(self, job_id: int) -> dict:
     from celery.exceptions import SoftTimeLimitExceeded
 
     progress_logs: list[dict[str, Any]] = []
-    total_steps = 12
+    # Derived at runtime from the actual pipeline step count; 15 for full_scan,
+    # 5 for product_readiness, 19 for full_launch_audit. Default to 15.
+    total_steps = 15
 
     def store_progress_snapshot(snapshot: dict[str, Any]) -> None:
-        progress_job = db.session.get(ScanJob, job_id)
-        if not progress_job:
-            return
-
-        current_findings = progress_job.findings if isinstance(progress_job.findings, dict) else {}
-        progress_job.findings = {
-            **current_findings,
-            '_progress': snapshot,
-        }
-        db.session.commit()
+        # Patch only the _progress key via JSON_SET to avoid reading + rewriting
+        # the entire findings blob on every progress tick.
+        try:
+            db.session.execute(
+                sa_update(ScanJob)
+                .where(ScanJob.id == job_id)
+                .values(
+                    findings=func.json_set(
+                        func.coalesce(ScanJob.findings, func.cast('{}', db.JSON)),
+                        '$._progress',
+                        func.cast(json.dumps(snapshot), db.JSON),
+                    )
+                )
+            )
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
 
     def push_progress(update: dict[str, Any]) -> None:
         entry = {

@@ -56,6 +56,21 @@ class Config:
     UX_SCAN_RATE_LIMIT = settings.ux_scan_rate_limit
     SCAN_RESULT_RETENTION_DAYS = settings.scan_result_retention_days
     SCREENSHOT_RETENTION_DAYS = settings.screenshot_retention_days
+    UPTIME_MONITOR_ENABLED = settings.uptime_monitor_enabled
+    UPTIME_MONITOR_DEFAULT_INTERVAL_MINUTES = settings.uptime_monitor_default_interval_minutes
+    UPTIME_MONITOR_REQUEST_TIMEOUT_SECONDS = settings.uptime_monitor_request_timeout_seconds
+    UPTIME_MONITOR_HISTORY_LIMIT = settings.uptime_monitor_history_limit
+    MALWARE_SCAN_ENABLED = settings.malware_scan_enabled
+    MALWARE_MAX_ARTIFACTS = settings.malware_max_artifacts
+    MALWARE_MAX_DOWNLOAD_BYTES = settings.malware_max_download_bytes
+    MALWARE_DOWNLOAD_TIMEOUT_SECONDS = settings.malware_download_timeout_seconds
+    MALWARE_TEMP_DIR = settings.malware_temp_dir
+    MALWARE_ALLOWED_EXTENSIONS = settings.malware_allowed_extensions
+    CLAMAV_ENABLED = settings.clamav_enabled
+    CLAMAV_NETWORK_SOCKET = settings.clamav_network_socket
+    CLAMAV_UNIX_SOCKET = settings.clamav_unix_socket
+    YARA_ENABLED = settings.yara_enabled
+    YARA_RULES_DIR = settings.yara_rules_dir
 
     SMTP_HOST = settings.smtp_host
     SMTP_PORT = settings.smtp_port
@@ -73,11 +88,15 @@ class Config:
     CELERY_TASK_TIME_LIMIT = 30 * 60
     CELERY_TIMEZONE = settings.celery_timezone
     BROKER_CONNECTION_RETRY_ON_STARTUP = True
-    CELERY_IMPORTS = ("app.tasks.ssl_checks", "app.tasks.scan_jobs")
+    CELERY_IMPORTS = ("app.tasks.ssl_checks", "app.tasks.scan_jobs", "app.tasks.uptime")
     CELERY_BEAT_SCHEDULE = {
         "check-ssl-tls-updates-daily": {
             "task": "app.tasks.check_ssl_tls_updates",
             "schedule": timedelta(hours=24),
+        },
+        "run-uptime-monitors-every-minute": {
+            "task": "app.tasks.run_due_uptime_checks",
+            "schedule": timedelta(minutes=1),
         },
     }
 
@@ -96,6 +115,8 @@ class Config:
     ZAP_API_KEY = settings.zap_api_key
     ZAP_SPIDER_MAX_MINUTES = settings.zap_spider_max_minutes
     ZAP_ACTIVE_SCAN_MAX_MINUTES = settings.zap_active_scan_max_minutes
+    ZAP_AUTO_START = settings.zap_auto_start
+    ZAP_START_CMD = settings.zap_start_cmd
 
     @classmethod
     def validate(cls) -> None:

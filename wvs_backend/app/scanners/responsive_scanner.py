@@ -28,6 +28,11 @@ class ResponsiveScanner:
                         page = context.new_page()
                         try:
                             page.goto(page_url, wait_until="networkidle", timeout=self.timeout_ms)
+                            # Wait for CSS transitions/animations to settle so animated
+                            # elements (typing effects, fade-ins, etc.) reach their final
+                            # resting position before we measure bounding boxes.
+                            page.wait_for_timeout(1200)
+                            page.evaluate("() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))")
                             screenshot_path = capture_page_screenshot(page, page_url, viewport_name)
                             measured = page.evaluate(
                                 """
@@ -35,11 +40,24 @@ class ResponsiveScanner:
                                   const visible = (el) => {
                                     const style = window.getComputedStyle(el);
                                     const rect = el.getBoundingClientRect();
-                                    return style.visibility !== 'hidden' && style.display !== 'none' && rect.width > 0 && rect.height > 0;
+                                    return (
+                                      style.visibility !== 'hidden' &&
+                                      style.display !== 'none' &&
+                                      style.opacity !== '0' &&
+                                      rect.width > 0 && rect.height > 0
+                                    );
                                   };
-                                  const selectorFor = (el, index) => el.id ? `#${el.id}` : `${el.tagName.toLowerCase()}:nth-of-type(${index + 1})`;
+                                  const selectorFor = (el, index) =>
+                                    el.id ? `#${el.id}` : `${el.tagName.toLowerCase()}:nth-of-type(${index + 1})`;
+
+                                  // Only flag off-screen elements when the document itself
+                                  // overflows — this prevents false positives from elements
+                                  // that are positioned off-screen intentionally (drawers,
+                                  // slide-in menus, fixed overlays).
+                                  const docOverflows = document.documentElement.scrollWidth > window.innerWidth + 4;
+
                                   const issues = [];
-                                  if (document.documentElement.scrollWidth > window.innerWidth + 4) {
+                                  if (docOverflows) {
                                     issues.push({
                                       title: 'Horizontal overflow detected',
                                       severity: 'high',
@@ -52,22 +70,28 @@ class ResponsiveScanner:
                                       user_impact: 'Users may need to scroll sideways to access content or controls.',
                                       technical_remediation: 'Constrain wide content and ensure layouts wrap correctly on narrow screens.',
                                     });
+
+                                    document.querySelectorAll('button, a[href], input, textarea, select').forEach((el, index) => {
+                                      if (!visible(el)) return;
+                                      const style = window.getComputedStyle(el);
+                                      // Skip fixed/sticky elements — they are relative to the
+                                      // viewport by design and are not layout overflow.
+                                      if (style.position === 'fixed' || style.position === 'sticky') return;
+                                      const rect = el.getBoundingClientRect();
+                                      if (rect.right > window.innerWidth + 4 || rect.left < -4) {
+                                        issues.push({
+                                          title: 'Interactive element is partially off-screen',
+                                          severity: 'high',
+                                          selector: selectorFor(el, index),
+                                          rule_id: 'off-screen-interactive',
+                                          description: `Control bounds (${Math.round(rect.left)}–${Math.round(rect.right)}px) exceed viewport width ${window.innerWidth}px.`,
+                                          user_impact: 'Users may not be able to reach or fully understand the control.',
+                                          technical_remediation: 'Reflow the layout so interactive elements stay within the viewport.',
+                                        });
+                                      }
+                                    });
                                   }
-                                  document.querySelectorAll('button, a[href], input, textarea, select').forEach((el, index) => {
-                                    if (!visible(el)) return;
-                                    const rect = el.getBoundingClientRect();
-                                    if (rect.right > window.innerWidth + 4 || rect.left < -4) {
-                                      issues.push({
-                                        title: 'Interactive element is partially off-screen',
-                                        severity: 'high',
-                                        selector: selectorFor(el, index),
-                                        rule_id: 'off-screen-interactive',
-                                        description: `Control bounds (${Math.round(rect.left)}, ${Math.round(rect.right)}) exceed viewport width ${window.innerWidth}px.`,
-                                        user_impact: 'Users may not be able to reach or fully understand the control.',
-                                        technical_remediation: 'Reflow the layout so interactive elements stay within the viewport.',
-                                      });
-                                    }
-                                  });
+
                                   document.querySelectorAll('form').forEach((form, index) => {
                                     if (!visible(form)) return;
                                     const rect = form.getBoundingClientRect();

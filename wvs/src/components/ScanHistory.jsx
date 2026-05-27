@@ -11,66 +11,53 @@ import { apiJson } from '../lib/api';
 import Spinner from './Spinner';
 import ConfirmDialog from './ConfirmDialog';
 
-const T = {
-  bg:          'var(--color-bg)',
-  surface:     'var(--color-surface)',
-  card:        'var(--color-card)',
-  elev:        'var(--color-elevated)',
-  border:      'var(--color-border)',
-  borderSubtle:'var(--color-border-subtle)',
-  borderBright:'var(--color-border-bright)',
-  text:        'var(--color-text)',
-  muted:       'var(--color-text-muted)',
-  dim:         'var(--color-text-dim)',
-  primary:     'var(--color-primary)',
-  secure:      'var(--color-secure)',
-  secureDim:   'var(--color-secure-dim)',
-  danger:      'var(--color-danger)',
-  dangerDim:   'var(--color-danger-dim)',
-  warn:        'var(--color-warn)',
-  info:        'var(--color-info)',
-};
-
 const fmt = (d) => {
   const dt = new Date(d);
   return dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
     + ' · ' + dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 };
 
-const StatPill = ({ icon: Icon, label, value, color, dimColor }) => (
-  <div className="flex items-center gap-3 px-4 py-3 rounded-xl" style={{ background: T.card, border: `1px solid ${T.border}` }}>
-    <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: dimColor }}>
-      <Icon size={14} style={{ color }} />
+const StatPill = ({ icon: Icon, label, value, danger, warn }) => {
+  const accent = danger ? 'var(--color-danger)' : warn ? 'var(--color-warn)' : 'var(--color-primary)';
+  const bg     = danger ? 'var(--color-danger-dim)' : warn ? 'var(--color-warn-dim)' : 'var(--color-primary-dim)';
+  return (
+    <div className="card p-4 flex items-center gap-3">
+      <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: bg }}>
+        <Icon size={14} style={{ color: accent }} />
+      </div>
+      <div>
+        <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>{label}</p>
+        <p className="text-xl font-bold leading-tight tabular-nums" style={{ color: 'var(--color-text)', letterSpacing: '-0.03em' }}>{value}</p>
+      </div>
     </div>
-    <div>
-      <p className="text-xs font-medium" style={{ color: T.muted }}>{label}</p>
-      <p className="text-lg font-bold leading-tight" style={{ color: T.text }}>{value}</p>
-    </div>
-  </div>
-);
+  );
+};
 
 const Pagination = ({ page, totalPages, setPage }) => {
   if (totalPages <= 1) return null;
-  const pages = [...Array(Math.min(totalPages, 5))].map((_, i) => i + 1);
+  const start = Math.max(1, Math.min(page - 2, totalPages - 4));
+  const pages = Array.from({ length: Math.min(5, totalPages) }, (_, i) => start + i);
   return (
-    <div className="flex items-center justify-between px-5 py-3.5" style={{ borderTop: `1px solid ${T.border}`, background: T.surface }}>
-      <p className="text-xs font-mono" style={{ color: T.dim }}>
+    <div className="flex items-center justify-between px-5 py-3.5" style={{ borderTop: '1px solid var(--color-border)', background: 'var(--color-surface)' }}>
+      <p className="text-xs font-mono" style={{ color: 'var(--color-text-dim)' }}>
         pg {page} / {totalPages}
       </p>
       <div className="flex items-center gap-1">
         <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}
-          className="px-2.5 py-1.5 rounded-lg text-xs cursor-pointer disabled:opacity-30 transition-colors"
-          style={{ background: T.card, color: T.muted, border: `1px solid ${T.border}` }}>‹</button>
+          className="btn-secondary px-2.5 py-1.5 text-xs disabled:opacity-30">‹</button>
         {pages.map(p => (
           <button key={p} onClick={() => setPage(p)}
             className="px-2.5 py-1.5 rounded-lg text-xs cursor-pointer transition-colors"
-            style={{ background: page === p ? T.primary : T.card, color: page === p ? '#fff' : T.muted, border: `1px solid ${page === p ? T.primary : T.border}` }}>
+            style={{
+              background: page === p ? 'var(--color-primary)' : 'var(--color-card)',
+              color: page === p ? '#fff' : 'var(--color-text-muted)',
+              border: `1px solid ${page === p ? 'var(--color-primary)' : 'var(--color-border)'}`,
+            }}>
             {p}
           </button>
         ))}
         <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages}
-          className="px-2.5 py-1.5 rounded-lg text-xs cursor-pointer disabled:opacity-30 transition-colors"
-          style={{ background: T.card, color: T.muted, border: `1px solid ${T.border}` }}>›</button>
+          className="btn-secondary px-2.5 py-1.5 text-xs disabled:opacity-30">›</button>
       </div>
     </div>
   );
@@ -85,8 +72,8 @@ const PROFILE_LABELS = {
 };
 
 const ScoreBadge = ({ score }) => {
-  const color = score >= 80 ? T.secure : score >= 50 ? T.warn : T.danger;
-  const bg    = score >= 80 ? T.secureDim : score >= 50 ? `${T.warn}20` : T.dangerDim;
+  const color = score >= 80 ? 'var(--color-secure)' : score >= 50 ? 'var(--color-warn)' : 'var(--color-danger)';
+  const bg    = score >= 80 ? 'var(--color-secure-dim)' : score >= 50 ? 'var(--color-warn-dim)' : 'var(--color-danger-dim)';
   return (
     <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-bold"
       style={{ background: bg, color }}>{score}</span>
@@ -103,19 +90,17 @@ const CompareView = ({ ids, onClose }) => {
       .catch(() => setLoading(false));
   }, [ids.join(',')]);
 
-  const fmt = (d) => new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  const fmtShort = (d) => new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col" style={{ background: T.bg }}>
-      {/* Header */}
-      <div className="flex items-center justify-between px-6 py-4 flex-shrink-0"
-        style={{ background: T.surface, borderBottom: `1px solid ${T.border}` }}>
+    <div className="fixed inset-0 z-50 flex flex-col" style={{ background: 'var(--color-bg)' }}>
+      <div className="page-header px-6 py-4 flex items-center justify-between flex-shrink-0">
         <div className="flex items-center gap-2.5">
-          <GitCompare size={16} style={{ color: T.primary }} />
-          <span className="text-sm font-semibold" style={{ color: T.text }}>Scan Comparison</span>
+          <GitCompare size={15} style={{ color: 'var(--color-primary)' }} />
+          <span className="text-sm font-semibold" style={{ color: 'var(--color-text)' }}>Scan Comparison</span>
         </div>
-        <button onClick={onClose} className="cursor-pointer" style={{ color: T.muted }}>
-          <X size={18} />
+        <button onClick={onClose} className="btn-secondary w-8 h-8 p-0 justify-center" aria-label="Close">
+          <X size={14} />
         </button>
       </div>
 
@@ -125,54 +110,48 @@ const CompareView = ({ ids, onClose }) => {
         </div>
       ) : (
         <div className="flex-1 overflow-y-auto">
-          <div className="grid grid-cols-2 divide-x h-full" style={{ borderColor: T.border }}>
+          <div className="grid grid-cols-2 divide-x h-full" style={{ borderColor: 'var(--color-border)' }}>
             {reports.map((r, idx) => !r ? (
               <div key={idx} className="flex items-center justify-center p-10">
-                <p className="text-sm" style={{ color: T.danger }}>Failed to load report</p>
+                <p className="text-sm" style={{ color: 'var(--color-danger)' }}>Failed to load report</p>
               </div>
             ) : (
               <div key={idx} className="p-5 flex flex-col gap-5 overflow-y-auto">
-                {/* Scan identity */}
                 <div className="flex flex-col gap-1">
-                  <p className="text-xs font-mono font-medium truncate" style={{ color: T.text }}>{r.url}</p>
-                  <p className="text-xs font-mono" style={{ color: T.dim }}>{fmt(r.timestamp)} · {String(r.scan_id).slice(0, 8)}</p>
+                  <p className="text-xs font-mono font-medium truncate" style={{ color: 'var(--color-text)' }}>{r.url}</p>
+                  <p className="text-xs font-mono" style={{ color: 'var(--color-text-dim)' }}>{fmtShort(r.timestamp)} · {String(r.scan_id).slice(0, 8)}</p>
                 </div>
 
-                {/* Overall score */}
-                <div className="flex items-center justify-between px-4 py-3 rounded-xl"
-                  style={{ background: T.card, border: `1px solid ${T.border}` }}>
-                  <span className="text-xs font-semibold" style={{ color: T.muted }}>Overall score</span>
+                <div className="card flex items-center justify-between px-4 py-3">
+                  <span className="text-xs font-semibold" style={{ color: 'var(--color-text-muted)' }}>Overall score</span>
                   <ScoreBadge score={r.summary?.score ?? 0} />
                 </div>
 
-                {/* Issue summary */}
                 <div className="grid grid-cols-2 gap-3">
                   {[
                     { label: 'Total issues', value: r.summary?.total_issues ?? 0 },
-                    { label: 'Critical', value: r.summary?.critical ?? 0 },
-                    { label: 'High', value: r.summary?.high ?? 0 },
-                    { label: 'Medium', value: r.summary?.medium ?? 0 },
+                    { label: 'SQL injection', value: r.summary?.sqli_count ?? 0 },
+                    { label: 'Exposure', value: r.summary?.exposure_count ?? 0 },
+                    { label: 'Headers', value: r.summary?.header_issue_count ?? 0 },
                   ].map(({ label, value }) => (
-                    <div key={label} className="flex flex-col px-3 py-2.5 rounded-lg"
-                      style={{ background: T.surface, border: `1px solid ${T.border}` }}>
-                      <span className="text-xs" style={{ color: T.muted }}>{label}</span>
-                      <span className="text-base font-bold" style={{ color: T.text }}>{value}</span>
+                    <div key={label} className="card px-3 py-2.5 flex flex-col">
+                      <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>{label}</span>
+                      <span className="text-base font-bold" style={{ color: 'var(--color-text)' }}>{value}</span>
                     </div>
                   ))}
                 </div>
 
-                {/* Per-scanner scores */}
                 <div className="flex flex-col gap-2">
-                  <p className="text-xs font-mono uppercase tracking-widest" style={{ color: T.dim }}>Scanner scores</p>
+                  <p className="section-label">Scanner scores</p>
                   {SCANNERS.map(key => {
-                    const s = r.findings?.[key]?.score ?? r.findings?.[key]?.score;
+                    const s = r.findings?.[key]?.score;
                     if (s === undefined) return null;
-                    const color = s >= 80 ? T.secure : s >= 50 ? T.warn : T.danger;
+                    const color = s >= 80 ? 'var(--color-secure)' : s >= 50 ? 'var(--color-warn)' : 'var(--color-danger)';
                     return (
                       <div key={key} className="flex items-center justify-between">
-                        <span className="text-xs" style={{ color: T.muted }}>{SCANNER_LABELS[key]}</span>
+                        <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>{SCANNER_LABELS[key]}</span>
                         <div className="flex items-center gap-2 flex-1 mx-3">
-                          <div className="flex-1 h-1.5 rounded-full" style={{ background: T.surface }}>
+                          <div className="flex-1 h-1.5 rounded-full" style={{ background: 'var(--color-elevated)' }}>
                             <div className="h-full rounded-full" style={{ width: `${s}%`, background: color }} />
                           </div>
                         </div>
@@ -235,7 +214,7 @@ const ScanHistory = ({ navigateTo }) => {
   };
 
   return (
-    <div className="min-h-screen" style={{ background: T.bg }}>
+    <div className="min-h-screen" style={{ background: 'var(--color-bg)' }}>
 
       {comparing && (
         <CompareView ids={selected} onClose={() => setComparing(false)} />
@@ -250,28 +229,23 @@ const ScanHistory = ({ navigateTo }) => {
         onCancel={() => setPendingDelete(null)}
       />
 
-      {/* Sticky header */}
-      <div className="sticky top-0 z-20 px-6 lg:px-10 py-4 flex items-center justify-between"
-        style={{ background: `${T.surface}E0`, backdropFilter: 'blur(12px)', borderBottom: `1px solid ${T.border}` }}>
+      {/* Page header */}
+      <div className="page-header px-6 lg:px-10 py-4 flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <button onClick={() => navigateTo('dashboard')}
-            className="flex items-center gap-1.5 text-xs font-medium cursor-pointer transition-colors px-3 py-1.5 rounded-lg"
-            style={{ color: T.muted, background: T.card, border: `1px solid ${T.border}` }}>
+          <button onClick={() => navigateTo('dashboard')} className="btn-secondary flex items-center gap-1.5 text-xs">
             <ArrowLeft size={13} /> Back
           </button>
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: `${T.primary}22`, border: `1px solid ${T.primary}40` }}>
-              <Clock size={15} style={{ color: T.primary }} />
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: 'var(--color-primary-dim)' }}>
+              <Clock size={15} style={{ color: 'var(--color-primary)' }} />
             </div>
             <div>
-              <h1 className="text-base font-bold leading-tight" style={{ color: T.text }}>Scan History</h1>
-              <p className="text-xs" style={{ color: T.dim }}>{scans.length} total records</p>
+              <h1 className="text-base font-bold leading-tight" style={{ color: 'var(--color-text)' }}>Scan History</h1>
+              <p className="text-xs" style={{ color: 'var(--color-text-dim)' }}>{scans.length} total records</p>
             </div>
           </div>
         </div>
-        <button onClick={fetchScans}
-          className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium cursor-pointer transition-colors"
-          style={{ background: T.card, color: T.muted, border: `1px solid ${T.border}` }}>
+        <button onClick={fetchScans} className="btn-secondary flex items-center gap-2 text-xs">
           <RefreshCw size={12} /> Refresh
         </button>
       </div>
@@ -280,44 +254,41 @@ const ScanHistory = ({ navigateTo }) => {
 
         {/* Stats strip */}
         <div className="grid grid-cols-3 gap-3">
-          <StatPill icon={Activity}     label="Total Scans"  value={scans.length} color={T.primary}  dimColor={`${T.primary}20`} />
-          <StatPill icon={ShieldAlert}  label="Vulnerable"   value={vulnCount}    color={T.danger}   dimColor={T.dangerDim} />
-          <StatPill icon={ShieldCheck}  label="Secure"       value={secureCount}  color={T.secure}   dimColor={T.secureDim} />
+          <StatPill icon={Activity}    label="Total Scans" value={scans.length} />
+          <StatPill icon={ShieldAlert} label="Vulnerable"  value={vulnCount}    danger />
+          <StatPill icon={ShieldCheck} label="Secure"      value={secureCount} />
         </div>
 
         {/* Table card */}
-        <div className="rounded-xl overflow-hidden" style={{ background: T.card, border: `1px solid ${T.border}` }}>
+        <div className="card overflow-hidden">
 
           {/* Toolbar */}
           <div className="px-5 py-3.5 flex flex-col sm:flex-row sm:items-center gap-3"
-            style={{ borderBottom: `1px solid ${T.border}`, background: T.surface }}>
+            style={{ borderBottom: '1px solid var(--color-border)', background: 'var(--color-surface)' }}>
             <div className="relative flex-1">
-              <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: T.dim }} />
+              <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--color-text-dim)' }} />
               <input type="text" value={q} onChange={e => { setQ(e.target.value); setPage(1); }}
                 placeholder="Search by URL…"
-                className="w-full pl-9 pr-4 py-2 rounded-lg text-xs outline-none font-mono"
-                style={{ background: T.card, border: `1px solid ${T.border}`, color: T.text }} />
+                className="input pl-9 text-xs font-mono" />
             </div>
             <div className="flex items-center gap-2 flex-shrink-0">
 
-              {/* Filter dropdown */}
+              {/* Filter */}
               <div className="relative">
-                <button onClick={() => setFilterOpen(o => !o)}
-                  className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium cursor-pointer"
-                  style={{ background: T.card, color: T.muted, border: `1px solid ${T.border}` }}>
+                <button onClick={() => setFilterOpen(o => !o)} className="btn-secondary flex items-center gap-1.5 text-xs">
                   <Filter size={12} />
                   {filter === 'all' ? 'All' : filter.charAt(0).toUpperCase() + filter.slice(1)}
                   <ChevronDown size={11} />
                 </button>
                 {filterOpen && (
                   <div className="absolute right-0 mt-1.5 w-40 rounded-xl overflow-hidden z-30 shadow-2xl"
-                    style={{ background: T.elev, border: `1px solid ${T.border}` }}>
+                    style={{ background: 'var(--color-overlay)', border: '1px solid var(--color-border-bright)' }}>
                     {['all', 'vulnerable', 'secure'].map(f => (
                       <button key={f} onClick={() => { setFilter(f); setFilterOpen(false); setPage(1); }}
                         className="flex items-center gap-2 w-full px-4 py-2.5 text-xs text-left cursor-pointer transition-colors"
-                        style={{ color: filter === f ? T.primary : T.muted, background: filter === f ? `${T.primary}12` : 'transparent' }}>
-                        {f === 'vulnerable' && <AlertTriangle size={11} style={{ color: T.danger }} />}
-                        {f === 'secure'     && <CheckCircle  size={11} style={{ color: T.secure }} />}
+                        style={{ color: filter === f ? 'var(--color-primary)' : 'var(--color-text-muted)', background: filter === f ? 'var(--color-primary-dim)' : 'transparent' }}>
+                        {f === 'vulnerable' && <AlertTriangle size={11} style={{ color: 'var(--color-danger)' }} />}
+                        {f === 'secure'     && <CheckCircle  size={11} style={{ color: 'var(--color-secure)' }} />}
                         {f.charAt(0).toUpperCase() + f.slice(1)}
                       </button>
                     ))}
@@ -327,9 +298,7 @@ const ScanHistory = ({ navigateTo }) => {
 
               {/* Compare — shown only when exactly 2 selected */}
               {selected.length === 2 && (
-                <button onClick={() => setComparing(true)}
-                  className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold cursor-pointer text-white"
-                  style={{ background: T.primary }}>
+                <button onClick={() => setComparing(true)} className="btn-primary flex items-center gap-1.5 text-xs">
                   <GitCompare size={12} /> Compare
                 </button>
               )}
@@ -337,18 +306,16 @@ const ScanHistory = ({ navigateTo }) => {
               {/* Export */}
               {selected.length > 0 && selected.length !== 2 && (
                 <div className="relative">
-                  <button onClick={() => setExportOpen(o => !o)}
-                    className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold cursor-pointer text-white"
-                    style={{ background: T.primary }}>
+                  <button onClick={() => setExportOpen(o => !o)} className="btn-primary flex items-center gap-1.5 text-xs">
                     <Download size={12} /> Export ({selected.length}) <ChevronDown size={11} />
                   </button>
                   {exportOpen && (
                     <div className="absolute right-0 mt-1.5 w-40 rounded-xl overflow-hidden z-30 shadow-2xl"
-                      style={{ background: T.elev, border: `1px solid ${T.border}` }}>
+                      style={{ background: 'var(--color-overlay)', border: '1px solid var(--color-border-bright)' }}>
                       {['PDF', 'CSV'].map(f => (
                         <button key={f} onClick={() => setExportOpen(false)}
-                          className="flex items-center gap-2 w-full px-4 py-2.5 text-xs text-left cursor-pointer transition-colors"
-                          style={{ color: T.muted }}>
+                          className="flex items-center gap-2 w-full px-4 py-2.5 text-xs text-left cursor-pointer transition-colors hover:bg-[var(--color-elevated)]"
+                          style={{ color: 'var(--color-text-muted)' }}>
                           Export as {f}
                         </button>
                       ))}
@@ -366,31 +333,32 @@ const ScanHistory = ({ navigateTo }) => {
             </div>
           ) : error ? (
             <div className="flex flex-col items-center gap-4 py-20">
-              <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ background: T.dangerDim }}>
-                <AlertTriangle size={20} style={{ color: T.danger }} />
+              <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ background: 'var(--color-danger-dim)' }}>
+                <AlertTriangle size={20} style={{ color: 'var(--color-danger)' }} />
               </div>
-              <p className="text-sm font-medium" style={{ color: T.text }}>Error loading history</p>
-              <p className="text-xs" style={{ color: T.muted }}>{error}</p>
-              <button onClick={fetchScans} className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium cursor-pointer text-white" style={{ background: T.primary }}>
+              <p className="text-sm font-medium" style={{ color: 'var(--color-text)' }}>Error loading history</p>
+              <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>{error}</p>
+              <button onClick={fetchScans} className="btn-primary">
                 <RefreshCw size={13} /> Retry
               </button>
             </div>
           ) : filtered.length === 0 ? (
             <div className="flex flex-col items-center gap-4 py-20">
-              <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ background: T.surface }}>
-                <Search size={20} style={{ color: T.dim }} />
+              <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ background: 'var(--color-elevated)' }}>
+                <Search size={20} style={{ color: 'var(--color-text-dim)' }} />
               </div>
               {q || filter !== 'all' ? (
                 <>
-                  <p className="text-sm font-medium" style={{ color: T.text }}>No matching scans</p>
-                  <button onClick={() => { setQ(''); setFilter('all'); }} className="text-xs cursor-pointer" style={{ color: T.primary }}>
+                  <p className="text-sm font-medium" style={{ color: 'var(--color-text)' }}>No matching scans</p>
+                  <button onClick={() => { setQ(''); setFilter('all'); }}
+                    className="text-xs font-medium cursor-pointer" style={{ color: 'var(--color-primary)' }}>
                     Clear filters
                   </button>
                 </>
               ) : (
                 <>
-                  <p className="text-sm font-medium" style={{ color: T.text }}>No scan history yet</p>
-                  <button onClick={() => navigateTo('scanners')} className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium cursor-pointer text-white" style={{ background: T.primary }}>
+                  <p className="text-sm font-medium" style={{ color: 'var(--color-text)' }}>No scan history yet</p>
+                  <button onClick={() => navigateTo('scanners')} className="btn-primary">
                     Start scanning
                   </button>
                 </>
@@ -401,54 +369,53 @@ const ScanHistory = ({ navigateTo }) => {
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr style={{ background: T.surface, borderBottom: `1px solid ${T.border}` }}>
-                      <th className="px-5 py-3 w-10" style={{ borderBottom: `1px solid ${T.border}` }}>
+                    <tr style={{ background: 'var(--color-surface)', borderBottom: '1px solid var(--color-border)' }}>
+                      <th className="px-5 py-3 w-10">
                         <input type="checkbox"
                           checked={selected.length === filtered.length && filtered.length > 0}
                           onChange={toggleAll}
-                          style={{ accentColor: T.primary }} />
+                          style={{ accentColor: 'var(--color-primary)' }} />
                       </th>
-                      <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-widest" style={{ color: T.dim }}>Target URL</th>
+                      <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-widest" style={{ color: 'var(--color-text-dim)' }}>Target URL</th>
                       <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-widest cursor-pointer select-none"
-                        style={{ color: T.dim }}
+                        style={{ color: 'var(--color-text-dim)' }}
                         onClick={() => setSort(s => s === 'desc' ? 'asc' : 'desc')}>
                         <div className="flex items-center gap-1">
                           Date {sort === 'desc' ? <ChevronDown size={11} /> : <ChevronUp size={11} />}
                         </div>
                       </th>
-                      <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-widest" style={{ color: T.dim }}>Status</th>
-                      <th className="px-5 py-3 text-right text-xs font-semibold uppercase tracking-widest" style={{ color: T.dim }}>Actions</th>
+                      <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-widest" style={{ color: 'var(--color-text-dim)' }}>Status</th>
+                      <th className="px-5 py-3 text-right text-xs font-semibold uppercase tracking-widest" style={{ color: 'var(--color-text-dim)' }}>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {pageScans.map((scan, i) => (
-                      <tr key={scan.id}
-                        className="transition-colors group"
-                        style={{ borderBottom: `1px solid ${T.borderSubtle}` }}>
+                    {pageScans.map((scan) => (
+                      <tr key={scan.id} className="transition-colors hover:bg-[var(--color-elevated)]"
+                        style={{ borderBottom: '1px solid var(--color-border-subtle)' }}>
                         <td className="px-5 py-4">
                           <input type="checkbox" checked={selected.includes(scan.id)}
-                            onChange={() => toggleSelect(scan.id)} style={{ accentColor: T.primary }} />
+                            onChange={() => toggleSelect(scan.id)} style={{ accentColor: 'var(--color-primary)' }} />
                         </td>
                         <td className="px-5 py-4">
-                          <p className="text-xs font-mono font-medium truncate max-w-sm" style={{ color: T.text }}>{scan.url}</p>
+                          <p className="text-xs font-mono font-medium truncate max-w-sm" style={{ color: 'var(--color-text)' }}>{scan.url}</p>
                           <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                            <p className="text-xs font-mono" style={{ color: T.dim }}>{String(scan.id).slice(0, 8)}</p>
-                            <span className="px-2 py-0.5 rounded text-[11px] font-semibold" style={{ background: T.surface, color: T.primary, border: `1px solid ${T.border}` }}>
+                            <p className="text-xs font-mono" style={{ color: 'var(--color-text-dim)' }}>{String(scan.id).slice(0, 8)}</p>
+                            <span className="px-2 py-0.5 rounded text-[11px] font-semibold"
+                              style={{ background: 'var(--color-primary-dim)', color: 'var(--color-primary)', border: '1px solid var(--color-border)' }}>
                               {PROFILE_LABELS[scan.scan_profile] || 'Security'}
                             </span>
                           </div>
                         </td>
                         <td className="px-5 py-4">
-                          <div className="flex items-center gap-1.5 text-xs font-mono" style={{ color: T.muted }}>
+                          <div className="flex items-center gap-1.5 text-xs font-mono" style={{ color: 'var(--color-text-muted)' }}>
                             <Calendar size={11} />
                             {fmt(scan.timestamp)}
                           </div>
                         </td>
                         <td className="px-5 py-4">
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold"
-                            style={scan.has_vulnerabilities
-                              ? { background: T.dangerDim, color: T.danger }
-                              : { background: T.secureDim, color: T.secure }}>
+                          <span className="badge" style={scan.has_vulnerabilities
+                            ? { background: 'var(--color-danger-dim)', color: 'var(--color-danger)' }
+                            : { background: 'var(--color-secure-dim)', color: 'var(--color-secure)' }}>
                             {scan.has_vulnerabilities
                               ? <><AlertTriangle size={10} /> Vulnerable</>
                               : <><CheckCircle size={10} /> Secure</>}
@@ -457,19 +424,19 @@ const ScanHistory = ({ navigateTo }) => {
                         <td className="px-5 py-4">
                           <div className="flex items-center justify-end gap-3">
                             <a href={scan.url} target="_blank" rel="noopener noreferrer" title="Visit site"
-                              className="transition-colors" style={{ color: T.dim }}>
+                              className="transition-colors" style={{ color: 'var(--color-text-dim)' }}>
                               <ExternalLink size={14} />
                             </a>
                             <button onClick={() => navigateTo('report', scan.id)} title="View report"
-                              className="cursor-pointer transition-colors" style={{ color: T.primary }}>
+                              className="cursor-pointer transition-colors" style={{ color: 'var(--color-primary)' }}>
                               <FileText size={14} />
                             </button>
                             <button onClick={() => setPendingDelete(scan.id)} title="Delete scan"
                               disabled={deleting === scan.id}
                               className="cursor-pointer transition-colors disabled:opacity-40"
-                              style={{ color: T.danger }}>
+                              style={{ color: 'var(--color-danger)' }}>
                               {deleting === scan.id
-                                ? <Spinner size="sm" color={T.danger} style={{ width: 14, height: 14 }} />
+                                ? <Spinner size="sm" color="var(--color-danger)" style={{ width: 14, height: 14 }} />
                                 : <Trash2 size={14} />}
                             </button>
                           </div>
