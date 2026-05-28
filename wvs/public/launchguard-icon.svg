@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="LaunchGuard">
+  <defs>
+    <linearGradient id="lg-blue" x1="37" y1="59" x2="120" y2="194" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0EA5FF"/>
+      <stop offset="1" stop-color="#0B7CFF"/>
+    </linearGradient>
+    <linearGradient id="lg-teal" x1="94" y1="137" x2="188" y2="95" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#11C5E8"/>
+      <stop offset="1" stop-color="#34E7B8"/>
+    </linearGradient>
+    <filter id="soft-shadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="10" stdDeviation="12" flood-color="#020617" flood-opacity=".45"/>
+    </filter>
+  </defs>
+  <rect width="256" height="256" rx="52" fill="#020817"/>
+  <g filter="url(#soft-shadow)">
+    <path d="M79 58 128 36l49 22v69c0 41-25 74-49 87-24-13-49-46-49-87V58Z" fill="none" stroke="#F8FAFC" stroke-width="18" stroke-linejoin="round"/>
+    <path d="M128 36 79 58v69c0 41 25 74 49 87" fill="none" stroke="url(#lg-blue)" stroke-width="18" stroke-linejoin="round"/>
+    <path d="M92 126 118 153 171 90" fill="none" stroke="url(#lg-teal)" stroke-width="20" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M47 159c47 18 116-2 161-57" fill="none" stroke="url(#lg-teal)" stroke-width="10" stroke-linecap="round"/>
+    <path d="M35 149c23 26 107 31 176-14" fill="none" stroke="url(#lg-blue)" stroke-width="8" stroke-linecap="round" opacity=".9"/>
+    <circle cx="211" cy="89" r="10" fill="#34E7B8"/>
+  </g>
+</svg>

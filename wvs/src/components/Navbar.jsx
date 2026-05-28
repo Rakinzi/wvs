@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
-  Shield, Menu, X, User, BarChart2, Clock, Settings,
+  Menu, X, User, BarChart2, Clock, Settings,
   LogOut, AlertTriangle, Bell, ChevronDown, Globe
 } from 'lucide-react';
 
@@ -52,12 +52,7 @@ const Navbar = ({ isAuthenticated, onLogout, navigateTo, currentPage }) => {
             className="flex items-center gap-2.5 focus-visible:outline-none"
             aria-label="Go to dashboard"
           >
-            <div
-              className="w-8 h-8 rounded-lg flex items-center justify-center"
-              style={{ background: 'var(--color-primary)' }}
-            >
-              <Shield size={16} className="text-white" />
-            </div>
+            <img src="/launchguard-icon.svg" alt="" className="w-8 h-8 rounded-lg" />
             <span className="text-white font-semibold tracking-tight text-base hidden sm:block">
               LaunchGuard
             </span>

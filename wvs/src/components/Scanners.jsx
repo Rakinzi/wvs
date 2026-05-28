@@ -289,7 +289,14 @@ const Scanners = ({ navigateTo }) => {
   const {
     fullScanUrl, setFullScanUrl, fullScanProfile, setFullScanProfile,
     fullScanPagePaths, setFullScanPagePaths, fullScanVerifiedTargetId, setFullScanVerifiedTargetId,
-    fullScanEnableAiReview, setFullScanEnableAiReview, sqlScanUrl, setSqlScanUrl,
+    fullScanEnableAiReview, setFullScanEnableAiReview,
+    fullScanEnableActiveChecks, setFullScanEnableActiveChecks,
+    fullScanActiveCheckPaths, setFullScanActiveCheckPaths,
+    fullScanActiveCheckBudget, setFullScanActiveCheckBudget,
+    fullScanAuthAccounts, setFullScanAuthAccounts,
+    fullScanProtectedPaths, setFullScanProtectedPaths,
+    fullScanIdorPaths, setFullScanIdorPaths,
+    sqlScanUrl, setSqlScanUrl,
     sslScanUrl, setSslScanUrl, wordpressScanUrl, setWordpressScanUrl,
     xssScanUrl, setXssScanUrl, techScanUrl, setTechScanUrl,
     exposureScanUrl, setExposureScanUrl, malwareScanUrl, setMalwareScanUrl,
@@ -455,6 +462,49 @@ const Scanners = ({ navigateTo }) => {
                         <input type="checkbox" checked={fullScanEnableAiReview} onChange={(e) => setFullScanEnableAiReview(e.target.checked)} />
                         Enable AI visual review when configured
                       </label>
+                      <div className="rounded-xl p-4" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border-subtle)' }}>
+                        <label className="flex items-center gap-2 text-xs cursor-pointer" style={{ color: 'var(--color-text-muted)' }}>
+                          <input type="checkbox" checked={fullScanEnableActiveChecks} onChange={(e) => setFullScanEnableActiveChecks(e.target.checked)} />
+                          Enable pre-production auth and abuse-control checks
+                        </label>
+                        {fullScanEnableActiveChecks && (
+                          <div className="grid grid-cols-1 md:grid-cols-[1fr_140px] gap-3 mt-3">
+                            <label className="flex flex-col gap-1.5">
+                              <span className="text-xs font-medium" style={{ color: 'var(--color-text-muted)' }}>Auth/API Paths</span>
+                              <textarea value={fullScanActiveCheckPaths} onChange={(e) => setFullScanActiveCheckPaths(e.target.value)}
+                                rows={4} placeholder={"POST /login\nPOST /signup\nPOST /forgot-password\nGET /admin"}
+                                className="input text-sm font-mono" style={{ resize: 'vertical' }} />
+                              <span className="text-[11px]" style={{ color: 'var(--color-text-dim)' }}>
+                                Leave blank to discover common auth and admin routes automatically.
+                              </span>
+                            </label>
+                            <label className="flex flex-col gap-1.5">
+                              <span className="text-xs font-medium" style={{ color: 'var(--color-text-muted)' }}>Request Budget</span>
+                              <input type="number" min="3" max="20" value={fullScanActiveCheckBudget}
+                                onChange={(e) => setFullScanActiveCheckBudget(e.target.value)}
+                                className="input text-sm font-mono" />
+                            </label>
+                            <label className="flex flex-col gap-1.5 md:col-span-2">
+                              <span className="text-xs font-medium" style={{ color: 'var(--color-text-muted)' }}>Staging Test Accounts</span>
+                              <textarea value={fullScanAuthAccounts} onChange={(e) => setFullScanAuthAccounts(e.target.value)}
+                                rows={3} placeholder={"user1@example.com|Password123!|user\nadmin@example.com|Password123!|admin"}
+                                className="input text-sm font-mono" style={{ resize: 'vertical' }} />
+                            </label>
+                            <label className="flex flex-col gap-1.5">
+                              <span className="text-xs font-medium" style={{ color: 'var(--color-text-muted)' }}>Protected Paths</span>
+                              <textarea value={fullScanProtectedPaths} onChange={(e) => setFullScanProtectedPaths(e.target.value)}
+                                rows={3} placeholder={"/dashboard\n/account\n/admin"}
+                                className="input text-sm font-mono" style={{ resize: 'vertical' }} />
+                            </label>
+                            <label className="flex flex-col gap-1.5">
+                              <span className="text-xs font-medium" style={{ color: 'var(--color-text-muted)' }}>IDOR Path Templates</span>
+                              <textarea value={fullScanIdorPaths} onChange={(e) => setFullScanIdorPaths(e.target.value)}
+                                rows={3} placeholder={"/api/users/123\n/api/projects/abc"}
+                                className="input text-sm font-mono" style={{ resize: 'vertical' }} />
+                            </label>
+                          </div>
+                        )}
+                      </div>
                       <div className="rounded-xl p-4" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border-subtle)' }}>
                         <div className="flex items-center gap-2 mb-3">
                           <Shield size={14} style={{ color: 'var(--color-primary)' }} />

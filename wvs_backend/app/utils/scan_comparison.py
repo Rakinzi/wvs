@@ -4,6 +4,7 @@ import hashlib
 from typing import Any
 
 from app.utils.scan_helpers import build_scan_summary
+from app.utils.launch_verdict import build_launch_verdict
 
 
 SCANNER_KEYS = [
@@ -23,6 +24,10 @@ SCANNER_KEYS = [
     "responsive_ux",
     "performance_ux",
     "form_usability",
+    "seo",
+    "broken_links",
+    "app_controls",
+    "exposed_services",
     "visual_ai",
 ]
 
@@ -89,6 +94,8 @@ def _extract_findings(findings: dict[str, Any]) -> list[dict[str, Any]]:
 def build_scan_comparison(current_findings: dict[str, Any], previous_findings: dict[str, Any]) -> dict[str, Any]:
     current_summary = build_scan_summary(current_findings)
     previous_summary = build_scan_summary(previous_findings)
+    current_verdict = (current_findings.get("launch_verdict") or build_launch_verdict(current_findings)).get("verdict")
+    previous_verdict = (previous_findings.get("launch_verdict") or build_launch_verdict(previous_findings)).get("verdict")
 
     current_items = {item["id"]: item for item in _extract_findings(current_findings)}
     previous_items = {item["id"]: item for item in _extract_findings(previous_findings)}
@@ -115,6 +122,11 @@ def build_scan_comparison(current_findings: dict[str, Any], previous_findings: d
             "performance_score": _delta(previous_summary.get("performance_score"), current_summary.get("performance_score")),
             "usability_score": _delta(previous_summary.get("usability_score"), current_summary.get("usability_score")),
             "launch_readiness_score": _delta(previous_summary.get("launch_readiness_score"), current_summary.get("launch_readiness_score")),
+        },
+        "verdict_delta": {
+            "previous": previous_verdict,
+            "current": current_verdict,
+            "changed": previous_verdict != current_verdict,
         },
     }
 

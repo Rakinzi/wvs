@@ -17,7 +17,7 @@ from app.utils.scan_helpers import (
     normalize_target_url,
 )
 from app.utils.scan_comparison import build_scan_comparison
-from app.utils.scan_pipeline import persist_scan_result
+from app.utils.scan_pipeline import attach_launch_verdict, persist_scan_result
 from app.utils.reports import generate_report
 from app.utils.ux_screenshot_manager import collect_screenshot_paths
 from app.tasks.scan_jobs import run_full_scan_job
@@ -29,6 +29,8 @@ bp = Blueprint('scans', __name__)
 
 
 def persist_scan(current_user, findings, prefix="scan"):
+    if 'launch_verdict' not in findings:
+        attach_launch_verdict(findings)
     return persist_scan_result(findings["url"], findings, current_user.id, prefix=prefix)
 
 
@@ -293,6 +295,12 @@ def start_scan():
                     'page_paths': payload.page_paths,
                     'page_type': payload.page_type,
                     'enable_ai_review': payload.enable_ai_review,
+                    'enable_active_checks': payload.enable_active_checks,
+                    'active_check_paths': payload.active_check_paths,
+                    'active_check_budget': payload.active_check_budget,
+                    'auth_test_accounts': [account.model_dump() for account in payload.auth_test_accounts],
+                    'protected_paths': payload.protected_paths,
+                    'idor_paths': payload.idor_paths,
                     'verified_target_id': payload.verified_target_id,
                 }
             },
@@ -569,11 +577,14 @@ def get_report(scan_id):
             findings['summary'] = build_scan_summary(findings)
         if 'sections' not in findings:
             findings['sections'] = build_scan_sections(findings)
+        if 'launch_verdict' not in findings:
+            attach_launch_verdict(findings)
 
         if report_format == 'json':
             public_findings = _publicize_scan_assets(scan.public_id, copy.deepcopy(findings))
             public_findings['summary'] = build_scan_summary(public_findings)
             public_findings['sections'] = build_scan_sections(public_findings)
+            attach_launch_verdict(public_findings)
             summary = public_findings.get('summary', {})
             comparison = None
             previous_scan = _find_previous_scan_for_comparison(scan)

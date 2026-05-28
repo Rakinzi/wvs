@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, ArrowRight, CheckCircle, Eye, EyeOff, Lock, Shield } from 'lucide-react';
+import { AlertTriangle, ArrowRight, CheckCircle, Eye, EyeOff, Lock } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { apiJson, ApiError } from '../lib/api';
 import Spinner from './Spinner';
@@ -88,9 +88,9 @@ const ResetPassword = () => {
           >
             <div
               className="w-14 h-14 rounded-2xl flex items-center justify-center"
-              style={{ background: 'var(--color-primary)', boxShadow: '0 0 32px #3B82F640' }}
+              style={{ boxShadow: '0 0 32px rgba(45,212,191,0.28)' }}
             >
-              <Shield size={26} className="text-white" />
+              <img src="/launchguard-icon.svg" alt="" className="w-14 h-14 rounded-2xl" />
             </div>
             <div className="text-center">
               <h1 className="text-xl font-semibold" style={{ color: 'var(--color-text)' }}>Choose a new password</h1>

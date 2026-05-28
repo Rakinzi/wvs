@@ -4,6 +4,7 @@ import os
 
 from app.scanners import SecurityScanner
 from app.utils.db_manager import DBManager
+from app.utils.launch_verdict import build_launch_verdict
 from app.utils.reports import generate_report
 from app.utils.scan_helpers import build_scan_sections, build_scan_summary
 from app.utils.time_utils import utc_now, utc_now_isoformat
@@ -14,6 +15,16 @@ def ensure_reports_dir() -> str:
     reports_dir = os.path.join(base_dir, 'reports')
     os.makedirs(reports_dir, exist_ok=True)
     return reports_dir
+
+
+def attach_launch_verdict(findings: dict) -> dict:
+    verdict = build_launch_verdict(findings)
+    findings['launch_verdict'] = {key: value for key, value in verdict.items() if key != 'universal_findings'}
+    findings['universal_findings'] = verdict['universal_findings']
+    if isinstance(findings.get('summary'), dict):
+        findings['summary']['launch_verdict'] = findings['launch_verdict'].get('verdict')
+        findings['summary']['launch_verdict_label'] = findings['launch_verdict'].get('label')
+    return findings
 
 
 def _emit_progress(
@@ -42,7 +53,7 @@ def _emit_progress(
     )
 
 
-def build_full_scan(url: str, progress_callback=None) -> dict:
+def build_full_scan(url: str, progress_callback=None, enable_active_checks: bool = False) -> dict:
     scanner = SecurityScanner()
     findings = {
         'url': url,
@@ -65,6 +76,10 @@ def build_full_scan(url: str, progress_callback=None) -> dict:
         ('dns', 'DNS', scanner.check_dns),
         ('redirect', 'open redirects', scanner.check_redirect),
         ('takeover', 'subdomain takeover', scanner.check_takeover),
+        ('ssrf', 'SSRF', lambda target: scanner.check_ssrf(target, enable_active_checks=enable_active_checks)),
+        ('logging_monitor', 'logging & monitoring', scanner.check_logging_monitor),
+        ('auth', 'authentication controls', scanner.check_auth),
+        ('integrity', 'software integrity', scanner.check_integrity),
     ]
     total_steps = len(steps)
 
@@ -91,6 +106,7 @@ def build_full_scan(url: str, progress_callback=None) -> dict:
 
     findings['summary'] = build_scan_summary(findings)
     findings['sections'] = build_scan_sections(findings)
+    attach_launch_verdict(findings)
     return findings
 
 
@@ -99,6 +115,12 @@ def build_product_readiness_scan(
     *,
     page_paths: list[str] | None = None,
     enable_ai_review: bool = False,
+    enable_active_checks: bool = False,
+    active_check_paths: list[str] | None = None,
+    active_check_budget: int | None = None,
+    auth_test_accounts: list[dict] | None = None,
+    protected_paths: list[str] | None = None,
+    idor_paths: list[str] | None = None,
     page_type: str | None = None,
     progress_callback=None,
 ) -> dict:
@@ -110,6 +132,12 @@ def build_product_readiness_scan(
         'scan_config': {
             'page_paths': page_paths or [],
             'enable_ai_review': enable_ai_review,
+            'enable_active_checks': enable_active_checks,
+            'active_check_paths': active_check_paths or [],
+            'active_check_budget': active_check_budget,
+            'auth_test_accounts': auth_test_accounts or [],
+            'protected_paths': protected_paths or [],
+            'idor_paths': idor_paths or [],
             'page_type': page_type,
         },
     }
@@ -118,6 +146,11 @@ def build_product_readiness_scan(
         ('responsive_ux', 'responsive layout', lambda target: scanner.check_responsive_ux(target, page_paths=page_paths)),
         ('performance_ux', 'performance experience', lambda target: scanner.check_performance_ux(target, page_paths=page_paths)),
         ('form_usability', 'form usability', lambda target: scanner.check_form_usability(target, page_paths=page_paths)),
+        ('seo', 'seo readiness', lambda target: scanner.check_seo(target, page_paths=page_paths, page_type=page_type)),
+        ('broken_links', 'broken links', lambda target: scanner.check_broken_links(target, page_paths=page_paths)),
+        ('app_controls', 'application controls', lambda target: scanner.check_app_controls(target, page_paths=page_paths, active_check_paths=active_check_paths, auth_test_accounts=auth_test_accounts, protected_paths=protected_paths, idor_paths=idor_paths)),
+        ('exposed_services', 'exposed services', scanner.check_exposed_services),
+        ('abuse_controls', 'abuse controls', lambda target: scanner.check_abuse_controls(target, endpoints=active_check_paths, budget=active_check_budget, enabled=enable_active_checks)),
         ('visual_ai', 'ai visual review', lambda target: scanner.check_visual_ai(target, page_paths=page_paths, enabled=enable_ai_review, page_type=page_type)),
     ]
     total_steps = len(steps)
@@ -144,14 +177,14 @@ def build_product_readiness_scan(
         )
 
     launch_blockers = []
-    for section_key in ('accessibility', 'responsive_ux', 'performance_ux', 'form_usability'):
+    for section_key in ('accessibility', 'responsive_ux', 'performance_ux', 'form_usability', 'seo', 'broken_links', 'app_controls', 'exposed_services', 'abuse_controls'):
         for issue in (findings.get(section_key, {}) or {}).get('issues', []):
             if str(issue.get('severity') or '').lower() in {'critical', 'high'}:
                 launch_blockers.append(issue)
 
     issue_total = sum(
         len((findings.get(key, {}) or {}).get('issues', []))
-        for key in ('accessibility', 'responsive_ux', 'performance_ux', 'form_usability')
+        for key in ('accessibility', 'responsive_ux', 'performance_ux', 'form_usability', 'seo', 'broken_links', 'app_controls', 'exposed_services', 'abuse_controls')
     )
     findings['launch_readiness'] = {
         'status': 'blocked' if launch_blockers else ('attention_required' if issue_total else 'ready'),
@@ -161,6 +194,7 @@ def build_product_readiness_scan(
     }
     findings['summary'] = build_scan_summary(findings)
     findings['sections'] = build_scan_sections(findings)
+    attach_launch_verdict(findings)
     return findings
 
 
@@ -169,22 +203,35 @@ def build_full_launch_audit(
     *,
     page_paths: list[str] | None = None,
     enable_ai_review: bool = False,
+    enable_active_checks: bool = False,
+    active_check_paths: list[str] | None = None,
+    active_check_budget: int | None = None,
+    auth_test_accounts: list[dict] | None = None,
+    protected_paths: list[str] | None = None,
+    idor_paths: list[str] | None = None,
     page_type: str | None = None,
     progress_callback=None,
 ) -> dict:
-    findings = build_full_scan(url, progress_callback=progress_callback)
+    findings = build_full_scan(url, progress_callback=progress_callback, enable_active_checks=enable_active_checks)
     ux_findings = build_product_readiness_scan(
         url,
         page_paths=page_paths,
         enable_ai_review=enable_ai_review,
+        enable_active_checks=enable_active_checks,
+        active_check_paths=active_check_paths,
+        active_check_budget=active_check_budget,
+        auth_test_accounts=auth_test_accounts,
+        protected_paths=protected_paths,
+        idor_paths=idor_paths,
         page_type=page_type,
         progress_callback=progress_callback,
     )
-    for key in ('accessibility', 'responsive_ux', 'performance_ux', 'form_usability', 'visual_ai', 'launch_readiness', 'scan_config'):
+    for key in ('accessibility', 'responsive_ux', 'performance_ux', 'form_usability', 'seo', 'broken_links', 'app_controls', 'exposed_services', 'abuse_controls', 'visual_ai', 'launch_readiness', 'scan_config'):
         findings[key] = ux_findings.get(key)
     findings['scan_profile'] = 'full_launch_audit'
     findings['summary'] = build_scan_summary(findings)
     findings['sections'] = build_scan_sections(findings)
+    attach_launch_verdict(findings)
     return findings
 
 

@@ -35,6 +35,30 @@ def build_builder_prompt(finding: Mapping[str, object]) -> str:
             f"{remediation or 'Clarify labels, validation, and submit actions while keeping the current flow intact.'} "
             "Preserve existing branding and keep the change scoped to the affected form."
         )
+    if scanner == "seo":
+        return (
+            f"Fix the SEO readiness issue '{title}' on {page}{selector_text}. "
+            f"{remediation or 'Update metadata, headings, or crawl configuration while preserving page content and behavior.'} "
+            "Keep the change scoped to SEO metadata or semantic structure unless the finding requires visible copy."
+        )
+    if scanner == "broken_links":
+        return (
+            f"Fix the broken link issue '{title}' on {page}{selector_text}. "
+            f"{remediation or 'Update the target URL, restore the missing route, or remove the link while preserving the current page layout.'} "
+            "Check both desktop and mobile navigation after the change."
+        )
+    if scanner == "app_controls":
+        return (
+            f"Fix the pre-production application-control issue '{title}' on {page}{selector_text}. "
+            f"{remediation or 'Add server-side controls and keep the change scoped to the affected route or workflow.'} "
+            "Preserve existing UX while enforcing the control on the backend."
+        )
+    if scanner == "exposed_services":
+        return (
+            f"Fix the exposed-service issue '{title}' for {page}. "
+            f"{remediation or 'Close the public port or restrict it with firewall/private-network controls before launch.'} "
+            "Verify from an external network that only intended public web services remain reachable."
+        )
     if scanner == "visual_ai":
         return (
             f"Improve the visual/product-quality recommendation '{title}' on {page}. "

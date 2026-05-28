@@ -31,6 +31,9 @@ This is backed by:
 - Mobile and Responsive UX
 - Performance UX
 - Form and Interaction Usability
+- Broken Links
+- Abuse Controls and Exposed Routes
+- Exposed Services
 - Visual UX Recommendations
 
 ### New finding contract
@@ -110,6 +113,26 @@ Current checks stay non-destructive and focus on:
 - missing required-field indications
 - weak or absent validation feedback
 - obvious interaction friction
+
+### Abuse controls and exposed routes
+
+Verified pre-production scans can optionally run bounded active checks for authentication and account-management abuse controls. The scanner:
+
+- discovers common exposed auth and admin routes such as `/login`, `/signup`, `/forgot-password`, `/reset-password`, and `/admin`
+- accepts explicit active-check paths such as `POST /login` or `GET /admin`
+- sends only a capped request budget
+- treats HTTP 429, `Retry-After`, rate-limit headers, CAPTCHA text, cooldown text, or lockout text as control signals
+- reports missing throttling on auth endpoints as launch blockers
+
+This is designed for staging or owner-authorized pre-production targets, not open-ended brute-force testing.
+
+### Broken links
+
+The product-readiness scan renders configured pages, extracts anchors, and checks link targets. Broken same-origin links are treated more severely than external links because they usually indicate missing routes, bad navigation, or launch packaging mistakes.
+
+### Exposed services
+
+The product-readiness scan performs a bounded TCP check against a configured launch-relevant port list. It flags public databases, caches, remote-admin ports, development servers, and non-standard web services so staging-only components are not accidentally shipped.
 
 ### Visual AI review
 

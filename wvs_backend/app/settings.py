@@ -53,6 +53,23 @@ class AppSettings(BaseSettings):
     visual_ai_base_url: str = Field(default="https://api.openai.com/v1", alias="VISUAL_AI_BASE_URL")
     visual_ai_timeout_seconds: int = Field(default=45, alias="VISUAL_AI_TIMEOUT_SECONDS")
     visual_ai_max_screenshots_per_scan: int = Field(default=5, alias="VISUAL_AI_MAX_SCREENSHOTS_PER_SCAN")
+    abuse_scan_enabled: bool = Field(default=True, alias="ABUSE_SCAN_ENABLED")
+    abuse_scan_default_budget: int = Field(default=8, alias="ABUSE_SCAN_DEFAULT_BUDGET")
+    abuse_scan_max_budget: int = Field(default=20, alias="ABUSE_SCAN_MAX_BUDGET")
+    abuse_scan_timeout_seconds: int = Field(default=8, alias="ABUSE_SCAN_TIMEOUT_SECONDS")
+    broken_link_max_links_per_page: int = Field(default=50, alias="BROKEN_LINK_MAX_LINKS_PER_PAGE")
+    broken_link_timeout_seconds: int = Field(default=8, alias="BROKEN_LINK_TIMEOUT_SECONDS")
+    app_controls_enabled: bool = Field(default=True, alias="APP_CONTROLS_ENABLED")
+    app_controls_timeout_seconds: int = Field(default=8, alias="APP_CONTROLS_TIMEOUT_SECONDS")
+    app_controls_max_js_files: int = Field(default=20, alias="APP_CONTROLS_MAX_JS_FILES")
+    app_controls_max_endpoints: int = Field(default=50, alias="APP_CONTROLS_MAX_ENDPOINTS")
+    exposed_services_enabled: bool = Field(default=True, alias="EXPOSED_SERVICES_ENABLED")
+    exposed_services_timeout_seconds: float = Field(default=1.5, alias="EXPOSED_SERVICES_TIMEOUT_SECONDS")
+    exposed_services_max_ports: int = Field(default=32, alias="EXPOSED_SERVICES_MAX_PORTS")
+    exposed_services_ports: str = Field(
+        default="22,80,443,2222,3000,3306,3389,5000,5173,5432,6379,8000,8080,8443,9200,1025,8025,27017",
+        alias="EXPOSED_SERVICES_PORTS",
+    )
     lighthouse_enabled: bool = Field(default=False, alias="LIGHTHOUSE_ENABLED")
     lighthouse_cli_path: str | None = Field(default=None, alias="LIGHTHOUSE_CLI_PATH")
     lighthouse_timeout_seconds: int = Field(default=90, alias="LIGHTHOUSE_TIMEOUT_SECONDS")

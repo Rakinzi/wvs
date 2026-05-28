@@ -4,17 +4,17 @@ from datetime import datetime, timezone, timedelta
 from xml.sax.saxutils import escape
 
 from reportlab.lib import colors
-from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
+from reportlab.lib.enums import TA_CENTER
 from reportlab.lib.pagesizes import letter
-from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.units import inch
 from reportlab.platypus import (
     BaseDocTemplate, Frame, HRFlowable, PageTemplate,
-    Paragraph, Spacer, Table, TableStyle, Image,
+    Paragraph, Spacer, Table, TableStyle, Image, KeepTogether,
 )
 from reportlab.lib.colors import HexColor
 
-from app.utils.scan_helpers import build_best_practices, build_scan_summary
+from app.utils.scan_helpers import build_best_practices, build_risk_rating, build_scan_summary, build_security_score, owasp_coverage_summary
 
 # ── Palette ──────────────────────────────────────────────────────────────────
 BG        = HexColor('#020617')
@@ -60,6 +60,45 @@ def _styles():
 
 
 # ── Page canvas decorations ───────────────────────────────────────────────────
+def _draw_brand_mark(canvas, x, y, size=28):
+    """Draw a compact LaunchGuard mark in report headers."""
+    canvas.saveState()
+    s = size
+
+    canvas.setFillColor(HexColor('#07111F'))
+    canvas.roundRect(x, y, s, s, 6, fill=1, stroke=0)
+
+    shield = canvas.beginPath()
+    shield.moveTo(x + s * 0.5, y + s * 0.88)
+    shield.lineTo(x + s * 0.22, y + s * 0.72)
+    shield.lineTo(x + s * 0.22, y + s * 0.36)
+    shield.curveTo(x + s * 0.22, y + s * 0.2, x + s * 0.34, y + s * 0.12, x + s * 0.5, y + s * 0.06)
+    shield.curveTo(x + s * 0.66, y + s * 0.12, x + s * 0.78, y + s * 0.2, x + s * 0.78, y + s * 0.36)
+    shield.lineTo(x + s * 0.78, y + s * 0.72)
+    shield.close()
+    canvas.setStrokeColor(WHITE)
+    canvas.setLineWidth(1.5)
+    canvas.drawPath(shield, fill=0, stroke=1)
+
+    canvas.setStrokeColor(PRIMARY)
+    canvas.setLineWidth(2.2)
+    canvas.line(x + s * 0.22, y + s * 0.72, x + s * 0.22, y + s * 0.36)
+    canvas.line(x + s * 0.22, y + s * 0.72, x + s * 0.5, y + s * 0.88)
+
+    canvas.setStrokeColor(INFO)
+    canvas.setLineWidth(3)
+    canvas.line(x + s * 0.35, y + s * 0.48, x + s * 0.47, y + s * 0.34)
+    canvas.line(x + s * 0.47, y + s * 0.34, x + s * 0.68, y + s * 0.6)
+
+    canvas.setStrokeColor(HexColor('#2DD4BF'))
+    canvas.setLineWidth(1.5)
+    canvas.arc(x - s * 0.1, y + s * 0.08, x + s * 1.12, y + s * 0.84, 205, 120)
+    canvas.setFillColor(HexColor('#2DD4BF'))
+    canvas.circle(x + s * 0.88, y + s * 0.66, s * 0.06, fill=1, stroke=0)
+
+    canvas.restoreState()
+
+
 def _draw_page(canvas, doc):
     canvas.saveState()
     w, h = letter
@@ -76,13 +115,14 @@ def _draw_page(canvas, doc):
     canvas.setFillColor(SURFACE)
     canvas.rect(0, h - 52, w, 48, fill=1, stroke=0)
 
-    # Header text
+    # Header brand
+    _draw_brand_mark(canvas, MARGIN, h - 42, 28)
     canvas.setFillColor(TEXT)
     canvas.setFont('Helvetica-Bold', 11)
-    canvas.drawString(MARGIN, h - 32, 'WebVulnScanner')
+    canvas.drawString(MARGIN + 36, h - 30, 'LaunchGuard')
     canvas.setFillColor(MUTED)
     canvas.setFont('Helvetica', 8)
-    canvas.drawString(MARGIN, h - 44, 'Security Assessment Report')
+    canvas.drawString(MARGIN + 36, h - 42, 'Launch Readiness Report')
 
     # Page number (right)
     canvas.setFillColor(DIM)
@@ -209,6 +249,13 @@ def _findings_block(items, color, ST):
                                                                                   leading=10, textColor=DIM)),
                 '',
             ])
+        owasp_cat = item.get('owasp_category') or ''
+        if owasp_cat:
+            rows.append([
+                Paragraph(f'OWASP: {_safe_text(owasp_cat)}', ParagraphStyle('oc', fontName='Helvetica-Oblique', fontSize=7.5,
+                                                                             leading=10, textColor=INFO)),
+                '',
+            ])
         screenshot_path = item.get('screenshot_path')
         if isinstance(screenshot_path, str) and screenshot_path and os.path.exists(screenshot_path):
             screenshots.append((name, screenshot_path))
@@ -252,6 +299,150 @@ def _recs_block(items, ST):
     return [Spacer(1, 4), t]
 
 
+def _compact_table(title, headers, rows, ST, *, max_rows=20):
+    clean_rows = rows[:max_rows]
+    if not clean_rows:
+        return []
+    style = ParagraphStyle('ct', fontName='Helvetica', fontSize=7, leading=9, textColor=MUTED)
+    head_style = ParagraphStyle('cth', fontName='Helvetica-Bold', fontSize=7, leading=9, textColor=TEXT)
+    table_rows = [[Paragraph(_safe_text(header, 40), head_style) for header in headers]]
+    for row in clean_rows:
+        table_rows.append([Paragraph(_safe_text(cell, 95), style) for cell in row])
+    col_width = (PAGE_W - 2 * MARGIN) / max(1, len(headers))
+    table = Table(table_rows, colWidths=[col_width] * len(headers), repeatRows=1)
+    table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), ELEVATED),
+        ('BACKGROUND', (0, 1), (-1, -1), CARD),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [CARD, SURFACE]),
+        ('GRID', (0, 0), (-1, -1), 0.25, BORDER),
+        ('TOPPADDING', (0, 0), (-1, -1), 4),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+        ('LEFTPADDING', (0, 0), (-1, -1), 5),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 5),
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+    ]))
+    blocks = [Spacer(1, 6), Paragraph(_safe_text(title), ST['h3']), Spacer(1, 3), table]
+    if len(rows) > max_rows:
+        blocks.append(Paragraph(f'{len(rows) - max_rows} additional rows omitted from PDF table.', ST['small']))
+    return blocks
+
+
+def _active_check_summary(results, ST):
+    config = results.get('scan_config') or {}
+    if not config:
+        return []
+    accounts = config.get('auth_test_accounts') or []
+    rows = [[
+        'Active checks',
+        'enabled' if config.get('enable_active_checks') else 'disabled',
+    ], [
+        'Request budget',
+        config.get('active_check_budget') or 'default',
+    ], [
+        'Auth test accounts',
+        f'{len(accounts)} supplied (redacted)',
+    ], [
+        'Protected paths',
+        len(config.get('protected_paths') or []),
+    ], [
+        'IDOR templates',
+        len(config.get('idor_paths') or []),
+    ]]
+    return _compact_table('Pre-production Controls Summary', ['Control', 'Value'], rows, ST, max_rows=10)
+
+
+def _technical_evidence_blocks(section_key, results, ST):
+    payload = results.get(section_key) or {}
+    blocks = []
+    if section_key == 'app_controls':
+        endpoints = payload.get('discovered_endpoints') or []
+        blocks.extend(_compact_table(
+            'Discovered API Endpoints',
+            ['Endpoint'],
+            [[endpoint] for endpoint in endpoints],
+            ST,
+            max_rows=30,
+        ))
+        js_files = payload.get('javascript_files') or []
+        blocks.extend(_compact_table(
+            'JavaScript Sources',
+            ['File', 'Endpoints'],
+            [[item.get('url'), len(item.get('endpoints') or [])] for item in js_files],
+            ST,
+            max_rows=20,
+        ))
+        specs = payload.get('openapi_specs') or []
+        blocks.extend(_compact_table(
+            'OpenAPI Specs',
+            ['Spec URL', 'Endpoints'],
+            [[item.get('url'), item.get('endpoint_count')] for item in specs],
+            ST,
+            max_rows=10,
+        ))
+        form_matrix = payload.get('form_matrix') or []
+        blocks.extend(_compact_table(
+            'Form Safety Matrix',
+            ['Selector', 'Class', 'Method', 'Testing'],
+            [[item.get('selector'), item.get('classification'), item.get('method'), 'bounded' if item.get('safe_to_submit') else 'manual'] for item in form_matrix],
+            ST,
+            max_rows=25,
+        ))
+    elif section_key == 'abuse_controls':
+        routes = ((payload.get('discovery') or {}).get('routes') or [])
+        blocks.extend(_compact_table(
+            'Discovered Auth/Admin Routes',
+            ['Path', 'Kind', 'HTTP'],
+            [[item.get('path'), item.get('kind'), item.get('status_code')] for item in routes],
+            ST,
+            max_rows=25,
+        ))
+        observations = payload.get('observations') or []
+        blocks.extend(_compact_table(
+            'Rate-limit Observations',
+            ['Endpoint', 'Method', 'Requests', 'Control'],
+            [[item.get('endpoint'), item.get('method'), item.get('requests_sent'), item.get('control_reason') or ('yes' if item.get('control_detected') else 'no')] for item in observations],
+            ST,
+            max_rows=20,
+        ))
+    elif section_key == 'broken_links':
+        checked = payload.get('checked_links') or []
+        broken = [item for item in checked if not item.get('ok')]
+        blocks.extend(_compact_table(
+            'Broken Link Evidence',
+            ['Source', 'Target', 'Status', 'Reason'],
+            [[item.get('source_url'), item.get('target_url'), item.get('status_code'), item.get('reason')] for item in broken],
+            ST,
+            max_rows=30,
+        ))
+        if checked:
+            blocks.extend(_compact_table(
+                'Link Check Summary',
+                ['Checked', 'Broken'],
+                [[len(checked), len(broken)]],
+                ST,
+                max_rows=1,
+            ))
+    elif section_key == 'exposed_services':
+        services = payload.get('open_services') or []
+        blocks.extend(_compact_table(
+            'Open Services',
+            ['Host', 'Port', 'Risk', 'HTTP/Banner'],
+            [[item.get('host'), item.get('port'), item.get('risk'), (item.get('http') or {}).get('server') or (item.get('http') or {}).get('status_code') or 'tcp'] for item in services],
+            ST,
+            max_rows=30,
+        ))
+        ports = payload.get('ports_checked') or []
+        if ports:
+            blocks.extend(_compact_table(
+                'Port Check Scope',
+                ['Ports Checked'],
+                [[', '.join(str(port) for port in ports)]],
+                ST,
+                max_rows=1,
+            ))
+    return blocks
+
+
 def _obfuscate_email(email):
     return str(email).replace('@', ' [at] ')
 
@@ -271,7 +462,7 @@ def _score_bar(score, score_color, ST):
     bar_fill = Table([['']],  colWidths=[max(filled_w, 2)], rowHeights=[8])
     bar_fill.setStyle(TableStyle([('BACKGROUND', (0,0), (0,0), score_color), ('ROUNDEDCORNERS', [4])]))
 
-    label = Paragraph('Security Score', ST['label'])
+    label = Paragraph('LaunchGuard Score', ST['label'])
 
     outer = Table(
         [[score_label, [label, bar_bg, bar_fill]]],
@@ -287,6 +478,59 @@ def _score_bar(score, score_color, ST):
     return outer
 
 
+def _owasp_table(coverage: list, ST) -> list:
+    if not coverage:
+        return []
+    STATUS_COLORS = {
+        "covered_no_findings":   SECURE,
+        "covered_with_findings": WARN,
+        "not_tested":            DIM,
+    }
+    STATUS_LABELS = {
+        "covered_no_findings":   "Covered",
+        "covered_with_findings": "Issues Found",
+        "not_tested":            "Not Tested",
+    }
+    header_style = ParagraphStyle("owh", fontName="Helvetica-Bold", fontSize=7.5, leading=10, textColor=TEXT)
+    cell_style   = ParagraphStyle("owc", fontName="Helvetica",      fontSize=7.5, leading=10, textColor=MUTED)
+
+    col_w = [200, 85, 55, PAGE_W - 2 * MARGIN - 340]
+    rows = [[
+        Paragraph("Category",     header_style),
+        Paragraph("Status",       header_style),
+        Paragraph("Findings",     header_style),
+        Paragraph("Scanners Run", header_style),
+    ]]
+    for item in coverage:
+        status = item.get("status", "not_tested")
+        color  = STATUS_COLORS.get(status, DIM)
+        label  = STATUS_LABELS.get(status, status)
+        hex_color = color.hexval()[2:]
+        rows.append([
+            Paragraph(_safe_text(f"{item['id']} – {item['name']}"), cell_style),
+            Paragraph(f'<font color="#{hex_color}">{label}</font>', cell_style),
+            Paragraph(_safe_text(str(item.get("finding_count", 0))), cell_style),
+            Paragraph(_safe_text(", ".join(item.get("scanners_run", [])) or "—"), cell_style),
+        ])
+
+    t = Table(rows, colWidths=col_w, repeatRows=1)
+    t.setStyle(TableStyle([
+        ("BACKGROUND",     (0, 0), (-1,  0), ELEVATED),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [CARD, SURFACE]),
+        ("GRID",           (0, 0), (-1, -1), 0.25, BORDER),
+        ("TOPPADDING",     (0, 0), (-1, -1), 4),
+        ("BOTTOMPADDING",  (0, 0), (-1, -1), 4),
+        ("LEFTPADDING",    (0, 0), (-1, -1), 5),
+        ("RIGHTPADDING",   (0, 0), (-1, -1), 5),
+        ("VALIGN",         (0, 0), (-1, -1), "TOP"),
+    ]))
+    footnote = Paragraph(
+        "Coverage is based on the scan profile used. 'Not Tested' categories were not included in this scan.",
+        ST["small"],
+    )
+    return [t, Spacer(1, 4), footnote]
+
+
 # ── Main generator ────────────────────────────────────────────────────────────
 def generate_report(results):
     buffer = io.BytesIO()
@@ -299,15 +543,18 @@ def generate_report(results):
         rightMargin=MARGIN,
         topMargin=0.85 * inch,
         bottomMargin=0.7 * inch,
-        title=f"Security Report — {results.get('url', '')}",
+        title=f"LaunchGuard Report — {results.get('url', '')}",
     )
     frame = Frame(MARGIN, 0.7 * inch, PAGE_W - 2 * MARGIN, PAGE_H - 1.55 * inch, id='main')
     doc.addPageTemplates([PageTemplate(id='main', frames=[frame], onPage=_draw_page)])
 
     story = []
-    sp = lambda h=6: Spacer(1, h)
+
+    def sp(h=6):
+        return Spacer(1, h)
 
     summary   = results.get('summary') or build_scan_summary(results)
+    verdict_data = results.get('launch_verdict') or {}
     url       = results.get('url', '—')
     scan_id   = results.get('scan_id', '—')
     timestamp  = results.get('timestamp')
@@ -339,10 +586,8 @@ def generate_report(results):
     malware_artifact_count = summary.get('malware_artifact_count', 0)
     total          = summary.get('total_issues', 0)
 
-    risk  = ('Critical' if (total > 5 or is_mal) else
-             'High'     if total > 3 else
-             'Medium'   if total > 0 else 'Low')
-    score = max(0, 100 - total * 15)
+    risk  = build_risk_rating(summary)
+    score = build_security_score(summary)
 
     risk_map = {
         'Critical': (HexColor('#4B0000'), DANGER),
@@ -352,10 +597,18 @@ def generate_report(results):
     }
     risk_bg, risk_fg = risk_map[risk]
     score_color = DANGER if score < 50 else WARN if score < 80 else SECURE
+    verdict_key = verdict_data.get('verdict') or 'ready_to_ship'
+    verdict_label = verdict_data.get('label') or str(verdict_key).replace('_', ' ').title()
+    verdict_color = {
+        'blocked': DANGER,
+        'fix_before_shipping': WARN,
+        'monitor_after_launch': INFO,
+        'ready_to_ship': SECURE,
+    }.get(verdict_key, INFO)
 
     # ── Hero ──────────────────────────────────────────────────────────────────
     story.append(sp(4))
-    story.append(Paragraph('Security Assessment Report', ST['h1']))
+    story.append(Paragraph('LaunchGuard Readiness Report', ST['h1']))
     story.append(sp(4))
     story.append(_divider(PRIMARY, 1.5))
     story.append(sp(6))
@@ -378,6 +631,42 @@ def generate_report(results):
         ('LINEBELOW',     (0,0), (-1,-2), 0.3, BORDER),
     ]))
     story.append(meta_t)
+    story.append(sp(10))
+
+    # Launch verdict
+    story.append(_section_header('Launch Verdict', verdict_label, '!', verdict_color, ST))
+    story.append(sp(4))
+    story.append(Paragraph(escape(verdict_data.get('summary') or 'No launch verdict was generated.'), ST['body_w']))
+    if verdict_data.get('next_action'):
+        story.append(sp(3))
+        story.append(Paragraph(f"<b>Next action:</b> {escape(str(verdict_data.get('next_action')))}", ST['body']))
+    profile = verdict_data.get('scan_profile') or {}
+    if profile:
+        story.append(sp(3))
+        story.append(Paragraph(
+            f"<b>Scan profile:</b> {escape(str(profile.get('label') or profile.get('key') or 'Configured scan'))}. "
+            f"{escape(str(profile.get('description') or ''))}",
+            ST['small'],
+        ))
+    top_blockers = verdict_data.get('top_blockers') or []
+    important_issues = verdict_data.get('important_issues') or []
+    if top_blockers or important_issues:
+        story.append(sp(6))
+        rows = [[Paragraph('Top launch actions', ST['h3'])]]
+        for item in (top_blockers or important_issues)[:5]:
+            title = escape(str(item.get('title') or 'Finding'))
+            impact = escape(str(item.get('launch_impact') or 'fix_before_ship').replace('_', ' ').title())
+            rows.append([Paragraph(f"<b>{impact}:</b> {title}", ST['body'])])
+        actions_t = Table(rows, colWidths=[PAGE_W - 2 * MARGIN])
+        actions_t.setStyle(TableStyle([
+            ('BACKGROUND', (0,0), (-1,-1), CARD),
+            ('BOX', (0,0), (-1,-1), 0.4, BORDER),
+            ('TOPPADDING', (0,0), (-1,-1), 6),
+            ('BOTTOMPADDING', (0,0), (-1,-1), 6),
+            ('LEFTPADDING', (0,0), (-1,-1), 8),
+            ('RIGHTPADDING', (0,0), (-1,-1), 8),
+        ]))
+        story.append(actions_t)
     story.append(sp(10))
 
     # Score + risk badges side by side
@@ -410,7 +699,13 @@ def generate_report(results):
             if path and os.path.isfile(path):
                 avail_w = (PAGE_W - 2 * MARGIN - 12) / 2
                 try:
-                    img = Image(path, width=avail_w, height=avail_w * 0.6)
+                    # Mobile screenshots are portrait (390px wide); render them at
+                    # ~55% column width so they appear phone-sized next to the desktop.
+                    if vp == 'mobile':
+                        img_w = avail_w * 0.55
+                        img = Image(path, width=img_w, height=img_w * (844 / 390), kind='proportional')
+                    else:
+                        img = Image(path, width=avail_w, height=avail_w * 0.6)
                     label = Paragraph(labels.get(vp, vp), ParagraphStyle(
                         'sl', fontName='Helvetica-Bold', fontSize=8,
                         textColor=MUTED, leading=11, alignment=TA_CENTER,
@@ -504,6 +799,20 @@ def generate_report(results):
             ]))
             story.append(issue_t)
 
+    story.append(sp(10))
+    story.append(_divider())
+
+    # ── OWASP Top 10 2021 Compliance Table ────────────────────────────────────
+    story.append(sp(4))
+    story.append(Paragraph('OWASP Top 10 2021 – Coverage Summary', ST['h2']))
+    story.append(sp(4))
+    story.append(Paragraph(
+        'The table below shows which OWASP Top 10 2021 categories were evaluated in this scan '
+        'and whether findings were detected.',
+        ST['body'],
+    ))
+    story.append(sp(6))
+    story.extend(_owasp_table(owasp_coverage_summary(results), ST))
     story.append(sp(10))
     story.append(_divider())
 
@@ -815,7 +1124,6 @@ def generate_report(results):
     if not exp_ran:
         story.append(Paragraph('Sensitive file exposure scan was not run.', ST['body']))
     elif exp_issues:
-        from reportlab.platypus import KeepTogether
         discovered_emails = exp_data.get('discovered_emails') or []
         if discovered_emails:
             story.extend(_findings_block([
@@ -827,7 +1135,6 @@ def generate_report(results):
                 for email in discovered_emails[:20]
             ], INFO, ST))
             story.append(sp(4))
-        from reportlab.platypus import KeepTogether
         for i in exp_issues:
             sev = i.get('severity', 'Medium')
             sev_colors = {
@@ -932,7 +1239,6 @@ def generate_report(results):
     if not sec_ran:
         story.append(Paragraph('Hardcoded secrets scan was not run.', ST['body']))
     elif sec_issues:
-        from reportlab.platypus import KeepTogether as _KT
         for i in sec_issues:
             sev = i.get('severity', 'Medium')
             sev_colors = {'Critical': DANGER, 'High': DANGER, 'Medium': WARN, 'Low': INFO}
@@ -977,7 +1283,7 @@ def generate_report(results):
                     ('LINEABOVE',     (0, 0), (-1, 0),  1.5, sev_color),
                 ]),
             )
-            story.append(_KT([title_row, meta_t, sp(6)]))
+            story.append(KeepTogether([title_row, meta_t, sp(6)]))
         story.extend(_recs_block(sec_data.get('recommendations') or [
             'Remove hardcoded API keys and secrets from client-side code immediately.',
             'Rotate any exposed credentials — treat them as fully compromised.',
@@ -1089,13 +1395,111 @@ def generate_report(results):
         ))
     story.append(sp(10))
 
+    # SSRF
+    ssrf_data   = findings.get('ssrf') or results.get('ssrf') or {}
+    ssrf_issues = ssrf_data.get('issues') or []
+    ssrf_ran    = bool(ssrf_data) and ssrf_data.get('status') != 'disabled'
+    story.append(_section_header(
+        'Server-Side Request Forgery (SSRF)',
+        'Active checks disabled' if not ssrf_ran else (
+            f'{len(ssrf_issues)} issue{"s" if len(ssrf_issues) != 1 else ""} found' if ssrf_issues else 'Pass'
+        ),
+        '—' if not ssrf_ran else ('✗' if ssrf_issues else '✓'),
+        DIM if not ssrf_ran else (DANGER if ssrf_issues else SECURE), ST,
+    ))
+    story.append(sp(4))
+    if not ssrf_ran:
+        story.append(Paragraph(
+            'SSRF active probing was disabled for this scan. Enable active checks to test for SSRF vulnerabilities.',
+            ST['body'],
+        ))
+    elif ssrf_issues:
+        story.extend(_findings_block(ssrf_issues, DANGER, ST))
+        story.extend(_recs_block(ssrf_data.get('recommendations') or [], ST))
+    else:
+        story.append(Paragraph('✓  No SSRF indicators detected in tested parameters.', ST['secure']))
+    story.append(sp(10))
+
+    # Logging & Monitoring
+    log_data   = findings.get('logging_monitor') or results.get('logging_monitor') or {}
+    log_issues = log_data.get('issues') or []
+    log_ran    = bool(log_data)
+    story.append(_section_header(
+        'Security Logging & Monitoring',
+        'Not run' if not log_ran else (
+            f'{len(log_issues)} issue{"s" if len(log_issues) != 1 else ""} found' if log_issues else 'Pass'
+        ),
+        '—' if not log_ran else ('✗' if log_issues else '✓'),
+        DIM if not log_ran else (WARN if log_issues else SECURE), ST,
+    ))
+    story.append(sp(4))
+    if not log_ran:
+        story.append(Paragraph('Logging & monitoring scan was not run.', ST['body']))
+    elif log_issues:
+        story.extend(_findings_block(log_issues, WARN, ST))
+        story.extend(_recs_block(log_data.get('recommendations') or [], ST))
+    else:
+        story.append(Paragraph('✓  Logging and monitoring signals look healthy.', ST['secure']))
+    story.append(sp(10))
+
+    # Authentication Controls
+    auth_data   = findings.get('auth') or results.get('auth') or {}
+    auth_issues = auth_data.get('issues') or []
+    auth_ran    = bool(auth_data)
+    story.append(_section_header(
+        'Authentication Controls',
+        'Not run' if not auth_ran else (
+            f'{len(auth_issues)} issue{"s" if len(auth_issues) != 1 else ""} found' if auth_issues else 'Pass'
+        ),
+        '—' if not auth_ran else ('✗' if auth_issues else '✓'),
+        DIM if not auth_ran else (WARN if auth_issues else SECURE), ST,
+    ))
+    story.append(sp(4))
+    if not auth_ran:
+        story.append(Paragraph('Authentication controls scan was not run.', ST['body']))
+    elif auth_issues:
+        story.extend(_findings_block(auth_issues, WARN, ST))
+        story.extend(_recs_block(auth_data.get('recommendations') or [], ST))
+    else:
+        story.append(Paragraph('✓  No authentication control gaps detected.', ST['secure']))
+    story.append(sp(10))
+
+    # Software & Data Integrity
+    integ_data   = findings.get('integrity') or results.get('integrity') or {}
+    integ_issues = integ_data.get('issues') or []
+    integ_ran    = bool(integ_data)
+    story.append(_section_header(
+        'Software & Data Integrity',
+        'Not run' if not integ_ran else (
+            f'{len(integ_issues)} issue{"s" if len(integ_issues) != 1 else ""} found' if integ_issues else 'Pass'
+        ),
+        '—' if not integ_ran else ('✗' if integ_issues else '✓'),
+        DIM if not integ_ran else (WARN if integ_issues else SECURE), ST,
+    ))
+    story.append(sp(4))
+    if not integ_ran:
+        story.append(Paragraph('Software integrity scan was not run.', ST['body']))
+    elif integ_issues:
+        story.extend(_findings_block(integ_issues, WARN, ST))
+        story.extend(_recs_block(integ_data.get('recommendations') or [], ST))
+    else:
+        story.append(Paragraph('✓  No software integrity gaps detected.', ST['secure']))
+    story.append(sp(10))
+
     # Product Readiness / UX sections
     sections = results.get('sections') or {}
+    story.extend(_active_check_summary(results, ST))
+    if results.get('scan_config'):
+        story.append(sp(8))
     for section_key, color in [
         ('accessibility', INFO),
         ('responsive_ux', WARN),
         ('performance_ux', INFO),
         ('form_usability', WARN),
+        ('seo', INFO),
+        ('broken_links', WARN),
+        ('app_controls', WARN),
+        ('exposed_services', DANGER),
         ('visual_ai', PURPLE),
     ]:
         section = sections.get(section_key) or {}
@@ -1114,6 +1518,7 @@ def generate_report(results):
             story.extend(_recs_block(section.get('recommendations') or [], ST))
         else:
             story.append(Paragraph('✓  No issues detected in this category.', ST['secure']))
+        story.extend(_technical_evidence_blocks(section_key, results, ST))
         story.append(sp(10))
 
     # ── Conclusion ────────────────────────────────────────────────────────────
@@ -1130,24 +1535,32 @@ def generate_report(results):
         ))
     else:
         steps = []
-        if sql_count:      steps.append(('SQL Injection',       'Migrate to parameterised queries and review all input handling code.'))
-        if ssl_issue:      steps.append(('SSL/TLS',             'Renew or replace the certificate with one from a trusted CA.'))
-        if hdr_count:      steps.append(('HTTP Headers',        'Add missing security headers (CSP, HSTS, X-Frame-Options, etc.).'))
-        if wp_count:       steps.append(('WordPress',           'Update core, themes and plugins; restrict XML-RPC and REST exposure.'))
-        if zap_count:      steps.append(('ZAP Alerts',          'Triage each alert and patch confirmed vulnerabilities.'))
-        if xss_count:      steps.append(('XSS',                 'Encode all output and implement a Content-Security-Policy header.'))
-        if tech_count:     steps.append(('Technology Exposure', 'Patch outdated client libraries, disable directory indexes, and reduce version disclosure.'))
-        if advisory_count: steps.append(('Dependency Risk',     'Upgrade vulnerable packages, review CVE/CWE exposure, and automate dependency scanning in CI/CD.'))
-        if exposure_count: steps.append(('File Exposure',       'Block sensitive paths in the web server and rotate any exposed credentials.'))
-        if secrets_count:  steps.append(('Hardcoded Secrets',   'Remove API keys from client-side code, rotate all exposed credentials immediately, and use a secrets manager.'))
-        if malware_artifact_count: steps.append(('Malware Artifacts', 'Remove suspicious downloads, verify artifact integrity, and only publish signed release files from trusted CI.'))
-        if is_mal:         steps.append(('Malicious Site',      'Investigate server compromise, rotate credentials, and notify users.'))
+        step_candidates = [
+            (sql_count, 'SQL Injection', 'Migrate to parameterised queries and review all input handling code.'),
+            (ssl_issue, 'SSL/TLS', 'Renew or replace the certificate with one from a trusted CA.'),
+            (hdr_count, 'HTTP Headers', 'Add missing security headers (CSP, HSTS, X-Frame-Options, etc.).'),
+            (wp_count, 'WordPress', 'Update core, themes and plugins; restrict XML-RPC and REST exposure.'),
+            (zap_count, 'ZAP Alerts', 'Triage each alert and patch confirmed vulnerabilities.'),
+            (xss_count, 'XSS', 'Encode all output and implement a Content-Security-Policy header.'),
+            (tech_count, 'Technology Exposure', 'Patch outdated client libraries, disable directory indexes, and reduce version disclosure.'),
+            (advisory_count, 'Dependency Risk', 'Upgrade vulnerable packages, review CVE/CWE exposure, and automate dependency scanning in CI/CD.'),
+            (exposure_count, 'File Exposure', 'Block sensitive paths in the web server and rotate any exposed credentials.'),
+            (secrets_count, 'Public Secret Exposure', 'Remove API keys from public client-side assets, rotate all exposed credentials immediately, and use server-side secret management.'),
+            (malware_artifact_count, 'Malware Artifacts', 'Remove suspicious downloads, verify artifact integrity, and only publish signed release files from trusted CI.'),
+            (is_mal, 'Malicious Site', 'Investigate server compromise, rotate credentials, and notify users.'),
+        ]
+        for condition, title, description in step_candidates:
+            if condition:
+                steps.append((title, description))
         dns_count = summary.get('dns_issue_count', 0)
         redir_count = summary.get('redirect_count', 0)
         take_count = summary.get('takeover_count', 0)
-        if dns_count:      steps.append(('DNS Security',        'Configure SPF (-all), DMARC (p=quarantine or reject), DKIM signing, and CAA records.'))
-        if redir_count:    steps.append(('Open Redirect',       'Validate all redirect targets against a strict server-side allowlist.'))
-        if take_count:     steps.append(('Subdomain Takeover',  'Remove dangling CNAME records and claim or delete unclaimed service deployments.'))
+        if dns_count:
+            steps.append(('DNS Security', 'Configure SPF (-all), DMARC (p=quarantine or reject), DKIM signing, and CAA records.'))
+        if redir_count:
+            steps.append(('Open Redirect', 'Validate all redirect targets against a strict server-side allowlist.'))
+        if take_count:
+            steps.append(('Subdomain Takeover', 'Remove dangling CNAME records and claim or delete unclaimed service deployments.'))
 
         rows = [[
             Paragraph(f'{i+1}. {t}', ParagraphStyle('st', fontName='Helvetica-Bold', fontSize=9,
@@ -1179,6 +1592,15 @@ def generate_report(results):
     practices = build_best_practices(results)
     if practices:
         story.extend(_recs_block(practices, ST))
+
+    limitations = verdict_data.get('limitations') or []
+    if limitations:
+        story.append(sp(10))
+        story.append(Paragraph('Report Limitations', ST['h2']))
+        story.append(sp(4))
+        for limitation in limitations:
+            story.append(Paragraph(escape(str(limitation)), ST['small']))
+            story.append(sp(3))
 
     story.append(sp(16))
 

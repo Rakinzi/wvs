@@ -45,9 +45,28 @@ const obfuscateEmail = (email) => String(email || '').replace('@', ' [at] ');
 
 const labelForConfidence = (value) => {
   const normalized = String(value || 'heuristic').replace(/_/g, ' ').toLowerCase();
+  if (normalized === 'high') return 'High Confidence';
+  if (normalized === 'medium') return 'Medium Confidence';
+  if (normalized === 'low') return 'Low Confidence';
   if (normalized === 'measured') return 'Measured';
   if (normalized === 'ai assisted') return 'AI-Assisted';
   return 'Heuristic';
+};
+
+const labelForEvidenceType = (value) => {
+  const normalized = String(value || '').replace(/_/g, ' ').toLowerCase();
+  if (normalized === 'confirmed technical issue') return 'Confirmed Technical Issue';
+  if (normalized === 'measured ux failure') return 'Measured UX Failure';
+  if (normalized === 'heuristic ux risk') return 'Heuristic UX Risk';
+  if (normalized === 'ai visual recommendation') return 'AI Visual Recommendation';
+  return normalized ? normalized.replace(/\b\w/g, c => c.toUpperCase()) : 'Evidence';
+};
+
+const verdictTone = (verdict) => {
+  if (verdict === 'blocked') return { color: T.danger, bg: T.dangerDim, icon: AlertOctagon };
+  if (verdict === 'fix_before_shipping') return { color: T.warn, bg: T.warnDim, icon: AlertTriangle };
+  if (verdict === 'monitor_after_launch') return { color: T.info, bg: T.infoDim, icon: RefreshCw };
+  return { color: T.secure, bg: T.secureDim, icon: CheckCircle };
 };
 
 const deltaLabel = (value) => {
@@ -248,7 +267,7 @@ const ScreenshotPanel = ({ screenshots }) => {
 
 /* ─────────────────────────────────────────────── */
 const ScanReport = ({ scanId, navigateTo }) => {
-  const [expanded, setExpanded] = useState({ sql: true, ssl: true, headers: true, wordpress: true, zap: true, malicious: true, xss: true, tech: true, exposure: true, secrets: true, dns: true, redirect: true, takeover: true, accessibility: true, responsive_ux: true, performance_ux: true, form_usability: true, visual_ai: true, comparison: true });
+  const [expanded, setExpanded] = useState({ sql: true, ssl: true, headers: true, wordpress: true, zap: true, malicious: true, xss: true, tech: true, exposure: true, secrets: true, dns: true, redirect: true, takeover: true, accessibility: true, responsive_ux: true, performance_ux: true, form_usability: true, seo: true, broken_links: true, app_controls: true, exposed_services: true, abuse_controls: true, visual_ai: true, comparison: true });
   const { report, loading, error } = useScanReportData(scanId);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState(null);
@@ -327,6 +346,9 @@ const ScanReport = ({ scanId, navigateTo }) => {
   const findings  = report.findings || {};
   const sections  = report.sections || findings.sections || {};
   const summary   = report.summary  || findings.summary  || {};
+  const launchVerdict = findings.launch_verdict || {};
+  const verdictInfo = verdictTone(launchVerdict.verdict);
+  const VerdictIcon = verdictInfo.icon;
   const scanProfile = findings.scan_profile || 'full_scan';
   const isSecurityScan = scanProfile === 'full_scan' || scanProfile === 'full_launch_audit' || scanProfile === 'security_only';
   const isUxScan = scanProfile === 'product_readiness' || scanProfile === 'full_launch_audit';
@@ -354,8 +376,21 @@ const ScanReport = ({ scanId, navigateTo }) => {
   const responsiveIssues = findings.responsive_ux?.issues || [];
   const performanceIssues = findings.performance_ux?.issues || [];
   const formIssues = findings.form_usability?.issues || [];
+  const seoIssues = findings.seo?.issues || [];
+  const brokenLinkIssues = findings.broken_links?.issues || [];
+  const appControlIssues = findings.app_controls?.issues || [];
+  const exposedServiceIssues = findings.exposed_services?.issues || [];
+  const abuseIssues = [
+    ...(findings.abuse_controls?.issues || []),
+    ...((findings.abuse_controls?.discovery || {}).issues || []),
+  ];
   const visualAiIssues = findings.visual_ai?.issues || [];
   const launchReadiness = findings.launch_readiness || {};
+  const topLaunchActions = [
+    ...(launchVerdict.top_blockers || []),
+    ...(launchVerdict.important_issues || []),
+    ...(launchVerdict.monitoring_items || []),
+  ].slice(0, 5);
 
   const totalIssues = summary.total_issues ??
     (
@@ -370,11 +405,12 @@ const ScanReport = ({ scanId, navigateTo }) => {
       dnsIssues.length +
       redirIssues.length +
       takeIssues.length +
+      seoIssues.length +
       (hasSsl ? 1 : 0) +
       (isMal ? 1 : 0)
     );
 
-  const score = meta.security_score ?? (totalIssues === 0 ? 100 : Math.max(0, 100 - totalIssues * 20));
+  const score = meta.security_score ?? (totalIssues === 0 ? 100 : Math.max(0, 100 - totalIssues * 5));
   const risk  = meta.risk_rating || (totalIssues > 5 || isMal ? 'Critical' : totalIssues > 3 ? 'High' : totalIssues > 0 ? 'Medium' : 'Low');
   const url   = meta.target_url || report.url || '';
   const ts    = meta.timestamp  || report.timestamp;
@@ -426,6 +462,67 @@ const ScanReport = ({ scanId, navigateTo }) => {
             <AlertTriangle size={14} /> {deleteError}
           </div>
         )}
+        <div className="card p-5 mb-6" style={{ borderColor: verdictInfo.color }}>
+          <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-5">
+            <div className="flex items-start gap-4">
+              <div className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: verdictInfo.bg }}>
+                <VerdictIcon size={22} style={{ color: verdictInfo.color }} />
+              </div>
+              <div>
+                <p className="section-label mb-1">Launch Verdict</p>
+                <h1 className="text-2xl font-bold" style={{ color: verdictInfo.color }}>
+                  {launchVerdict.label || 'Launch Verdict Pending'}
+                </h1>
+                <p className="text-sm mt-2 max-w-3xl" style={{ color: T.muted }}>
+                  {launchVerdict.summary || 'This report was generated before the verdict engine was available.'}
+                </p>
+                {launchVerdict.next_action && (
+                  <p className="text-sm mt-2" style={{ color: T.text }}>
+                    <span className="font-semibold">Next action:</span> {launchVerdict.next_action}
+                  </p>
+                )}
+                {launchVerdict.scan_profile && (
+                  <p className="text-xs mt-3" style={{ color: T.dim }}>
+                    Scan profile: <span style={{ color: T.text }}>{launchVerdict.scan_profile.label}</span>
+                    {launchVerdict.scan_profile.description ? ` · ${launchVerdict.scan_profile.description}` : ''}
+                  </p>
+                )}
+              </div>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 min-w-[280px]">
+              {[
+                { label: 'Blockers', value: launchVerdict.counts?.blockers ?? 0, color: T.danger },
+                { label: 'Fix First', value: launchVerdict.counts?.fix_before_ship ?? 0, color: T.warn },
+                { label: 'Monitor', value: launchVerdict.counts?.monitor_after_ship ?? 0, color: T.info },
+                { label: 'Advisory', value: launchVerdict.counts?.recommendations ?? 0, color: T.muted },
+              ].map(item => (
+                <div key={item.label} className="rounded-lg p-3" style={{ background: T.surface, border: `1px solid ${T.borderSubtle}` }}>
+                  <p className="text-[10px] uppercase tracking-wide" style={{ color: T.dim }}>{item.label}</p>
+                  <p className="text-lg font-bold font-mono" style={{ color: item.color }}>{item.value}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+          {topLaunchActions.length > 0 && (
+            <div className="mt-5 pt-4" style={{ borderTop: `1px solid ${T.borderSubtle}` }}>
+              <p className="section-label mb-3">Top Launch Actions</p>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                {topLaunchActions.map((item, index) => (
+                  <div key={item.finding_id || index} className="rounded-lg p-3" style={{ background: T.surface, border: `1px solid ${T.border}` }}>
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-[10px] uppercase font-semibold px-2 py-0.5 rounded" style={{ background: T.elev, color: verdictTone(item.launch_impact === 'blocked' ? 'blocked' : item.launch_impact === 'monitor_after_ship' ? 'monitor_after_launch' : 'fix_before_shipping').color }}>
+                        {String(item.launch_impact || '').replace(/_/g, ' ')}
+                      </span>
+                      <span className="text-[10px]" style={{ color: T.dim }}>{labelForEvidenceType(item.evidence_type)}</span>
+                    </div>
+                    <p className="text-sm font-semibold" style={{ color: T.text }}>{item.title}</p>
+                    {item.recommended_fix && <p className="text-xs mt-1" style={{ color: T.muted }}>{item.recommended_fix}</p>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
         <div className="grid grid-cols-1 lg:grid-cols-[300px_1fr] gap-6 items-start">
 
           {/* ── Left: sticky summary panel ── */}
@@ -435,7 +532,7 @@ const ScanReport = ({ scanId, navigateTo }) => {
             <div className="card p-5 flex flex-col items-center gap-4">
               <ScoreRing score={score} color={scoreColor} />
               <div className="text-center">
-                <p className="section-label mb-1">Security Score</p>
+                <p className="section-label mb-1">LaunchGuard Score</p>
                 <span className="badge" style={{ background: riskDim, color: riskColor }}>
                   {risk} Risk
                 </span>
@@ -476,7 +573,7 @@ const ScanReport = ({ scanId, navigateTo }) => {
                 </div>
                 {findings.secrets && (
                   <div className="flex items-center justify-between text-xs py-1.5">
-                    <span style={{ color: T.muted }}>Hardcoded Secrets</span>
+                    <span style={{ color: T.muted }}>Public Secrets</span>
                     <span className="font-mono" style={{ color: secretsIssues.length > 0 ? T.danger : T.secure }}>{secretsIssues.length || '—'}</span>
                   </div>
                 )}
@@ -527,6 +624,12 @@ const ScanReport = ({ scanId, navigateTo }) => {
                     <span className="font-mono" style={{ color: formIssues.length > 0 ? T.warn : T.secure }}>{formIssues.length || '—'}</span>
                   </div>
                 )}
+                {findings.seo && (
+                  <div className="flex items-center justify-between text-xs py-1.5">
+                    <span style={{ color: T.muted }}>SEO Readiness</span>
+                    <span className="font-mono" style={{ color: seoIssues.length > 0 ? T.info : T.secure }}>{seoIssues.length || '—'}</span>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -556,9 +659,9 @@ const ScanReport = ({ scanId, navigateTo }) => {
             <div className="card p-5">
               <p className="section-label mb-3">Executive Summary</p>
               <p className="text-xs leading-relaxed" style={{ color: T.muted }}>
-                {totalIssues > 0
-                  ? `Detected ${totalIssues} security ${totalIssues === 1 ? 'issue' : 'issues'} that should be addressed promptly.`
-                  : 'No security issues detected — the site appears well-protected.'}
+                {launchVerdict.summary || (totalIssues > 0
+                  ? `Detected ${totalIssues} issue${totalIssues === 1 ? '' : 's'} that should be addressed promptly.`
+                  : 'No configured launch-blocking issues were detected.')}
               </p>
               {totalIssues > 0 && (
                 <ul className="mt-3 flex flex-col gap-1.5">
@@ -570,7 +673,7 @@ const ScanReport = ({ scanId, navigateTo }) => {
                   {xssIssues.length > 0 && <li className="flex items-center gap-2 text-xs" style={{ color: T.purple }}><AlertTriangle size={11} /> {xssIssues.length} XSS issue{xssIssues.length > 1 ? 's' : ''}</li>}
                   {actionableTechIssues.length > 0 && <li className="flex items-center gap-2 text-xs" style={{ color: T.info }}><AlertTriangle size={11} /> {actionableTechIssues.length} technology issue{actionableTechIssues.length > 1 ? 's' : ''}</li>}
                   {exposureIssues.length > 0 && <li className="flex items-center gap-2 text-xs" style={{ color: T.warn }}><AlertTriangle size={11} /> {exposureIssues.length} exposed path{exposureIssues.length > 1 ? 's' : ''}</li>}
-                  {secretsIssues.length > 0 && <li className="flex items-center gap-2 text-xs" style={{ color: T.danger }}><AlertOctagon size={11} /> {secretsIssues.length} hardcoded secret{secretsIssues.length > 1 ? 's' : ''} detected</li>}
+                  {secretsIssues.length > 0 && <li className="flex items-center gap-2 text-xs" style={{ color: T.danger }}><AlertOctagon size={11} /> {secretsIssues.length} publicly exposed secret{secretsIssues.length > 1 ? 's' : ''} detected</li>}
                   {isMal && <li className="flex items-center gap-2 text-xs" style={{ color: T.purple }}><AlertOctagon size={11} /> Potentially malicious</li>}
                   {dnsIssues.length > 0 && <li className="flex items-center gap-2 text-xs" style={{ color: T.warn }}><AlertTriangle size={11} /> {dnsIssues.length} DNS issue{dnsIssues.length > 1 ? 's' : ''}</li>}
                   {redirIssues.length > 0 && <li className="flex items-center gap-2 text-xs" style={{ color: T.danger }}><AlertOctagon size={11} /> {redirIssues.length} open redirect{redirIssues.length > 1 ? 's' : ''}</li>}
@@ -579,6 +682,7 @@ const ScanReport = ({ scanId, navigateTo }) => {
                   {responsiveIssues.length > 0 && <li className="flex items-center gap-2 text-xs" style={{ color: T.warn }}><AlertTriangle size={11} /> {responsiveIssues.length} responsive/mobile finding{responsiveIssues.length > 1 ? 's' : ''}</li>}
                   {performanceIssues.length > 0 && <li className="flex items-center gap-2 text-xs" style={{ color: T.warn }}><AlertTriangle size={11} /> {performanceIssues.length} performance UX issue{performanceIssues.length > 1 ? 's' : ''}</li>}
                   {formIssues.length > 0 && <li className="flex items-center gap-2 text-xs" style={{ color: T.warn }}><AlertTriangle size={11} /> {formIssues.length} form usability issue{formIssues.length > 1 ? 's' : ''}</li>}
+                  {seoIssues.length > 0 && <li className="flex items-center gap-2 text-xs" style={{ color: T.info }}><AlertTriangle size={11} /> {seoIssues.length} SEO readiness issue{seoIssues.length > 1 ? 's' : ''}</li>}
                 </ul>
               )}
             </div>
@@ -602,6 +706,17 @@ const ScanReport = ({ scanId, navigateTo }) => {
                   <p>Previous scan: <span style={{ color: T.text }}>{comparison.previous_scan_id || '—'}</span></p>
                   <p>Issue count delta: <span style={{ color: T.text }}>{deltaLabel(comparison.summary_delta?.issue_count)}</span></p>
                   <p>Launch readiness delta: <span style={{ color: T.text }}>{deltaLabel(comparison.summary_delta?.launch_readiness_score)}</span></p>
+                </div>
+              </div>
+            )}
+
+            {launchVerdict.limitations?.length > 0 && (
+              <div className="card p-5">
+                <p className="section-label mb-3">Report Limitations</p>
+                <div className="flex flex-col gap-2">
+                  {launchVerdict.limitations.map((item, index) => (
+                    <p key={index} className="text-xs leading-relaxed" style={{ color: T.dim }}>{item}</p>
+                  ))}
                 </div>
               </div>
             )}
@@ -1219,6 +1334,11 @@ const ScanReport = ({ scanId, navigateTo }) => {
               { id: 'responsive_ux', label: 'Mobile and Responsive UX', issues: responsiveIssues, iconColor: T.warn, iconBg: T.warnDim, recommendations: findings.responsive_ux?.recommendations || [] },
               { id: 'performance_ux', label: 'Performance UX', issues: performanceIssues, iconColor: T.info, iconBg: T.infoDim, recommendations: findings.performance_ux?.recommendations || [], rawMetrics: findings.performance_ux?.raw_metrics },
               { id: 'form_usability', label: 'Form and Interaction Usability', issues: formIssues, iconColor: T.warn, iconBg: T.warnDim, recommendations: findings.form_usability?.recommendations || [] },
+              { id: 'seo', label: 'SEO Readiness', issues: seoIssues, iconColor: T.info, iconBg: T.infoDim, recommendations: findings.seo?.recommendations || [] },
+              { id: 'broken_links', label: 'Broken Links', issues: brokenLinkIssues, iconColor: T.warn, iconBg: T.warnDim, recommendations: findings.broken_links?.recommendations || [] },
+              { id: 'app_controls', label: 'Application Controls', issues: appControlIssues, iconColor: T.warn, iconBg: T.warnDim, recommendations: findings.app_controls?.recommendations || [], endpoints: findings.app_controls?.discovered_endpoints || [], forms: findings.app_controls?.form_matrix || [] },
+              { id: 'exposed_services', label: 'Exposed Services', issues: exposedServiceIssues, iconColor: T.danger, iconBg: T.dangerDim, recommendations: findings.exposed_services?.recommendations || [], services: findings.exposed_services?.open_services || [], ports: findings.exposed_services?.ports_checked || [] },
+              { id: 'abuse_controls', label: 'Abuse Controls and Exposed Routes', issues: abuseIssues, iconColor: T.danger, iconBg: T.dangerDim, recommendations: findings.abuse_controls?.recommendations || [], routes: findings.abuse_controls?.discovery?.routes || [] },
               { id: 'visual_ai', label: 'Visual UX Recommendations', issues: visualAiIssues, iconColor: T.purple, iconBg: T.purpleDim, recommendations: findings.visual_ai?.recommendations || [] },
             ].filter((item) => findings[item.id]).map((item) => (
               <Section
@@ -1271,6 +1391,61 @@ const ScanReport = ({ scanId, navigateTo }) => {
                           </div>
                         </div>
                       )}
+                      {item.routes?.length > 0 && (
+                        <div className="rounded-lg p-4" style={{ background: T.surface, border: `1px solid ${T.border}` }}>
+                          <p className="text-xs font-semibold mb-3" style={{ color: T.muted }}>DISCOVERED AUTH AND ADMIN ROUTES</p>
+                          <div className="flex flex-col gap-2">
+                            {item.routes.map((route, index) => (
+                              <div key={`${route.path}-${index}`} className="flex items-center justify-between gap-3 p-3 rounded" style={{ background: T.elev, border: `1px solid ${T.borderSubtle}` }}>
+                                <div className="min-w-0">
+                                  <p className="text-xs font-mono truncate" style={{ color: T.text }}>{route.path}</p>
+                                  <p className="text-[11px]" style={{ color: T.dim }}>{route.kind} · HTTP {route.status_code}</p>
+                                </div>
+                                <span className="text-[11px] font-semibold" style={{ color: route.kind === 'sensitive' ? T.warn : T.info }}>{route.kind}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {item.endpoints?.length > 0 && (
+                        <div className="rounded-lg p-4" style={{ background: T.surface, border: `1px solid ${T.border}` }}>
+                          <p className="text-xs font-semibold mb-3" style={{ color: T.muted }}>DISCOVERED API ENDPOINTS</p>
+                          <div className="flex flex-col gap-2 max-h-64 overflow-auto">
+                            {item.endpoints.slice(0, 30).map((endpoint, index) => (
+                              <p key={`${endpoint}-${index}`} className="text-xs font-mono break-all p-2 rounded" style={{ background: T.elev, color: T.text }}>{endpoint}</p>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {item.forms?.length > 0 && (
+                        <div className="rounded-lg p-4" style={{ background: T.surface, border: `1px solid ${T.border}` }}>
+                          <p className="text-xs font-semibold mb-3" style={{ color: T.muted }}>FORM SAFETY MATRIX</p>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                            {item.forms.map((form, index) => (
+                              <div key={`${form.selector}-${index}`} className="p-3 rounded" style={{ background: T.elev, border: `1px solid ${T.borderSubtle}` }}>
+                                <p className="text-xs font-mono truncate" style={{ color: T.text }}>{form.selector}</p>
+                                <p className="text-[11px]" style={{ color: T.dim }}>{form.classification} · {form.method} · {form.safe_to_submit ? 'bounded-testable' : 'manual-review'}</p>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {item.services?.length > 0 && (
+                        <div className="rounded-lg p-4" style={{ background: T.surface, border: `1px solid ${T.border}` }}>
+                          <p className="text-xs font-semibold mb-3" style={{ color: T.muted }}>OPEN SERVICES</p>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                            {item.services.map((service, index) => (
+                              <div key={`${service.port}-${index}`} className="p-3 rounded" style={{ background: T.elev, border: `1px solid ${T.borderSubtle}` }}>
+                                <p className="text-xs font-mono" style={{ color: T.text }}>{service.host}:{service.port}</p>
+                                <p className="text-[11px]" style={{ color: T.dim }}>{service.protocol} · {service.risk} · {service.http?.server || service.http?.status_code || 'tcp open'}</p>
+                              </div>
+                            ))}
+                          </div>
+                          {item.ports?.length > 0 && (
+                            <p className="text-[11px] mt-3 font-mono break-all" style={{ color: T.dim }}>Checked: {item.ports.join(', ')}</p>
+                          )}
+                        </div>
+                      )}
                       {item.issues.length > 0 ? (
                         <>
                           {item.issues.map((issue, index) => (
@@ -1282,6 +1457,11 @@ const ScanReport = ({ scanId, navigateTo }) => {
                                     <span className="px-2 py-0.5 rounded text-[11px] font-semibold" style={{ background: T.elev, color: item.iconColor, border: `1px solid ${T.border}` }}>
                                       {labelForConfidence(issue.confidence)}
                                     </span>
+                                    {issue.evidence_type && (
+                                      <span className="px-2 py-0.5 rounded text-[11px] font-semibold" style={{ background: T.elev, color: T.muted, border: `1px solid ${T.border}` }}>
+                                        {labelForEvidenceType(issue.evidence_type)}
+                                      </span>
+                                    )}
                                     <span className="text-xs" style={{ color: T.dim }}>{issue.viewport || 'all viewports'}</span>
                                     {issue.evidence?.metric && (
                                       <span className="text-xs font-mono" style={{ color: T.dim }}>

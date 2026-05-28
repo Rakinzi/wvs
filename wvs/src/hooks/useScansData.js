@@ -78,6 +78,12 @@ export const useScansData = ({ onScanComplete } = {}) => {
   const [fullScanPagePaths, setFullScanPagePaths]   = useLocalStorage('scan_page_paths', '');
   const [fullScanVerifiedTargetId, setFullScanVerifiedTargetId] = useLocalStorage('scan_verified_target_id', '');
   const [fullScanEnableAiReview, setFullScanEnableAiReview]     = useLocalStorage('scan_ai_review', false);
+  const [fullScanEnableActiveChecks, setFullScanEnableActiveChecks] = useLocalStorage('scan_active_checks', false);
+  const [fullScanActiveCheckPaths, setFullScanActiveCheckPaths] = useLocalStorage('scan_active_check_paths', '');
+  const [fullScanActiveCheckBudget, setFullScanActiveCheckBudget] = useLocalStorage('scan_active_check_budget', 8);
+  const [fullScanAuthAccounts, setFullScanAuthAccounts] = useLocalStorage('scan_auth_accounts', '');
+  const [fullScanProtectedPaths, setFullScanProtectedPaths] = useLocalStorage('scan_protected_paths', '');
+  const [fullScanIdorPaths, setFullScanIdorPaths] = useLocalStorage('scan_idor_paths', '');
   const [sqlScanUrl, setSqlScanUrl]                 = useLocalStorage('scan_url_sql', '');
   const [sslScanUrl, setSslScanUrl]                 = useLocalStorage('scan_url_ssl', '');
   const [wordpressScanUrl, setWordpressScanUrl]     = useLocalStorage('scan_url_wordpress', '');
@@ -171,6 +177,30 @@ export const useScansData = ({ onScanComplete } = {}) => {
             .filter(Boolean),
           verified_target_id: fullScanVerifiedTargetId || undefined,
           enable_ai_review: fullScanEnableAiReview,
+          enable_active_checks: fullScanEnableActiveChecks,
+          active_check_paths: fullScanActiveCheckPaths
+            .split('\n')
+            .map((item) => item.trim())
+            .filter(Boolean),
+          active_check_budget: Number(fullScanActiveCheckBudget) || 8,
+          auth_test_accounts: fullScanAuthAccounts
+            .split('\n')
+            .map((item) => item.trim())
+            .filter(Boolean)
+            .map((line) => {
+              const [identifier, password, role] = line.split('|').map((part) => part?.trim());
+              return identifier?.includes('@')
+                ? { email: identifier, password, role: role || undefined }
+                : { username: identifier, password, role: role || undefined };
+            }),
+          protected_paths: fullScanProtectedPaths
+            .split('\n')
+            .map((item) => item.trim())
+            .filter(Boolean),
+          idor_paths: fullScanIdorPaths
+            .split('\n')
+            .map((item) => item.trim())
+            .filter(Boolean),
         }
       });
       if (data.status === 'accepted') {
@@ -187,7 +217,7 @@ export const useScansData = ({ onScanComplete } = {}) => {
     } finally {
       setIsFullScanSubmitting(false);
     }
-  }, [fullScanEnableAiReview, fullScanPagePaths, fullScanProfile, fullScanUrl, fullScanVerifiedTargetId, onScanComplete]);
+  }, [fullScanActiveCheckBudget, fullScanActiveCheckPaths, fullScanAuthAccounts, fullScanEnableActiveChecks, fullScanEnableAiReview, fullScanIdorPaths, fullScanPagePaths, fullScanProfile, fullScanProtectedPaths, fullScanUrl, fullScanVerifiedTargetId, onScanComplete]);
 
   const handleSqlScan = useCallback(async () => {
     if (!sqlScanUrl) { setSqlError('Please enter a URL to scan'); return; }
@@ -394,7 +424,14 @@ export const useScansData = ({ onScanComplete } = {}) => {
   return {
     fullScanUrl, setFullScanUrl, fullScanProfile, setFullScanProfile,
     fullScanPagePaths, setFullScanPagePaths, fullScanVerifiedTargetId, setFullScanVerifiedTargetId,
-    fullScanEnableAiReview, setFullScanEnableAiReview, sqlScanUrl, setSqlScanUrl,
+    fullScanEnableAiReview, setFullScanEnableAiReview,
+    fullScanEnableActiveChecks, setFullScanEnableActiveChecks,
+    fullScanActiveCheckPaths, setFullScanActiveCheckPaths,
+    fullScanActiveCheckBudget, setFullScanActiveCheckBudget,
+    fullScanAuthAccounts, setFullScanAuthAccounts,
+    fullScanProtectedPaths, setFullScanProtectedPaths,
+    fullScanIdorPaths, setFullScanIdorPaths,
+    sqlScanUrl, setSqlScanUrl,
     sslScanUrl, setSslScanUrl, wordpressScanUrl, setWordpressScanUrl,
     xssScanUrl, setXssScanUrl, techScanUrl, setTechScanUrl,
     exposureScanUrl, setExposureScanUrl, malwareScanUrl, setMalwareScanUrl,

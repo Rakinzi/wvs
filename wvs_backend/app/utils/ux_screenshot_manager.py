@@ -23,7 +23,7 @@ def build_screenshot_filename(page_url: str, viewport: str) -> str:
 def capture_page_screenshot(page, page_url: str, viewport: str) -> str:
     screenshot_dir = ensure_screenshot_dir()
     path = os.path.join(screenshot_dir, build_screenshot_filename(page_url, viewport))
-    page.screenshot(path=path, full_page=False)
+    page.screenshot(path=path, full_page=True)
     return os.path.abspath(path)
 
 

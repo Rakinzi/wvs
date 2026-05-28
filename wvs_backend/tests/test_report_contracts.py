@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 
 from app import db
 from app.models import ScanResult
+from app.utils.reports import generate_report
 from app.utils.scan_helpers import build_scan_sections, build_scan_summary
 
 
@@ -97,3 +98,70 @@ def test_report_json_endpoint_preserves_contract_and_backfills_summary(auth_clie
     assert "security_score" in data["meta"]
     assert "xss" in data["sections"]
     assert isinstance(data["best_practices"], list)
+
+
+def test_pdf_report_renders_preproduction_control_evidence_tables():
+    findings = {
+        "url": "https://example.com",
+        "scan_profile": "product_readiness",
+        "scan_config": {
+            "enable_active_checks": True,
+            "active_check_budget": 8,
+            "auth_test_accounts": [{"email": "user@example.com", "password": "redacted"}],
+            "protected_paths": ["/dashboard"],
+            "idor_paths": ["/api/users/123"],
+        },
+        "app_controls": {
+            "status": "issues_found",
+            "issues": [{
+                "title": "Protected path is reachable without authentication",
+                "severity": "high",
+                "confidence": "measured",
+                "evidence": {"description": "/dashboard returned HTTP 200."},
+            }],
+            "discovered_endpoints": ["https://example.com/api/users", "https://example.com/api/admin"],
+            "javascript_files": [{"url": "https://example.com/app.js", "endpoints": ["https://example.com/api/users"]}],
+            "openapi_specs": [{"url": "https://example.com/openapi.json", "endpoint_count": 2}],
+            "form_matrix": [{"selector": "#login", "classification": "auth", "method": "POST", "safe_to_submit": True}],
+        },
+        "abuse_controls": {
+            "status": "issues_found",
+            "issues": [{
+                "title": "No rate limiting observed on active endpoint",
+                "severity": "high",
+                "confidence": "measured",
+                "evidence": {"description": "POST /login accepted 8 requests."},
+            }],
+            "discovery": {"routes": [{"path": "/login", "kind": "auth", "status_code": 200}]},
+            "observations": [{"endpoint": "POST /login", "method": "POST", "requests_sent": 8, "control_detected": False}],
+        },
+        "broken_links": {
+            "status": "issues_found",
+            "issues": [{
+                "title": "Broken link detected",
+                "severity": "medium",
+                "confidence": "measured",
+                "evidence": {"description": "Link target failed."},
+            }],
+            "checked_links": [
+                {"source_url": "https://example.com", "target_url": "https://example.com/missing", "status_code": 404, "ok": False, "reason": "HTTP 404"}
+            ],
+        },
+        "exposed_services": {
+            "status": "issues_found",
+            "issues": [{
+                "title": "Redis service is publicly reachable",
+                "severity": "high",
+                "confidence": "measured",
+                "evidence": {"description": "TCP port 6379 accepted a connection."},
+            }],
+            "open_services": [{"host": "example.com", "port": 6379, "protocol": "tcp", "risk": "high", "http": {}}],
+            "ports_checked": [80, 443, 6379],
+        },
+    }
+    findings["summary"] = build_scan_summary(findings)
+    findings["sections"] = build_scan_sections(findings)
+
+    pdf = generate_report(findings)
+
+    assert pdf.getbuffer().nbytes > 1000

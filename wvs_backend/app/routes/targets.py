@@ -56,6 +56,7 @@ def _build_instructions(method: str, token: str, origin: str) -> dict:
 
 def _serialize_target(target: VerifiedTarget) -> dict:
     data = target.to_dict()
+    data.pop("verification_token", None)
     data["requires_verification_for_scans"] = current_app.config.get("REQUIRE_VERIFIED_TARGETS", False)
     # Include live instructions whenever a token is stored and not yet verified
     if target.verification_token and target.verification_status != "verified":

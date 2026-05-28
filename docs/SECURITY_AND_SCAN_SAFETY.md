@@ -42,11 +42,17 @@ It does not attempt:
 - irreversible settings changes
 - payment flow completion
 
+Verified pre-production scans may optionally run bounded active checks against auth or account-management endpoints. These checks are capped by request budget and look for throttle signals such as HTTP 429, `Retry-After`, rate-limit headers, CAPTCHA text, cooldown text, or lockout text. They do not brute-force real credentials.
+
+Verified pre-production scans also run bounded exposed-service checks against a configured small port list. This is not broad internet port scanning; it is intended to catch accidental exposure of development servers, databases, caches, mail catchers, and admin ports before launch.
+
 Default UX scanning limits exist to reduce blast radius:
 
 - capped page count
 - capped timeouts
 - capped screenshot generation
+- capped active auth/API check requests
+- capped exposed-service port list
 - public-page focus only
 - separate queueing for browser-heavy UX scans when configured
 

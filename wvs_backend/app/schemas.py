@@ -56,6 +56,15 @@ class ResetPasswordPayload(BaseModel):
         return AuthRegisterPayload.validate_password(value)
 
 
+class AuthTestAccountPayload(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    username: str | None = Field(default=None, max_length=254)
+    email: EmailStr | None = None
+    password: str = Field(min_length=1, max_length=128)
+    role: str | None = Field(default=None, max_length=80)
+
+
 class ScanRequestPayload(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 
@@ -64,6 +73,12 @@ class ScanRequestPayload(BaseModel):
     page_paths: list[str] = Field(default_factory=list)
     page_type: str | None = Field(default=None, max_length=50)
     enable_ai_review: bool = False
+    enable_active_checks: bool = False
+    active_check_paths: list[str] = Field(default_factory=list)
+    active_check_budget: int = Field(default=8, ge=3, le=20)
+    auth_test_accounts: list[AuthTestAccountPayload] = Field(default_factory=list)
+    protected_paths: list[str] = Field(default_factory=list)
+    idor_paths: list[str] = Field(default_factory=list)
     verified_target_id: str | None = Field(default=None, max_length=36)
 
     @field_validator("scan_profile")
@@ -81,6 +96,40 @@ class ScanRequestPayload(BaseModel):
         if len(cleaned) > 10:
             raise ValueError("A maximum of 10 page paths may be scanned")
         return cleaned
+
+    @field_validator("active_check_paths")
+    @classmethod
+    def validate_active_check_paths(cls, value: list[str]) -> list[str]:
+        cleaned = [str(item).strip() for item in value if str(item).strip()]
+        if len(cleaned) > 10:
+            raise ValueError("A maximum of 10 active check paths may be scanned")
+        for item in cleaned:
+            parts = item.split(maxsplit=1)
+            path = parts[1] if len(parts) == 2 and parts[0].upper() in {"GET", "POST"} else item
+            if not path.startswith(("/", "http://", "https://")):
+                raise ValueError("Active check paths must start with /, http://, https://, or an HTTP method plus path")
+        return cleaned
+
+    @field_validator("protected_paths", "idor_paths")
+    @classmethod
+    def validate_security_paths(cls, value: list[str]) -> list[str]:
+        cleaned = [str(item).strip() for item in value if str(item).strip()]
+        if len(cleaned) > 20:
+            raise ValueError("A maximum of 20 security test paths may be scanned")
+        for item in cleaned:
+            if not item.startswith(("/", "http://", "https://")):
+                raise ValueError("Security test paths must start with /, http://, or https://")
+        return cleaned
+
+    @field_validator("auth_test_accounts")
+    @classmethod
+    def validate_auth_test_accounts(cls, value: list[AuthTestAccountPayload]) -> list[AuthTestAccountPayload]:
+        if len(value) > 2:
+            raise ValueError("A maximum of 2 auth test accounts may be supplied")
+        for account in value:
+            if not account.username and not account.email:
+                raise ValueError("Each auth test account must include a username or email")
+        return value
 
 
 class AddMaliciousPayload(BaseModel):

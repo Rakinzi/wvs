@@ -138,9 +138,7 @@ const Register = () => {
     <AuthLayout visible={visible} isDark={isDark} heroContent={<RegisterHero isDark={isDark} />}>
       {/* Logo */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 36 }}>
-        <div style={{ width: 34, height: 34, borderRadius: 9, background: 'linear-gradient(135deg, #6366f1, #4f46e5)', boxShadow: '0 0 18px rgba(99,102,241,0.32)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-          <Shield size={17} color="white" />
-        </div>
+        <img src="/launchguard-icon.svg" alt="" style={{ width: 34, height: 34, borderRadius: 9, boxShadow: '0 0 18px rgba(45,212,191,0.32)', flexShrink: 0 }} />
         <span style={{ fontSize: 14.5, fontWeight: 700, color: 'var(--color-text)', letterSpacing: '-0.02em' }}>LaunchGuard</span>
       </div>
 

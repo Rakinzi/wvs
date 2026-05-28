@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Shield, CheckCircle, AlertTriangle, RefreshCw, Mail } from 'lucide-react';
+import { CheckCircle, AlertTriangle, Mail } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { apiJson, ApiError } from '../lib/api';
 import Spinner from './Spinner';
@@ -31,8 +31,8 @@ const VerifyEmail = () => {
         <div className="px-8 pt-8 pb-6 flex flex-col items-center gap-3"
           style={{ borderBottom: '1px solid var(--color-border-subtle)' }}>
           <div className="w-14 h-14 rounded-2xl flex items-center justify-center"
-            style={{ background: 'var(--color-primary)', boxShadow: '0 0 32px #3B82F640' }}>
-            <Shield size={26} className="text-white" />
+            style={{ boxShadow: '0 0 32px rgba(45,212,191,0.28)' }}>
+            <img src="/launchguard-icon.svg" alt="" className="w-14 h-14 rounded-2xl" />
           </div>
           <div className="text-center">
             <h1 className="text-xl font-semibold" style={{ color: 'var(--color-text)' }}>Email Verification</h1>

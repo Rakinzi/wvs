@@ -86,7 +86,7 @@ def test_product_readiness_scan_queues_when_verified_target_exists(auth_client, 
     class FakeTask:
         id = "celery-task-1"
 
-    monkeypatch.setattr(scans_routes.run_full_scan_job, "delay", lambda job_id: FakeTask())
+    monkeypatch.setattr(scans_routes.run_full_scan_job, "apply_async", lambda args, queue: FakeTask())
 
     response = auth_client.post(
         "/scan",
@@ -95,6 +95,9 @@ def test_product_readiness_scan_queues_when_verified_target_exists(auth_client, 
             "scan_profile": "product_readiness",
             "verified_target_id": target_id,
             "page_paths": ["/", "/signup"],
+            "enable_active_checks": True,
+            "active_check_paths": ["POST /login"],
+            "active_check_budget": 5,
         },
         headers=auth_headers,
     )
@@ -108,3 +111,6 @@ def test_product_readiness_scan_queues_when_verified_target_exists(auth_client, 
         assert job is not None
         assert job.scan_type == "product_readiness"
         assert job.findings["_config"]["page_paths"] == ["/", "/signup"]
+        assert job.findings["_config"]["enable_active_checks"] is True
+        assert job.findings["_config"]["active_check_paths"] == ["POST /login"]
+        assert job.findings["_config"]["active_check_budget"] == 5

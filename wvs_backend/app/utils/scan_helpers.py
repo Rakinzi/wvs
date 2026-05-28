@@ -94,6 +94,52 @@ def validate_target_redirect(url: str, expected_hostname: str) -> str:
     return normalized
 
 
+def _compute_weighted_score(
+    *,
+    sqli: list,
+    ssl_invalid: bool,
+    malicious: bool,
+    malicious_score: float,
+    all_issues: list,
+) -> int:
+    """
+    Severity-weighted security score (0–100).
+
+    Penalty weights per finding (capped so a flood of low issues
+    doesn't crater the score as badly as a handful of criticals):
+      critical  → 15 pts  (cap: 45 — 3 criticals = floor of 55)
+      high      → 8 pts   (cap: 32)
+      medium    → 3 pts   (cap: 21)
+      low/info  → 0.5 pts (cap: 10)
+
+    Hard deductions (not capped):
+      SQLi found         → −20
+      SSL invalid        → −15
+      Site is malicious  → −25 (or proportional to threat score)
+    """
+    _WEIGHTS = {"critical": 15, "high": 8, "medium": 3, "low": 0.5, "info": 0.5}
+    _CAPS    = {"critical": 45, "high": 32, "medium": 21, "low": 10, "info": 10}
+
+    buckets: dict[str, float] = {"critical": 0, "high": 0, "medium": 0, "low": 0, "info": 0}
+    for issue in all_issues:
+        sev = str(issue.get("severity") or issue.get("risk") or "info").lower()
+        if sev not in buckets:
+            sev = "info"
+        buckets[sev] += _WEIGHTS[sev]
+
+    issue_penalty = sum(min(v, _CAPS[k]) for k, v in buckets.items())
+
+    hard_penalty = 0
+    if sqli:
+        hard_penalty += min(20, len(sqli) * 7)
+    if ssl_invalid:
+        hard_penalty += 15
+    if malicious:
+        hard_penalty += max(15, min(25, int(malicious_score * 3)))
+
+    return max(0, round(100 - issue_penalty - hard_penalty))
+
+
 def build_scan_summary(findings: dict[str, Any]) -> dict[str, Any]:
     sqli_findings = findings.get("sqli", []) or []
     ssl_findings = findings.get("ssl", {}) or {}
@@ -113,7 +159,17 @@ def build_scan_summary(findings: dict[str, Any]) -> dict[str, Any]:
     responsive_findings = findings.get("responsive_ux", {}) or {}
     performance_findings = findings.get("performance_ux", {}) or {}
     form_findings = findings.get("form_usability", {}) or {}
+    seo_findings = findings.get("seo", {}) or {}
+    broken_link_findings = findings.get("broken_links", {}) or {}
+    app_control_findings = findings.get("app_controls", {}) or {}
+    exposed_service_findings = findings.get("exposed_services", {}) or {}
+    abuse_findings = findings.get("abuse_controls", {}) or {}
     visual_findings = findings.get("visual_ai", {}) or {}
+    verdict_findings = findings.get("launch_verdict", {}) or {}
+    ssrf_findings = findings.get("ssrf", {}) or {}
+    logging_monitor_findings = findings.get("logging_monitor", {}) or {}
+    auth_findings = findings.get("auth", {}) or {}
+    integrity_findings = findings.get("integrity", {}) or {}
     header_issues = header_findings.get("issues", []) or []
     wordpress_issues = wordpress_findings.get("issues", []) or []
     zap_issues = zap_findings.get("issues", []) or []
@@ -132,10 +188,20 @@ def build_scan_summary(findings: dict[str, Any]) -> dict[str, Any]:
     responsive_issues = responsive_findings.get("issues", []) or []
     performance_issues = performance_findings.get("issues", []) or []
     form_issues = form_findings.get("issues", []) or []
+    seo_issues = seo_findings.get("issues", []) or []
+    broken_link_issues = broken_link_findings.get("issues", []) or []
+    app_control_issues = app_control_findings.get("issues", []) or []
+    exposed_service_issues = exposed_service_findings.get("issues", []) or []
+    abuse_issues = abuse_findings.get("issues", []) or []
+    discovery_issues = ((abuse_findings.get("discovery") or {}).get("issues", []) or [])
     visual_issues = visual_findings.get("issues", []) or []
+    ssrf_issues = ssrf_findings.get("issues", []) or []
+    logging_monitor_issues = logging_monitor_findings.get("issues", []) or []
+    auth_issues = auth_findings.get("issues", []) or []
+    integrity_issues = integrity_findings.get("issues", []) or []
     launch_blockers = [
         issue
-        for issue in accessibility_issues + responsive_issues + performance_issues + form_issues
+        for issue in accessibility_issues + responsive_issues + performance_issues + form_issues + seo_issues + broken_link_issues + app_control_issues + exposed_service_issues + abuse_issues
         if str(issue.get("severity") or "").lower() in {"critical", "high"}
     ]
 
@@ -162,14 +228,27 @@ def build_scan_summary(findings: dict[str, Any]) -> dict[str, Any]:
         len(sqli_findings) + len(header_issues) + len(wordpress_issues) +
         len(zap_issues) + len(xss_issues) + len(actionable_tech_issues) + len(tech_advisories) +
         len(exposure_issues) + len(secrets_issues) + len(dns_issues) + len(redirect_issues) + len(takeover_issues) +
-        len(malware_analysis_issues) + len(accessibility_issues) + len(responsive_issues) + len(performance_issues) + len(form_issues)
+        len(malware_analysis_issues) + len(accessibility_issues) + len(responsive_issues) + len(performance_issues) + len(form_issues) + len(seo_issues) + len(broken_link_issues) + len(app_control_issues) + len(exposed_service_issues) + len(abuse_issues) + len(discovery_issues) +
+        len(ssrf_issues) + len(logging_monitor_issues) + len(auth_issues) + len(integrity_issues)
     )
     if ssl_findings.get("valid") is False:
         total_issues += 1
     if malicious_findings.get("is_malicious", False):
         total_issues += 1
 
-    security_score = 100 if total_issues == 0 else max(0, 100 - (total_issues * 20))
+    security_score = _compute_weighted_score(
+        sqli=sqli_findings,
+        ssl_invalid=ssl_findings.get("valid") is False,
+        malicious=malicious_findings.get("is_malicious", False),
+        malicious_score=malicious_findings.get("score", 0),
+        all_issues=(
+            header_issues + wordpress_issues + zap_issues + xss_issues +
+            actionable_tech_issues + tech_advisories + exposure_issues + secrets_issues +
+            dns_issues + redirect_issues + takeover_issues + malware_analysis_issues +
+            accessibility_issues + responsive_issues + performance_issues + form_issues + seo_issues + broken_link_issues + app_control_issues + exposed_service_issues + abuse_issues + discovery_issues +
+            ssrf_issues + logging_monitor_issues + auth_issues + integrity_issues
+        ),
+    )
 
     return {
         "vulnerable": vulnerable,
@@ -196,13 +275,30 @@ def build_scan_summary(findings: dict[str, Any]) -> dict[str, Any]:
         "responsive_issue_count": len(responsive_issues),
         "performance_issue_count": len(performance_issues),
         "form_issue_count": len(form_issues),
+        "seo_issue_count": len(seo_issues),
+        "broken_link_issue_count": len(broken_link_issues),
+        "app_control_issue_count": len(app_control_issues),
+        "exposed_service_issue_count": len(exposed_service_issues),
+        "abuse_control_issue_count": len(abuse_issues),
+        "exposed_route_issue_count": len(discovery_issues),
         "visual_ai_issue_count": len(visual_issues),
         "launch_blocker_count": len(launch_blockers),
         "accessibility_score": accessibility_findings.get("score"),
         "responsive_score": responsive_findings.get("score"),
         "performance_score": performance_findings.get("score"),
         "usability_score": form_findings.get("score"),
+        "seo_score": seo_findings.get("score"),
+        "broken_link_score": broken_link_findings.get("score"),
+        "app_control_score": app_control_findings.get("score"),
+        "exposed_service_score": exposed_service_findings.get("score"),
         "launch_readiness_score": findings.get("launch_readiness", {}).get("score"),
+        "launch_verdict": verdict_findings.get("verdict"),
+        "launch_verdict_label": verdict_findings.get("label"),
+        "ssrf_count": len(ssrf_issues),
+        "logging_monitor_count": len(logging_monitor_issues),
+        "auth_issue_count": len(auth_issues),
+        "integrity_issue_count": len(integrity_issues),
+        "owasp_coverage": owasp_coverage_summary(findings),
     }
 
 
@@ -263,7 +359,16 @@ def build_scan_sections(findings: dict[str, Any]) -> dict[str, dict[str, Any]]:
     responsive_findings = findings.get("responsive_ux", {}) or {}
     performance_findings = findings.get("performance_ux", {}) or {}
     form_findings = findings.get("form_usability", {}) or {}
+    seo_findings = findings.get("seo", {}) or {}
+    broken_link_findings = findings.get("broken_links", {}) or {}
+    app_control_findings = findings.get("app_controls", {}) or {}
+    exposed_service_findings = findings.get("exposed_services", {}) or {}
+    abuse_findings = findings.get("abuse_controls", {}) or {}
     visual_findings = findings.get("visual_ai", {}) or {}
+    ssrf_findings = findings.get("ssrf", {}) or {}
+    logging_monitor_findings = findings.get("logging_monitor", {}) or {}
+    auth_findings = findings.get("auth", {}) or {}
+    integrity_findings = findings.get("integrity", {}) or {}
 
     sections = {
         "sql": {
@@ -426,6 +531,46 @@ def build_scan_sections(findings: dict[str, Any]) -> dict[str, dict[str, Any]]:
             "top_findings": [to_report_finding(item) for item in (form_findings.get("issues", []) or [])[:5]],
             "recommendations": form_findings.get("recommendations", []) or [],
         },
+        "seo": {
+            "label": "SEO Readiness",
+            "status": seo_findings.get("status", "not_run"),
+            "issue_count": len(seo_findings.get("issues", []) or []),
+            "severity_counts": _severity_counts(seo_findings.get("issues", []) or []),
+            "top_findings": [to_report_finding(item) for item in (seo_findings.get("issues", []) or [])[:5]],
+            "recommendations": seo_findings.get("recommendations", []) or [],
+        },
+        "broken_links": {
+            "label": "Broken Links",
+            "status": broken_link_findings.get("status", "not_run"),
+            "issue_count": len(broken_link_findings.get("issues", []) or []),
+            "severity_counts": _severity_counts(broken_link_findings.get("issues", []) or []),
+            "top_findings": [to_report_finding(item) for item in (broken_link_findings.get("issues", []) or [])[:5]],
+            "recommendations": broken_link_findings.get("recommendations", []) or [],
+        },
+        "app_controls": {
+            "label": "Application Controls",
+            "status": app_control_findings.get("status", "not_run"),
+            "issue_count": len(app_control_findings.get("issues", []) or []),
+            "severity_counts": _severity_counts(app_control_findings.get("issues", []) or []),
+            "top_findings": [to_report_finding(item) for item in (app_control_findings.get("issues", []) or [])[:5]],
+            "recommendations": app_control_findings.get("recommendations", []) or [],
+        },
+        "exposed_services": {
+            "label": "Exposed Services",
+            "status": exposed_service_findings.get("status", "not_run"),
+            "issue_count": len(exposed_service_findings.get("issues", []) or []),
+            "severity_counts": _severity_counts(exposed_service_findings.get("issues", []) or []),
+            "top_findings": [to_report_finding(item) for item in (exposed_service_findings.get("issues", []) or [])[:5]],
+            "recommendations": exposed_service_findings.get("recommendations", []) or [],
+        },
+        "abuse_controls": {
+            "label": "Abuse Controls and Exposed Routes",
+            "status": abuse_findings.get("status", "not_run"),
+            "issue_count": len(abuse_findings.get("issues", []) or []) + len(((abuse_findings.get("discovery") or {}).get("issues", []) or [])),
+            "severity_counts": _severity_counts((abuse_findings.get("issues", []) or []) + (((abuse_findings.get("discovery") or {}).get("issues", []) or []))),
+            "top_findings": [to_report_finding(item) for item in ((abuse_findings.get("issues", []) or []) + (((abuse_findings.get("discovery") or {}).get("issues", []) or [])))[:5]],
+            "recommendations": abuse_findings.get("recommendations", []) or [],
+        },
         "visual_ai": {
             "label": "Visual UX Recommendations",
             "status": visual_findings.get("status", "not_run"),
@@ -434,9 +579,101 @@ def build_scan_sections(findings: dict[str, Any]) -> dict[str, dict[str, Any]]:
             "top_findings": [to_report_finding(item) for item in (visual_findings.get("issues", []) or [])[:5]],
             "recommendations": visual_findings.get("recommendations", []) or [],
         },
+        "ssrf": {
+            "label": "Server-Side Request Forgery (SSRF)",
+            "status": ssrf_findings.get("status", "not_run"),
+            "issue_count": len(ssrf_findings.get("issues", []) or []),
+            "severity_counts": _severity_counts(ssrf_findings.get("issues", []) or []),
+            "top_findings": (ssrf_findings.get("issues", []) or [])[:5],
+            "recommendations": ssrf_findings.get("recommendations", []) or [],
+        },
+        "logging_monitor": {
+            "label": "Security Logging & Monitoring",
+            "status": logging_monitor_findings.get("status", "not_run"),
+            "issue_count": len(logging_monitor_findings.get("issues", []) or []),
+            "severity_counts": _severity_counts(logging_monitor_findings.get("issues", []) or []),
+            "top_findings": (logging_monitor_findings.get("issues", []) or [])[:5],
+            "recommendations": logging_monitor_findings.get("recommendations", []) or [],
+        },
+        "auth": {
+            "label": "Authentication Controls",
+            "status": auth_findings.get("status", "not_run"),
+            "issue_count": len(auth_findings.get("issues", []) or []),
+            "severity_counts": _severity_counts(auth_findings.get("issues", []) or []),
+            "top_findings": (auth_findings.get("issues", []) or [])[:5],
+            "recommendations": auth_findings.get("recommendations", []) or [],
+        },
+        "integrity": {
+            "label": "Software & Data Integrity",
+            "status": integrity_findings.get("status", "not_run"),
+            "issue_count": len(integrity_findings.get("issues", []) or []),
+            "severity_counts": _severity_counts(integrity_findings.get("issues", []) or []),
+            "top_findings": (integrity_findings.get("issues", []) or [])[:5],
+            "recommendations": integrity_findings.get("recommendations", []) or [],
+        },
     }
 
     return sections
+
+
+_OWASP_COVERAGE_MAP = [
+    {"id": "A01:2021", "name": "Broken Access Control",                        "scanners": ["redirect", "takeover", "app_controls"]},
+    {"id": "A02:2021", "name": "Cryptographic Failures",                        "scanners": ["ssl", "headers", "secrets"]},
+    {"id": "A03:2021", "name": "Injection",                                     "scanners": ["sqli", "xss", "zap"]},
+    {"id": "A04:2021", "name": "Insecure Design",                               "scanners": ["abuse_controls", "malicious"]},
+    {"id": "A05:2021", "name": "Security Misconfiguration",                     "scanners": ["headers", "exposure", "wordpress", "dns", "exposed_services"]},
+    {"id": "A06:2021", "name": "Vulnerable and Outdated Components",            "scanners": ["tech", "malware_analysis"]},
+    {"id": "A07:2021", "name": "Identification and Authentication Failures",    "scanners": ["auth", "abuse_controls"]},
+    {"id": "A08:2021", "name": "Software and Data Integrity Failures",          "scanners": ["integrity"]},
+    {"id": "A09:2021", "name": "Security Logging and Monitoring Failures",      "scanners": ["logging_monitor"]},
+    {"id": "A10:2021", "name": "Server-Side Request Forgery",                  "scanners": ["ssrf"]},
+]
+
+
+def _scanner_issue_count(scanner: str, findings: dict[str, Any]) -> int:
+    if scanner == "sqli":
+        return len(findings.get("sqli") or [])
+    payload = findings.get(scanner)
+    if not isinstance(payload, dict):
+        return 0
+    return len(payload.get("issues") or [])
+
+
+def _scanner_ran(scanner: str, findings: dict[str, Any]) -> bool:
+    payload = findings.get(scanner)
+    if payload is None:
+        return False
+    if isinstance(payload, list):
+        return True
+    if isinstance(payload, dict):
+        status = payload.get("status")
+        if status in {"disabled", "not_run"}:
+            return False
+        return True
+    return False
+
+
+def owasp_coverage_summary(findings: dict[str, Any]) -> list[dict[str, Any]]:
+    result = []
+    for entry in _OWASP_COVERAGE_MAP:
+        ran = [s for s in entry["scanners"] if _scanner_ran(s, findings)]
+        not_ran = [s for s in entry["scanners"] if s not in ran]
+        count = sum(_scanner_issue_count(s, findings) for s in ran)
+        if not ran:
+            status = "not_tested"
+        elif count > 0:
+            status = "covered_with_findings"
+        else:
+            status = "covered_no_findings"
+        result.append({
+            "id": entry["id"],
+            "name": entry["name"],
+            "status": status,
+            "finding_count": count,
+            "scanners_run": ran,
+            "scanners_not_run": not_ran,
+        })
+    return result
 
 
 def build_best_practices(findings: dict[str, Any]) -> list[str]:
@@ -505,8 +742,13 @@ def build_risk_rating(summary: dict[str, Any]) -> str:
 
 
 def build_security_score(summary: dict[str, Any]) -> int:
-    total_issues = summary.get("total_issues", 0)
-    return 100 if total_issues == 0 else max(0, 100 - (total_issues * 20))
+    # `security_score` is already computed by _compute_weighted_score inside
+    # build_scan_summary. Fall back to a simple total-based estimate only when
+    # called outside that context (e.g. on legacy summary dicts).
+    if "security_score" in summary:
+        return int(summary["security_score"])
+    total = summary.get("total_issues", 0)
+    return 100 if total == 0 else max(0, 100 - (total * 5))
 
 
 def build_report_meta(scan_id: int, url: str, timestamp: str, summary: dict[str, Any]) -> dict[str, Any]:
@@ -520,5 +762,11 @@ def build_report_meta(scan_id: int, url: str, timestamp: str, summary: dict[str,
         "responsive_score": summary.get("responsive_score"),
         "performance_score": summary.get("performance_score"),
         "usability_score": summary.get("usability_score"),
+        "seo_score": summary.get("seo_score"),
+        "broken_link_score": summary.get("broken_link_score"),
+        "app_control_score": summary.get("app_control_score"),
+        "exposed_service_score": summary.get("exposed_service_score"),
         "launch_readiness_score": summary.get("launch_readiness_score"),
+        "launch_verdict": summary.get("launch_verdict"),
+        "launch_verdict_label": summary.get("launch_verdict_label"),
     }

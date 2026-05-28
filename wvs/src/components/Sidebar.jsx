@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
-  Shield, BarChart2, Clock, Settings, LogOut,
+  BarChart2, Clock, Settings, LogOut,
   AlertTriangle, Globe, User, Bell, X, Menu, ChevronDown,
   Zap, Sun, Moon, BadgeCheck, Activity, ChevronRight,
 } from 'lucide-react';
@@ -64,15 +64,12 @@ const Sidebar = ({ isAuthenticated, onLogout, navigateTo, currentPage, isAdmin =
           className="flex items-center gap-2.5 focus-visible:outline-none group"
           aria-label="Go to dashboard"
         >
-          <div
-            className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 glow-pulse transition-all duration-200"
-            style={{
-              background: 'linear-gradient(135deg, #818cf8, #6366f1, #4f46e5)',
-              boxShadow: '0 0 18px rgba(99,102,241,0.5)',
-            }}
-          >
-            <Shield size={14} className="text-white" />
-          </div>
+          <img
+            src="/launchguard-icon.svg"
+            alt=""
+            className="w-8 h-8 rounded-lg flex-shrink-0 glow-pulse transition-all duration-200"
+            style={{ boxShadow: '0 0 18px rgba(45,212,191,0.35)' }}
+          />
           <span
             className="font-bold tracking-tight text-sm gradient-text"
             style={{ letterSpacing: '-0.02em' }}

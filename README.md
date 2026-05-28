@@ -29,6 +29,10 @@ Product-readiness scanning:
 - mobile/responsive layout findings
 - performance UX findings
 - form and interaction usability findings
+- broken-link checks across rendered launch pages
+- opt-in pre-production auth/admin route discovery
+- bounded abuse-control checks for login, signup, reset, contact, and API endpoints
+- bounded exposed-service checks for common dev, database, cache, admin, and web ports
 - deterministic builder-ready remediation prompts
 - optional AI visual review behind a provider abstraction
 - scan-to-scan comparison for fixed, new, and unresolved findings
@@ -151,6 +155,16 @@ Backend flags added for the product-readiness extension:
 - `VISUAL_AI_MODEL`
 - `VISUAL_AI_MAX_SCREENSHOTS_PER_SCAN`
 - `VISUAL_AI_BASE_URL`
+- `ABUSE_SCAN_ENABLED`
+- `ABUSE_SCAN_DEFAULT_BUDGET`
+- `ABUSE_SCAN_MAX_BUDGET`
+- `ABUSE_SCAN_TIMEOUT_SECONDS`
+- `BROKEN_LINK_MAX_LINKS_PER_PAGE`
+- `BROKEN_LINK_TIMEOUT_SECONDS`
+- `EXPOSED_SERVICES_ENABLED`
+- `EXPOSED_SERVICES_TIMEOUT_SECONDS`
+- `EXPOSED_SERVICES_MAX_PORTS`
+- `EXPOSED_SERVICES_PORTS`
 - `LIGHTHOUSE_ENABLED`
 - `LIGHTHOUSE_CLI_PATH`
 - `LIGHTHOUSE_TIMEOUT_SECONDS`
