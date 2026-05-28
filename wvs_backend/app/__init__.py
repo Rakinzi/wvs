@@ -47,6 +47,7 @@ def register_blueprints(app: Flask) -> None:
     from app.routes.blocked_access import bp as blocked_access_bp
     from app.routes.dashboard import bp as dashboard_bp
     from app.routes.malicious import bp as malicious_bp
+    from app.routes.news import bp as news_bp
     from app.routes.scans import bp as scans_bp
     from app.routes.targets import bp as targets_bp
     from app.routes.uptime import bp as uptime_bp
@@ -54,6 +55,7 @@ def register_blueprints(app: Flask) -> None:
 
     app.register_blueprint(blocked_access_bp)
     app.register_blueprint(dashboard_bp)
+    app.register_blueprint(news_bp)
     app.register_blueprint(scans_bp)
     app.register_blueprint(users_bp)
     app.register_blueprint(malicious_bp)

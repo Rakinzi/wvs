@@ -267,7 +267,7 @@ const ScreenshotPanel = ({ screenshots }) => {
 
 /* ─────────────────────────────────────────────── */
 const ScanReport = ({ scanId, navigateTo }) => {
-  const [expanded, setExpanded] = useState({ sql: true, ssl: true, headers: true, wordpress: true, zap: true, malicious: true, xss: true, tech: true, exposure: true, secrets: true, dns: true, redirect: true, takeover: true, accessibility: true, responsive_ux: true, performance_ux: true, form_usability: true, seo: true, broken_links: true, app_controls: true, exposed_services: true, abuse_controls: true, visual_ai: true, comparison: true });
+  const [expanded, setExpanded] = useState({ sql: true, ssl: true, headers: true, wordpress: true, zap: true, malicious: true, xss: true, tech: true, exposure: true, secrets: true, dns: true, redirect: true, takeover: true, ssrf: true, auth: true, integrity: true, logging_monitor: true, accessibility: true, responsive_ux: true, performance_ux: true, form_usability: true, seo: true, broken_links: true, app_controls: true, exposed_services: true, abuse_controls: true, visual_ai: true, comparison: true, owasp: true });
   const { report, loading, error } = useScanReportData(scanId);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState(null);
@@ -385,6 +385,11 @@ const ScanReport = ({ scanId, navigateTo }) => {
     ...((findings.abuse_controls?.discovery || {}).issues || []),
   ];
   const visualAiIssues = findings.visual_ai?.issues || [];
+  const ssrfIssues = findings.ssrf?.issues || [];
+  const logMonIssues = findings.logging_monitor?.issues || [];
+  const authIssues = findings.auth?.issues || [];
+  const integrityIssues = findings.integrity?.issues || [];
+  const owaspCoverage = summary.owasp_coverage || [];
   const launchReadiness = findings.launch_readiness || {};
   const topLaunchActions = [
     ...(launchVerdict.top_blockers || []),
@@ -600,6 +605,30 @@ const ScanReport = ({ scanId, navigateTo }) => {
                     <span className="font-mono" style={{ color: takeIssues.length > 0 ? T.danger : T.secure }}>{takeIssues.length || '—'}</span>
                   </div>
                 )}
+                {findings.ssrf && findings.ssrf.status !== 'disabled' && (
+                  <div className="flex items-center justify-between text-xs py-1.5">
+                    <span style={{ color: T.muted }}>SSRF</span>
+                    <span className="font-mono" style={{ color: ssrfIssues.length > 0 ? T.danger : T.secure }}>{ssrfIssues.length || '—'}</span>
+                  </div>
+                )}
+                {findings.auth && (
+                  <div className="flex items-center justify-between text-xs py-1.5">
+                    <span style={{ color: T.muted }}>Auth Controls</span>
+                    <span className="font-mono" style={{ color: authIssues.length > 0 ? T.warn : T.secure }}>{authIssues.length || '—'}</span>
+                  </div>
+                )}
+                {findings.integrity && (
+                  <div className="flex items-center justify-between text-xs py-1.5">
+                    <span style={{ color: T.muted }}>Software Integrity</span>
+                    <span className="font-mono" style={{ color: integrityIssues.length > 0 ? T.warn : T.secure }}>{integrityIssues.length || '—'}</span>
+                  </div>
+                )}
+                {findings.logging_monitor && (
+                  <div className="flex items-center justify-between text-xs py-1.5">
+                    <span style={{ color: T.muted }}>Logging & Monitoring</span>
+                    <span className="font-mono" style={{ color: logMonIssues.length > 0 ? T.warn : T.secure }}>{logMonIssues.length || '—'}</span>
+                  </div>
+                )}
                 {findings.accessibility && (
                   <div className="flex items-center justify-between text-xs py-1.5">
                     <span style={{ color: T.muted }}>Accessibility</span>
@@ -707,6 +736,37 @@ const ScanReport = ({ scanId, navigateTo }) => {
                   <p>Issue count delta: <span style={{ color: T.text }}>{deltaLabel(comparison.summary_delta?.issue_count)}</span></p>
                   <p>Launch readiness delta: <span style={{ color: T.text }}>{deltaLabel(comparison.summary_delta?.launch_readiness_score)}</span></p>
                 </div>
+              </div>
+            )}
+
+            {owaspCoverage.length > 0 && (
+              <div className="card p-5">
+                <button onClick={() => toggle('owasp')} className="w-full flex items-center justify-between cursor-pointer mb-3">
+                  <p className="section-label">OWASP Top 10 2021</p>
+                  {expanded.owasp ? <ChevronUp size={13} style={{ color: T.dim }} /> : <ChevronDown size={13} style={{ color: T.dim }} />}
+                </button>
+                {expanded.owasp && (
+                  <div className="flex flex-col gap-1">
+                    {owaspCoverage.map((cat) => {
+                      const statusColor = cat.status === 'covered_no_findings' ? T.secure
+                        : cat.status === 'covered_with_findings' ? T.warn
+                        : T.dim;
+                      const statusLabel = cat.status === 'covered_no_findings' ? 'Pass'
+                        : cat.status === 'covered_with_findings' ? `${cat.finding_count} finding${cat.finding_count !== 1 ? 's' : ''}`
+                        : 'Not tested';
+                      return (
+                        <div key={cat.id} className="flex items-center justify-between gap-2 py-1.5 text-xs"
+                          style={{ borderBottom: `1px solid ${T.borderSubtle}` }}>
+                          <div className="min-w-0 flex-1">
+                            <span className="font-mono font-semibold" style={{ color: T.dim }}>{cat.id.replace(':2021', '')}</span>
+                            <span className="ml-1.5 truncate" style={{ color: T.muted }}>{cat.name}</span>
+                          </div>
+                          <span className="font-semibold flex-shrink-0" style={{ color: statusColor }}>{statusLabel}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             )}
 
@@ -1325,6 +1385,184 @@ const ScanReport = ({ scanId, navigateTo }) => {
                       <Recs items={['Avoid sharing sensitive info on this site', 'Block domain at network level', 'If your site: investigate for compromise or injected content', 'Run a malware scan on the server']} />
                     )}
                   </div>
+                </Section>
+              );
+            })()}
+
+            {/* SSRF */}
+            {isSecurityScan && findings.ssrf && findings.ssrf.status !== 'disabled' && (() => {
+              const ssrf = findings.ssrf;
+              const issues = ssrf.issues || [];
+              const hasIssues = issues.length > 0;
+              return (
+                <Section id="ssrf" label="Server-Side Request Forgery (SSRF)"
+                  subLabel={hasIssues ? `${issues.length} vulnerability${issues.length !== 1 ? 'ies' : ''}` : 'Pass'}
+                  icon={hasIssues ? AlertOctagon : CheckCircle}
+                  iconColor={hasIssues ? T.danger : T.secure}
+                  iconBg={hasIssues ? T.dangerDim : T.secureDim}
+                  expanded={expanded.ssrf} onToggle={toggle}>
+                  {hasIssues ? (
+                    <div className="flex flex-col gap-3">
+                      <p className="text-xs" style={{ color: T.muted }}>SSRF lets attackers force the server to make requests to internal infrastructure, cloud metadata endpoints, or other internal services.</p>
+                      {issues.map((issue, i) => {
+                        const color = issue.severity === 'critical' ? T.danger : issue.severity === 'high' ? T.warn : T.info;
+                        const bg = issue.severity === 'critical' ? T.dangerDim : issue.severity === 'high' ? T.warnDim : T.infoDim;
+                        return (
+                          <FindingCard key={i} color={color} bg={bg}
+                            icon={issue.severity === 'critical' ? AlertOctagon : AlertTriangle}
+                            title={issue.title || issue.name}
+                            items={[
+                              issue.parameter && `Parameter: ${issue.parameter}`,
+                              issue.payload && `Payload: ${issue.payload}`,
+                              `Severity: ${issue.severity}`,
+                              issue.evidence?.description,
+                            ].filter(Boolean)} />
+                        );
+                      })}
+                      <Recs items={ssrf.recommendations?.length ? ssrf.recommendations : [
+                        'Validate and allowlist all server-side URL destinations.',
+                        'Block requests to RFC-1918 ranges (10.x, 172.16-31.x, 192.168.x) and loopback (127.x).',
+                        'Block access to cloud metadata services (169.254.169.254).',
+                        'Apply fixes server-side — never rely on client-side URL filtering.',
+                      ]} />
+                    </div>
+                  ) : <CleanState icon={CheckCircle} title="No SSRF Vulnerabilities Detected" body="No server-side request forgery vectors found." />}
+                </Section>
+              );
+            })()}
+
+            {/* Authentication Controls */}
+            {isSecurityScan && findings.auth && (() => {
+              const auth = findings.auth;
+              const issues = authIssues;
+              const hasIssues = issues.length > 0;
+              return (
+                <Section id="auth" label="Authentication Controls"
+                  subLabel={hasIssues ? `${issues.length} finding${issues.length !== 1 ? 's' : ''}` : 'Pass'}
+                  icon={hasIssues ? AlertTriangle : CheckCircle}
+                  iconColor={hasIssues ? T.warn : T.secure}
+                  iconBg={hasIssues ? T.warnDim : T.secureDim}
+                  expanded={expanded.auth} onToggle={toggle}>
+                  {hasIssues ? (
+                    <div className="flex flex-col gap-3">
+                      {issues.map((issue, i) => {
+                        const color = issue.severity === 'high' ? T.danger : issue.severity === 'medium' ? T.warn : T.info;
+                        const bg = issue.severity === 'high' ? T.dangerDim : issue.severity === 'medium' ? T.warnDim : T.infoDim;
+                        return (
+                          <div key={i} className="rounded-lg p-4" style={{ background: bg, border: `1px solid ${color}30` }}>
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-semibold" style={{ color }}>{issue.title || issue.name}</p>
+                                {issue.selector && <p className="text-xs mt-1 font-mono break-all" style={{ color: T.muted }}>{issue.selector}</p>}
+                                {issue.user_impact && <p className="text-xs mt-1" style={{ color: T.muted }}>{issue.user_impact}</p>}
+                                {issue.technical_remediation && <p className="text-xs mt-2" style={{ color: T.text }}>{issue.technical_remediation}</p>}
+                              </div>
+                              <span className="px-2 py-1 rounded text-xs font-semibold flex-shrink-0" style={{ background: `${color}20`, color }}>
+                                {issue.severity}
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                      <Recs items={auth.recommendations?.length ? auth.recommendations : [
+                        'Add autocomplete="new-password" or autocomplete="current-password" to password inputs.',
+                        'Set HttpOnly, Secure, and SameSite=Strict on all session cookies.',
+                        'Implement rate limiting and account lockout on login endpoints.',
+                        'Consider requiring MFA for user accounts.',
+                      ]} />
+                    </div>
+                  ) : <CleanState icon={CheckCircle} title="No Authentication Issues Detected" body="Password fields, cookies, and login endpoints pass basic checks." />}
+                </Section>
+              );
+            })()}
+
+            {/* Software & Data Integrity */}
+            {isSecurityScan && findings.integrity && (() => {
+              const integ = findings.integrity;
+              const issues = integrityIssues;
+              const hasIssues = issues.length > 0;
+              return (
+                <Section id="integrity" label="Software & Data Integrity"
+                  subLabel={hasIssues ? `${issues.length} finding${issues.length !== 1 ? 's' : ''}` : 'Pass'}
+                  icon={hasIssues ? AlertTriangle : CheckCircle}
+                  iconColor={hasIssues ? T.warn : T.secure}
+                  iconBg={hasIssues ? T.warnDim : T.secureDim}
+                  expanded={expanded.integrity} onToggle={toggle}>
+                  {hasIssues ? (
+                    <div className="flex flex-col gap-3">
+                      <p className="text-xs" style={{ color: T.muted }}>Missing Subresource Integrity (SRI) hashes on external scripts and stylesheets allow supply-chain attacks if a CDN is compromised.</p>
+                      {issues.map((issue, i) => {
+                        const color = issue.severity === 'high' ? T.danger : issue.severity === 'medium' ? T.warn : T.info;
+                        const bg = issue.severity === 'high' ? T.dangerDim : issue.severity === 'medium' ? T.warnDim : T.infoDim;
+                        return (
+                          <div key={i} className="rounded-lg p-4" style={{ background: bg, border: `1px solid ${color}30` }}>
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-semibold" style={{ color }}>{issue.title || issue.name}</p>
+                                {issue.selector && <p className="text-xs mt-1 font-mono break-all" style={{ color: T.muted }}>{issue.selector}</p>}
+                                {issue.technical_remediation && <p className="text-xs mt-2" style={{ color: T.text }}>{issue.technical_remediation}</p>}
+                              </div>
+                              <span className="px-2 py-1 rounded text-xs font-semibold flex-shrink-0" style={{ background: `${color}20`, color }}>
+                                {issue.severity}
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                      <Recs items={integ.recommendations?.length ? integ.recommendations : [
+                        'Add integrity= and crossorigin="anonymous" attributes to all external <script> and <link> tags.',
+                        'Implement a Content-Security-Policy header to enforce SRI.',
+                        'Remove or restrict access to CI/CD config files (Jenkinsfile, .travis.yml, etc.) from the web root.',
+                        'Use a dependency audit tool (npm audit, Snyk) to check for known vulnerable packages.',
+                      ]} />
+                    </div>
+                  ) : <CleanState icon={CheckCircle} title="No Integrity Issues Detected" body="External resources use SRI and no CI/CD files are publicly exposed." />}
+                </Section>
+              );
+            })()}
+
+            {/* Logging & Monitoring */}
+            {isSecurityScan && findings.logging_monitor && (() => {
+              const logmon = findings.logging_monitor;
+              const issues = logMonIssues;
+              const hasIssues = issues.length > 0;
+              return (
+                <Section id="logging_monitor" label="Logging & Monitoring"
+                  subLabel={hasIssues ? `${issues.length} finding${issues.length !== 1 ? 's' : ''}` : 'Pass'}
+                  icon={hasIssues ? AlertTriangle : CheckCircle}
+                  iconColor={hasIssues ? T.warn : T.secure}
+                  iconBg={hasIssues ? T.warnDim : T.secureDim}
+                  expanded={expanded.logging_monitor} onToggle={toggle}>
+                  {hasIssues ? (
+                    <div className="flex flex-col gap-3">
+                      <p className="text-xs" style={{ color: T.muted }}>Inadequate logging and monitoring delays breach detection and incident response — a critical pre-launch readiness issue.</p>
+                      {issues.map((issue, i) => {
+                        const color = issue.severity === 'high' ? T.danger : issue.severity === 'medium' ? T.warn : T.info;
+                        const bg = issue.severity === 'high' ? T.dangerDim : issue.severity === 'medium' ? T.warnDim : T.infoDim;
+                        return (
+                          <div key={i} className="rounded-lg p-4" style={{ background: bg, border: `1px solid ${color}30` }}>
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-semibold" style={{ color }}>{issue.title || issue.name}</p>
+                                {issue.user_impact && <p className="text-xs mt-1" style={{ color: T.muted }}>{issue.user_impact}</p>}
+                                {issue.technical_remediation && <p className="text-xs mt-2" style={{ color: T.text }}>{issue.technical_remediation}</p>}
+                              </div>
+                              <span className="px-2 py-1 rounded text-xs font-semibold flex-shrink-0" style={{ background: `${color}20`, color }}>
+                                {issue.severity}
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                      <Recs items={logmon.recommendations?.length ? logmon.recommendations : [
+                        'Integrate an error monitoring SDK (Sentry, Datadog, or similar).',
+                        'Add structured logging with security event correlation.',
+                        'Configure alerting for failed authentication and unusual traffic patterns.',
+                        'Remove or restrict access to log files at /error.log, /access.log, /debug.log.',
+                        'Add a security.txt file at /.well-known/security.txt with a contact address.',
+                      ]} />
+                    </div>
+                  ) : <CleanState icon={CheckCircle} title="No Logging & Monitoring Issues" body="Monitoring SDKs detected and no log files publicly exposed." />}
                 </Section>
               );
             })()}

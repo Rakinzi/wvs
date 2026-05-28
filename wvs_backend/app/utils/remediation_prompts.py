@@ -64,6 +64,30 @@ def build_builder_prompt(finding: Mapping[str, object]) -> str:
             f"Improve the visual/product-quality recommendation '{title}' on {page}. "
             f"{remediation or 'Refine hierarchy, spacing, and CTA clarity while preserving the current brand style.'}"
         )
+    if scanner == "ssrf":
+        return (
+            f"Fix the SSRF vulnerability '{title}' on {page}{selector_text}. "
+            f"{remediation or 'Validate and allowlist all server-side URL destinations. Block requests to RFC-1918 ranges, loopback addresses, and cloud metadata services (169.254.169.254).'} "
+            "Apply the fix server-side; do not rely on client-side filtering."
+        )
+    if scanner == "logging_monitor":
+        return (
+            f"Fix the logging/monitoring gap '{title}' on {page}. "
+            f"{remediation or 'Add error monitoring, structured logging, and security event alerting before launch.'} "
+            "Keep the change scoped to infrastructure configuration and monitoring SDK integration."
+        )
+    if scanner == "auth":
+        return (
+            f"Fix the authentication issue '{title}' on {page}{selector_text}. "
+            f"{remediation or 'Apply the fix server-side with the smallest change that resolves the issue without breaking existing auth flows.'} "
+            "Test login, logout, and session expiry after the change."
+        )
+    if scanner == "integrity":
+        return (
+            f"Fix the software integrity issue '{title}' on {page}{selector_text}. "
+            f"{remediation or 'Add integrity hashes (SRI) to external scripts/stylesheets and implement a Content-Security-Policy header.'} "
+            "Verify the fix does not break third-party integrations."
+        )
 
     return (
         f"Fix the issue '{title}' on {page}{selector_text}. "

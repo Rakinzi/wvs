@@ -170,6 +170,47 @@ class UptimeMonitor(db.Model):
         }
 
 
+class NewsArticle(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    public_id = db.Column(db.String(36), unique=True, nullable=False, default=lambda: str(uuid.uuid4()), index=True)
+    title = db.Column(db.String(300), nullable=False)
+    slug = db.Column(db.String(320), unique=True, nullable=False, index=True)
+    summary = db.Column(db.Text, nullable=False)
+    body = db.Column(db.Text, nullable=False)
+    category = db.Column(db.String(60), nullable=False, default='General')
+    tags = db.Column(db.JSON, nullable=False, default=list)
+    severity = db.Column(db.String(20), nullable=True)
+    cve_ids = db.Column(db.JSON, nullable=False, default=list)
+    source_url = db.Column(db.String(500), nullable=True)
+    published = db.Column(db.Boolean, nullable=False, default=False, index=True)
+    published_at = db.Column(db.DateTime, nullable=True, index=True)
+    created_at = db.Column(db.DateTime, default=utc_now, nullable=False)
+    updated_at = db.Column(db.DateTime, default=utc_now, onupdate=utc_now, nullable=False)
+    author_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    author = db.relationship('User', backref=db.backref('news_articles', lazy=True))
+
+    def to_dict(self, body=False):
+        d = {
+            'id': self.public_id,
+            'title': self.title,
+            'slug': self.slug,
+            'summary': self.summary,
+            'category': self.category,
+            'tags': self.tags or [],
+            'severity': self.severity,
+            'cve_ids': self.cve_ids or [],
+            'source_url': self.source_url,
+            'published': self.published,
+            'published_at': self.published_at.isoformat() if self.published_at else None,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+            'author': self.author.username if self.author else None,
+        }
+        if body:
+            d['body'] = self.body
+        return d
+
+
 class UptimeCheck(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     public_id = db.Column(db.String(36), unique=True, nullable=False, default=lambda: str(uuid.uuid4()), index=True)

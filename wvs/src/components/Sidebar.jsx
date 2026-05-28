@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   BarChart2, Clock, Settings, LogOut,
   AlertTriangle, Globe, User, Bell, X, Menu, ChevronDown,
-  Zap, Sun, Moon, BadgeCheck, Activity, ChevronRight,
+  Zap, Sun, Moon, BadgeCheck, Activity, ChevronRight, Newspaper, BookOpen,
 } from 'lucide-react';
 import { useTheme } from '../hooks/useTheme';
 import { getSessionUsername } from '../lib/auth';
@@ -15,6 +15,8 @@ const NAV_ITEMS = [
   { key: 'history',       label: 'Scan History',     icon: Clock },
   { key: 'blockedSites',  label: 'Blocked Sites',    icon: AlertTriangle },
   { key: 'blockedAccess', label: 'Access Attempts',  icon: Globe, adminOnly: true },
+  { key: 'news',          label: 'Security News',    icon: Newspaper },
+  { key: 'news/admin',    label: 'News CMS',         icon: BookOpen, adminOnly: true },
 ];
 
 const NOTIFICATIONS = [

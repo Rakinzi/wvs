@@ -17,6 +17,9 @@ const BlockedSites = React.lazy(() => import('./components/BlockedSites'));
 const BlockedAccess = React.lazy(() => import('./components/BlockedAccess'));
 const VerifiedTargets = React.lazy(() => import('./components/VerifiedTargets'));
 const UptimeMonitors = React.lazy(() => import('./components/UptimeMonitors'));
+const LandingPage = React.lazy(() => import('./components/LandingPage'));
+const NewsPage = React.lazy(() => import('./components/NewsPage'));
+const NewsAdmin = React.lazy(() => import('./components/NewsAdmin'));
 
 const RouteFallback = () => {
   const [visible, setVisible] = useState(false);
@@ -94,6 +97,7 @@ const AdminRoute = ({ children }) => {
 };
 
 const AUTH_ROUTES = ['/login', '/register', '/reset-password', '/verify-email'];
+const PUBLIC_ROUTES = ['/', '/news', '/landing'];
 
 // Layout component that includes the Sidebar and Footer
 const Layout = ({ children }) => {
@@ -101,6 +105,7 @@ const Layout = ({ children }) => {
   const authenticated = isAuthenticated();
   const navigate = useNavigate();
   const isAuthRoute = AUTH_ROUTES.includes(location.pathname);
+  const isPublicRoute = PUBLIC_ROUTES.some(p => location.pathname === p || location.pathname.startsWith('/news'));
   const [isAdmin, setIsAdmin] = React.useState(getSessionIsAdmin());
 
   React.useEffect(() => {
@@ -132,10 +137,12 @@ const Layout = ({ children }) => {
     const path = location.pathname;
     if (path === '/') return 'dashboard';
     if (path.startsWith('/report')) return 'report';
+    if (path.startsWith('/news/admin')) return 'news/admin';
+    if (path.startsWith('/news')) return 'news';
     return path.replace('/', '');
   };
 
-  if (isAuthRoute) {
+  if (isAuthRoute || isPublicRoute) {
     return <Suspense fallback={<RouteFallback />}>{children}</Suspense>;
   }
 
@@ -266,6 +273,36 @@ const UptimeMonitorsWrapper = () => {
   return <UptimeMonitors navigateTo={navigateTo} />;
 };
 
+const LandingPageWrapper = () => {
+  const navigate = useNavigate();
+  const navigateTo = (page) => {
+    if (page === 'login') navigate('/login');
+    else if (page === 'news') navigate('/news');
+    else navigate('/');
+  };
+  return <LandingPage navigateTo={navigateTo} />;
+};
+
+const NewsPageWrapper = () => {
+  const navigate = useNavigate();
+  const navigateTo = (page) => {
+    if (page === 'dashboard') navigate('/');
+    else if (page === 'login') navigate('/login');
+    else if (page === 'landing') navigate('/landing');
+    else navigate(`/${page}`);
+  };
+  return <NewsPage navigateTo={navigateTo} isAuthenticated={isAuthenticated()} />;
+};
+
+const NewsAdminWrapper = () => {
+  const navigate = useNavigate();
+  const navigateTo = (page) => {
+    if (page === 'news') navigate('/news');
+    else navigate(page === 'dashboard' ? '/' : `/${page}`);
+  };
+  return <NewsAdmin navigateTo={navigateTo} />;
+};
+
 const App = () => {
   const themeValue = useThemeProvider();
   return (
@@ -296,11 +333,37 @@ const App = () => {
           </Layout>
         } />
         
-        <Route path="/" element={
+        <Route path="/landing" element={
+          <Layout>
+            <LandingPageWrapper />
+          </Layout>
+        } />
+
+        <Route path="/news" element={
+          <Layout>
+            <NewsPageWrapper />
+          </Layout>
+        } />
+
+        <Route path="/news/admin" element={
           <Layout>
             <ProtectedRoute>
-              <DashboardWrapper />
+              <AdminRoute>
+                <NewsAdminWrapper />
+              </AdminRoute>
             </ProtectedRoute>
+          </Layout>
+        } />
+
+        <Route path="/" element={
+          <Layout>
+            {isAuthenticated() ? (
+              <ProtectedRoute>
+                <DashboardWrapper />
+              </ProtectedRoute>
+            ) : (
+              <LandingPageWrapper />
+            )}
           </Layout>
         } />
         

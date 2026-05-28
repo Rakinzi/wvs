@@ -1098,6 +1098,187 @@ def check_takeover():
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 
+@bp.route('/scan/auth', methods=['POST'])
+@jwt_required()
+@limiter.limit("20 per hour")
+def check_auth():
+    try:
+        current_user = get_current_user()
+        if not current_user:
+            return jsonify({'error': 'User not found'}), 404
+        payload = ScanRequestPayload.model_validate(request.get_json(silent=True) or {})
+        url = normalize_target_url(payload.url)
+
+        scanner = SecurityScanner()
+        results = scanner.check_auth(url)
+
+        findings = {
+            'url': url,
+            'sqli': [], 'ssl': {'valid': True},
+            'headers': {'status': 'not_run', 'issues': []},
+            'wordpress': {'status': 'not_run', 'is_wordpress': False, 'issues': []},
+            'zap': {'enabled': False, 'status': 'not_run', 'issues': []},
+            'malicious': {'is_malicious': False},
+            'auth': results,
+            'timestamp': utc_now_isoformat(),
+        }
+        findings['summary'] = build_scan_summary(findings)
+        findings['sections'] = build_scan_sections(findings)
+
+        scan = persist_scan(current_user, findings, prefix="auth_scan")
+
+        return jsonify({
+            'status': 'success',
+            'scan_id': scan.public_id,
+            'url': url,
+            'findings': results,
+            'recommendations': results.get('recommendations', []),
+            'vulnerable': bool(results.get('issues')),
+            'summary': findings['summary'],
+        }), 200
+
+    except (ValueError, ValidationError) as exc:
+        return jsonify({'status': 'error', 'message': str(exc)}), 400
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+@bp.route('/scan/integrity', methods=['POST'])
+@jwt_required()
+@limiter.limit("20 per hour")
+def check_integrity():
+    try:
+        current_user = get_current_user()
+        if not current_user:
+            return jsonify({'error': 'User not found'}), 404
+        payload = ScanRequestPayload.model_validate(request.get_json(silent=True) or {})
+        url = normalize_target_url(payload.url)
+
+        scanner = SecurityScanner()
+        results = scanner.check_integrity(url)
+
+        findings = {
+            'url': url,
+            'sqli': [], 'ssl': {'valid': True},
+            'headers': {'status': 'not_run', 'issues': []},
+            'wordpress': {'status': 'not_run', 'is_wordpress': False, 'issues': []},
+            'zap': {'enabled': False, 'status': 'not_run', 'issues': []},
+            'malicious': {'is_malicious': False},
+            'integrity': results,
+            'timestamp': utc_now_isoformat(),
+        }
+        findings['summary'] = build_scan_summary(findings)
+        findings['sections'] = build_scan_sections(findings)
+
+        scan = persist_scan(current_user, findings, prefix="integrity_scan")
+
+        return jsonify({
+            'status': 'success',
+            'scan_id': scan.public_id,
+            'url': url,
+            'findings': results,
+            'recommendations': results.get('recommendations', []),
+            'vulnerable': bool(results.get('issues')),
+            'summary': findings['summary'],
+        }), 200
+
+    except (ValueError, ValidationError) as exc:
+        return jsonify({'status': 'error', 'message': str(exc)}), 400
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+@bp.route('/scan/logging_monitor', methods=['POST'])
+@jwt_required()
+@limiter.limit("20 per hour")
+def check_logging_monitor():
+    try:
+        current_user = get_current_user()
+        if not current_user:
+            return jsonify({'error': 'User not found'}), 404
+        payload = ScanRequestPayload.model_validate(request.get_json(silent=True) or {})
+        url = normalize_target_url(payload.url)
+
+        scanner = SecurityScanner()
+        results = scanner.check_logging_monitor(url)
+
+        findings = {
+            'url': url,
+            'sqli': [], 'ssl': {'valid': True},
+            'headers': {'status': 'not_run', 'issues': []},
+            'wordpress': {'status': 'not_run', 'is_wordpress': False, 'issues': []},
+            'zap': {'enabled': False, 'status': 'not_run', 'issues': []},
+            'malicious': {'is_malicious': False},
+            'logging_monitor': results,
+            'timestamp': utc_now_isoformat(),
+        }
+        findings['summary'] = build_scan_summary(findings)
+        findings['sections'] = build_scan_sections(findings)
+
+        scan = persist_scan(current_user, findings, prefix="logging_scan")
+
+        return jsonify({
+            'status': 'success',
+            'scan_id': scan.public_id,
+            'url': url,
+            'findings': results,
+            'recommendations': results.get('recommendations', []),
+            'vulnerable': bool(results.get('issues')),
+            'summary': findings['summary'],
+        }), 200
+
+    except (ValueError, ValidationError) as exc:
+        return jsonify({'status': 'error', 'message': str(exc)}), 400
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+@bp.route('/scan/ssrf', methods=['POST'])
+@jwt_required()
+@limiter.limit("10 per hour")
+def check_ssrf():
+    try:
+        current_user = get_current_user()
+        if not current_user:
+            return jsonify({'error': 'User not found'}), 404
+        payload = ScanRequestPayload.model_validate(request.get_json(silent=True) or {})
+        url = normalize_target_url(payload.url)
+
+        scanner = SecurityScanner()
+        results = scanner.check_ssrf(url, enable_active_checks=payload.enable_active_checks)
+
+        findings = {
+            'url': url,
+            'sqli': [], 'ssl': {'valid': True},
+            'headers': {'status': 'not_run', 'issues': []},
+            'wordpress': {'status': 'not_run', 'is_wordpress': False, 'issues': []},
+            'zap': {'enabled': False, 'status': 'not_run', 'issues': []},
+            'malicious': {'is_malicious': False},
+            'ssrf': results,
+            'timestamp': utc_now_isoformat(),
+        }
+        findings['summary'] = build_scan_summary(findings)
+        findings['sections'] = build_scan_sections(findings)
+
+        scan = persist_scan(current_user, findings, prefix="ssrf_scan")
+
+        return jsonify({
+            'status': 'success',
+            'scan_id': scan.public_id,
+            'url': url,
+            'findings': results,
+            'recommendations': results.get('recommendations', []),
+            'vulnerable': bool(results.get('issues')),
+            'params_tested': results.get('params_tested', []),
+            'summary': findings['summary'],
+        }), 200
+
+    except (ValueError, ValidationError) as exc:
+        return jsonify({'status': 'error', 'message': str(exc)}), 400
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
 @bp.route('/health', methods=['GET'])
 def health_check():
     try:
