@@ -1,0 +1,55 @@
+# Development override — adds hot reload for frontend and backend.
+# Usage: docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+#
+# Frontend: Vite dev server on :5173 with source volume-mounted (HMR)
+# Backend:  Flask dev server with --reload on source volume-mounted
+# Workers:  Celery restarted by watchfiles on source changes
+
+services:
+  frontend:
+    build:
+      context: ./wvs
+      dockerfile: Dockerfile.dev
+    image: wvs-frontend:dev
+    ports:
+      - "${FRONTEND_PORT:-5173}:5173"
+    volumes:
+      - ./wvs:/app
+      - /app/node_modules
+    environment:
+      - VITE_API_BASE_URL=${VITE_API_BASE_URL:-http://localhost:5001}
+    depends_on:
+      - backend
+
+  backend:
+    environment:
+      FRONTEND_BASE_URL: http://localhost:5173
+      FRONTEND_ORIGINS: "http://localhost:5173,http://localhost:8080"
+    volumes:
+      - ./wvs_backend:/app
+      - backend_instance:/app/instance
+      - backend_reports:/app/reports
+    command:
+      - sh
+      - -c
+      - "uv run flask --app manage.py db upgrade && uv run gunicorn --bind 0.0.0.0:5001 --workers 1 --reload --timeout 120 wsgi:app"
+
+  worker-security:
+    volumes:
+      - ./wvs_backend:/app
+      - backend_instance:/app/instance
+      - backend_reports:/app/reports
+    command: >
+      uv run --with watchfiles watchfiles
+      "celery -A app.celery_app:celery_app worker -Q ${SECURITY_SCAN_QUEUE:-security_scans} --loglevel=${CELERY_LOG_LEVEL:-info} --concurrency=${SECURITY_WORKER_CONCURRENCY:-2}"
+      /app
+
+  worker-ux:
+    volumes:
+      - ./wvs_backend:/app
+      - backend_instance:/app/instance
+      - backend_reports:/app/reports
+    command: >
+      uv run --with watchfiles watchfiles
+      "celery -A app.celery_app:celery_app worker -Q ${UX_SCAN_QUEUE:-ux_scans} --loglevel=${CELERY_LOG_LEVEL:-info} --concurrency=${UX_WORKER_CONCURRENCY:-1}"
+      /app

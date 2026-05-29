@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   Shield, ArrowLeft, AlertTriangle, ChevronRight, RefreshCw,
-  Tag, ExternalLink, Clock, Search, Filter, ChevronDown,
+  Tag, ExternalLink, Clock, Search, Filter, ChevronDown, Menu, X,
 } from 'lucide-react';
 import { apiJson } from '../lib/api';
+import Footer from './Footer';
 
 const T = {
   bg:      '#09090b',
@@ -49,42 +50,54 @@ const ArticleCard = ({ article, onClick }) => {
   const sev = severityColor(article.severity);
   return (
     <button onClick={() => onClick(article)}
-      style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 14, padding: '24px', textAlign: 'left', width: '100%', cursor: 'pointer', transition: 'border-color 200ms', fontFamily: 'inherit' }}
+      style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 14, padding: 0, textAlign: 'left', width: '100%', cursor: 'pointer', transition: 'border-color 200ms', fontFamily: 'inherit', overflow: 'hidden' }}
       onMouseEnter={e => e.currentTarget.style.borderColor = T.primary + '60'}
       onMouseLeave={e => e.currentTarget.style.borderColor = T.border}>
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
-        <span style={{ padding: '3px 10px', borderRadius: 100, fontSize: 11, fontWeight: 700, background: T.elev, color: T.muted, fontFamily: "'IBM Plex Mono', monospace", letterSpacing: '0.04em' }}>
-          {article.category}
-        </span>
-        {article.severity && (
-          <span style={{ padding: '3px 10px', borderRadius: 100, fontSize: 11, fontWeight: 700, background: sev.bg, color: sev.color, fontFamily: "'IBM Plex Mono', monospace" }}>
-            {article.severity.toUpperCase()}
-          </span>
-        )}
-      </div>
-      <p style={{ fontWeight: 700, fontSize: 16, color: T.text, lineHeight: 1.4, marginBottom: 10 }}>{article.title}</p>
-      <p style={{ fontSize: 13, color: T.muted, lineHeight: 1.6, marginBottom: 16 }}>{article.summary}</p>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <Clock size={12} color={T.dim} />
-          <span style={{ fontSize: 12, color: T.dim, fontFamily: "'IBM Plex Mono', monospace" }}>{fmt(article.published_at)}</span>
-          {article.author && <span style={{ fontSize: 12, color: T.dim }}>· {article.author}</span>}
-        </div>
-        {(article.cve_ids || []).length > 0 && (
-          <span style={{ fontSize: 11, fontFamily: "'IBM Plex Mono', monospace", color: T.purple, background: T.purpleDim, padding: '2px 8px', borderRadius: 6 }}>
-            {article.cve_ids[0]}{article.cve_ids.length > 1 ? ` +${article.cve_ids.length - 1}` : ''}
-          </span>
-        )}
-      </div>
-      {(article.tags || []).length > 0 && (
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 12, paddingTop: 12, borderTop: `1px solid ${T.borderSubtle}` }}>
-          {article.tags.slice(0, 4).map((t) => (
-            <span key={t} style={{ fontSize: 11, color: T.dim, display: 'flex', alignItems: 'center', gap: 4 }}>
-              <Tag size={9} /> {t}
-            </span>
-          ))}
+      {article.image_url && (
+        <div style={{ height: 150, background: T.elev, borderBottom: `1px solid ${T.borderSubtle}` }}>
+          <img
+            src={article.image_url}
+            alt={article.image_alt || ''}
+            loading="lazy"
+            style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+          />
         </div>
       )}
+      <div style={{ padding: 24 }}>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
+          <span style={{ padding: '3px 10px', borderRadius: 100, fontSize: 11, fontWeight: 700, background: T.elev, color: T.muted, fontFamily: "'IBM Plex Mono', monospace", letterSpacing: '0.04em' }}>
+            {article.category}
+          </span>
+          {article.severity && (
+            <span style={{ padding: '3px 10px', borderRadius: 100, fontSize: 11, fontWeight: 700, background: sev.bg, color: sev.color, fontFamily: "'IBM Plex Mono', monospace" }}>
+              {article.severity.toUpperCase()}
+            </span>
+          )}
+        </div>
+        <p style={{ fontWeight: 700, fontSize: 16, color: T.text, lineHeight: 1.4, marginBottom: 10 }}>{article.title}</p>
+        <p style={{ fontSize: 13, color: T.muted, lineHeight: 1.6, marginBottom: 16 }}>{article.summary}</p>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <Clock size={12} color={T.dim} />
+            <span style={{ fontSize: 12, color: T.dim, fontFamily: "'IBM Plex Mono', monospace" }}>{fmt(article.published_at)}</span>
+            {article.author && <span style={{ fontSize: 12, color: T.dim }}>· {article.author}</span>}
+          </div>
+          {(article.cve_ids || []).length > 0 && (
+            <span style={{ fontSize: 11, fontFamily: "'IBM Plex Mono', monospace", color: T.purple, background: T.purpleDim, padding: '2px 8px', borderRadius: 6 }}>
+              {article.cve_ids[0]}{article.cve_ids.length > 1 ? ` +${article.cve_ids.length - 1}` : ''}
+            </span>
+          )}
+        </div>
+        {(article.tags || []).length > 0 && (
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 12, paddingTop: 12, borderTop: `1px solid ${T.borderSubtle}` }}>
+            {article.tags.slice(0, 4).map((t) => (
+              <span key={t} style={{ fontSize: 11, color: T.dim, display: 'flex', alignItems: 'center', gap: 4 }}>
+                <Tag size={9} /> {t}
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
     </button>
   );
 };
@@ -100,7 +113,17 @@ const ArticleDetail = ({ article, onBack }) => {
         <ArrowLeft size={13} /> Back to news
       </button>
 
-      <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 16, padding: '36px 36px' }}>
+      <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 16, overflow: 'hidden' }}>
+        {article.image_url && (
+          <div style={{ height: 'min(340px, 44vw)', minHeight: 190, background: T.elev, borderBottom: `1px solid ${T.borderSubtle}` }}>
+            <img
+              src={article.image_url}
+              alt={article.image_alt || ''}
+              style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+            />
+          </div>
+        )}
+        <div style={{ padding: '36px 36px' }}>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 20 }}>
           <span style={{ padding: '4px 12px', borderRadius: 100, fontSize: 12, fontWeight: 700, background: T.elev, color: T.muted, fontFamily: "'IBM Plex Mono', monospace" }}>
             {article.category}
@@ -153,10 +176,17 @@ const ArticleDetail = ({ article, onBack }) => {
             ))}
           </div>
         )}
+        </div>
       </div>
     </div>
   );
 };
+
+const NAV_LINKS = [
+  { label: 'Features', href: '/landing#features' },
+  { label: 'How it works', href: '/landing#how-it-works' },
+  { label: 'Pricing', href: '/landing#pricing' },
+];
 
 const NewsPage = ({ navigateTo, isAuthenticated }) => {
   const [articles, setArticles] = useState([]);
@@ -171,6 +201,14 @@ const NewsPage = ({ navigateTo, isAuthenticated }) => {
   const [selected, setSelected] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [filterOpen, setFilterOpen] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
+
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 20);
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
 
   const fetchArticles = useCallback(async (p = 1) => {
     setLoading(true);
@@ -180,10 +218,11 @@ const NewsPage = ({ navigateTo, isAuthenticated }) => {
       if (category !== 'All') params.set('category', category);
       if (severity !== 'All') params.set('severity', severity);
       const { data } = await apiJson(`/news?${params}`);
-      setArticles(data.articles);
-      setTotal(data.total);
-      setPage(data.page);
-      setPages(data.pages);
+      const payload = data.data;
+      setArticles(payload.articles);
+      setTotal(payload.total);
+      setPage(payload.page);
+      setPages(payload.pages);
     } catch (e) {
       setError(e.message || 'Failed to load news');
     } finally {
@@ -198,7 +237,7 @@ const NewsPage = ({ navigateTo, isAuthenticated }) => {
     setSelected(article);
     try {
       const { data } = await apiJson(`/news/${article.slug}`);
-      setSelected(data);
+      setSelected(data.data);
     } catch {
       // use the list article data as fallback
     } finally {
@@ -218,33 +257,80 @@ const NewsPage = ({ navigateTo, isAuthenticated }) => {
   return (
     <div style={{ background: T.bg, minHeight: '100vh', color: T.text, fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif" }}>
 
-      {/* Header */}
-      <div style={{ background: T.surface, borderBottom: `1px solid ${T.border}`, position: 'sticky', top: 0, zIndex: 30 }}>
-        <div style={{ maxWidth: 1120, margin: '0 auto', padding: '0 24px', height: 60, display: 'flex', alignItems: 'center', gap: 16 }}>
-          <button onClick={() => navigateTo('landing')}
-            style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'none', border: 'none', cursor: 'pointer', color: T.muted, fontSize: 13, fontFamily: 'inherit', padding: '5px 0' }}>
-            <div style={{ width: 28, height: 28, borderRadius: 8, background: 'linear-gradient(135deg, #6366f1, #4f46e5)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Shield size={14} color="white" />
-            </div>
-            <span style={{ fontWeight: 700, fontSize: 14, color: T.text }}>LaunchGuard</span>
-          </button>
-          <ChevronRight size={14} color={T.dim} />
-          <span style={{ fontSize: 13, fontWeight: 600, color: T.muted }}>Security News</span>
-          <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
+      {/* Navbar */}
+      <header style={{
+        position: 'sticky', top: 0, zIndex: 40,
+        background: scrolled ? 'rgba(9,9,11,0.92)' : T.surface,
+        backdropFilter: scrolled ? 'blur(16px)' : 'none',
+        borderBottom: `1px solid ${scrolled ? 'rgba(39,39,42,0.8)' : T.border}`,
+        transition: 'all 300ms ease',
+      }}>
+        <div style={{ maxWidth: 1120, margin: '0 auto', padding: '0 24px', height: 64, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          {/* Logo + breadcrumb */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <button onClick={() => navigateTo('landing')}
+              style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
+              <img src="/launchguard-icon.svg" alt="LaunchGuard" style={{ width: 30, height: 30 }} />
+              <span style={{ fontWeight: 700, fontSize: 15, letterSpacing: '-0.02em', background: 'linear-gradient(135deg, #818cf8 0%, #6366f1 40%, #a78bfa 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>
+                LaunchGuard
+              </span>
+            </button>
+            <ChevronRight size={13} color={T.dim} />
+            <span style={{ fontSize: 13, fontWeight: 600, color: T.muted }}>Security News</span>
+          </div>
+
+          {/* Desktop nav links */}
+          <nav style={{ display: 'flex', alignItems: 'center', gap: 4 }} className="hidden-mobile">
+            {NAV_LINKS.map(({ label, href }) => (
+              <a key={label} href={href}
+                style={{ padding: '6px 14px', borderRadius: 8, fontSize: 14, color: T.muted, textDecoration: 'none', transition: 'color 150ms' }}
+                onMouseEnter={e => e.target.style.color = T.text}
+                onMouseLeave={e => e.target.style.color = T.muted}>
+                {label}
+              </a>
+            ))}
+          </nav>
+
+          {/* CTA */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             {isAuthenticated ? (
               <button onClick={() => navigateTo('dashboard')}
-                style={{ padding: '6px 14px', borderRadius: 8, fontSize: 13, fontWeight: 600, background: 'linear-gradient(135deg, #6366f1, #4f46e5)', border: 'none', color: 'white', cursor: 'pointer', fontFamily: 'inherit' }}>
+                style={{ padding: '7px 16px', borderRadius: 8, fontSize: 13, fontWeight: 700, background: 'linear-gradient(135deg, #6366f1, #4f46e5)', border: 'none', color: 'white', cursor: 'pointer', fontFamily: 'inherit', boxShadow: '0 0 18px rgba(99,102,241,0.3)' }}>
                 Dashboard
               </button>
             ) : (
-              <button onClick={() => navigateTo('login')}
-                style={{ padding: '6px 14px', borderRadius: 8, fontSize: 13, fontWeight: 600, background: 'linear-gradient(135deg, #6366f1, #4f46e5)', border: 'none', color: 'white', cursor: 'pointer', fontFamily: 'inherit' }}>
-                Sign in
-              </button>
+              <>
+                <button onClick={() => navigateTo('login')}
+                  style={{ padding: '7px 14px', borderRadius: 8, fontSize: 13, fontWeight: 600, background: 'none', border: `1px solid ${T.border}`, color: T.muted, cursor: 'pointer', fontFamily: 'inherit' }}
+                  className="show-desktop">
+                  Sign in
+                </button>
+                <button onClick={() => navigateTo('login')}
+                  style={{ padding: '7px 16px', borderRadius: 8, fontSize: 13, fontWeight: 700, background: 'linear-gradient(135deg, #6366f1, #4f46e5)', border: 'none', color: 'white', cursor: 'pointer', fontFamily: 'inherit', boxShadow: '0 0 18px rgba(99,102,241,0.3)' }}>
+                  Get started
+                </button>
+              </>
             )}
+            <button onClick={() => setMobileOpen(o => !o)}
+              style={{ display: 'none', background: 'none', border: `1px solid ${T.border}`, borderRadius: 8, padding: 7, cursor: 'pointer', color: T.muted }}
+              className="show-mobile" aria-label="Menu">
+              {mobileOpen ? <X size={16} /> : <Menu size={16} />}
+            </button>
           </div>
         </div>
-      </div>
+
+        {/* Mobile nav */}
+        {mobileOpen && (
+          <div style={{ borderTop: `1px solid ${T.border}`, padding: '8px 16px 16px', display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {NAV_LINKS.map(({ label, href }) => (
+              <a key={label} href={href} onClick={() => setMobileOpen(false)}
+                style={{ padding: '10px 12px', borderRadius: 8, fontSize: 14, color: T.muted, textDecoration: 'none', display: 'block' }}>
+                {label}
+              </a>
+            ))}
+          </div>
+        )}
+      </header>
 
       <div style={{ maxWidth: 1120, margin: '0 auto', padding: '40px 24px' }}>
 
@@ -372,7 +458,19 @@ const NewsPage = ({ navigateTo, isAuthenticated }) => {
         )}
       </div>
 
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      <Footer />
+
+      <style>{`
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @media (min-width: 768px) {
+          .hidden-mobile { display: flex !important; }
+          .show-desktop { display: block !important; }
+        }
+        @media (max-width: 767px) {
+          .hidden-mobile { display: none !important; }
+          .show-mobile { display: flex !important; }
+        }
+      `}</style>
     </div>
   );
 };

@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   Shield, Zap, FileText, ChevronRight, CheckCircle,
-  Lock, Globe, AlertTriangle, BarChart2, ArrowRight,
-  ExternalLink, Menu, X, Activity, Eye, Search,
+  BarChart2, ArrowRight, ExternalLink, Menu, X, Activity, Eye,
 } from 'lucide-react';
 
 const NAV_LINKS = [
@@ -16,7 +15,7 @@ const FEATURES = [
   {
     icon: Shield,
     title: 'OWASP Top 10 Coverage',
-    desc: 'Full A01–A10 2021 coverage including SSRF, software integrity, logging gaps, and authentication failures — not just SQL injection.',
+    desc: 'Full OWASP Web Top 10 (A01–A10) and OWASP LLM Top 10 2025 coverage — from prompt injection and excessive agency to broken access control and SSRF.',
     color: '#6366f1',
     dim: 'rgba(99,102,241,0.12)',
   },
@@ -65,6 +64,8 @@ const SCANNERS = [
   'Accessibility (WCAG)', 'Responsive UX', 'Performance UX', 'Form Usability',
   'SEO Readiness', 'Broken Links', 'Application Controls', 'Exposed Services',
   'Abuse Controls', 'Visual AI Review',
+  'Prompt Injection (LLM01)', 'Sensitive Info Disclosure (LLM02)', 'LLM Supply Chain (LLM03)',
+  'Excessive Agency (LLM06)', 'System Prompt Leakage (LLM07)', 'Vector & Embedding (LLM08)',
 ];
 
 const HOW_IT_WORKS = [
@@ -133,13 +134,7 @@ const LandingPage = ({ navigateTo }) => {
           {/* Logo */}
           <button onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
             style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'none', border: 'none', cursor: 'pointer' }}>
-            <div style={{
-              width: 32, height: 32, borderRadius: 9, display: 'flex', alignItems: 'center', justifyContent: 'center',
-              background: 'linear-gradient(135deg, #6366f1, #4f46e5)',
-              boxShadow: '0 0 18px rgba(99,102,241,0.4)',
-            }}>
-              <Shield size={16} color="white" />
-            </div>
+            <img src="/launchguard-icon.svg" alt="LaunchGuard" style={{ width: 32, height: 32 }} />
             <span style={{ fontWeight: 700, fontSize: 15, letterSpacing: '-0.02em', background: 'linear-gradient(135deg, #818cf8 0%, #6366f1 40%, #a78bfa 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>
               LaunchGuard
             </span>
@@ -204,7 +199,7 @@ const LandingPage = ({ navigateTo }) => {
         {/* Badge */}
         <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '5px 14px', borderRadius: 100, border: '1px solid rgba(99,102,241,0.3)', background: 'rgba(99,102,241,0.08)', marginBottom: 32 }}>
           <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#6366f1', boxShadow: '0 0 8px rgba(99,102,241,0.8)' }} />
-          <span style={{ fontSize: 12, fontWeight: 600, color: '#818cf8', letterSpacing: '0.02em' }}>OWASP Top 10 2021 — Full Coverage</span>
+          <span style={{ fontSize: 12, fontWeight: 600, color: '#818cf8', letterSpacing: '0.02em' }}>OWASP Web Top 10 · OWASP LLM Top 10 2025</span>
         </div>
 
         <h1 style={{ fontSize: 'clamp(36px, 6vw, 68px)', fontWeight: 800, lineHeight: 1.08, letterSpacing: '-0.03em', margin: '0 0 24px' }}>
@@ -215,8 +210,8 @@ const LandingPage = ({ navigateTo }) => {
         </h1>
 
         <p style={{ fontSize: 'clamp(16px, 2vw, 20px)', color: '#71717a', lineHeight: 1.6, maxWidth: 620, margin: '0 auto 40px' }}>
-          LaunchGuard runs 26 automated scanners — security, accessibility, UX, and SEO — and tells you
-          exactly what blocks your launch, in minutes, with no agent to install.
+          83% of apps have security flaws before launch. Attackers exploit them in under 5 days.
+          LaunchGuard runs 32 automated scanners — including the OWASP LLM Top 10 2025 — and tells you exactly what to fix before you ship.
         </p>
 
         <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
@@ -232,8 +227,26 @@ const LandingPage = ({ navigateTo }) => {
 
         {/* Social proof */}
         <p style={{ marginTop: 32, fontSize: 13, color: '#52525b' }}>
-          Trusted by pre-launch founders · No credit card required
+          No credit card required · Results in minutes
         </p>
+      </section>
+
+      {/* ── Real stats bar ── */}
+      <section style={{ borderTop: '1px solid #27272a', borderBottom: '1px solid #27272a', padding: '40px 24px' }}>
+        <div style={{ maxWidth: 1120, margin: '0 auto', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 32, textAlign: 'center' }}>
+          {[
+            { stat: '83%', label: 'of apps have security flaws on first scan', source: 'Indusface, 2026' },
+            { stat: '$4.44M', label: 'average cost of a data breach globally', source: 'IBM Cost of a Data Breach, 2025' },
+            { stat: '94%', label: 'of apps have broken access control (OWASP A01)', source: 'OWASP Top 10, 2021' },
+            { stat: '<5 days', label: 'median time to exploit a known vulnerability', source: 'Edgescan Stats Report, 2026' },
+          ].map(({ stat, label, source }) => (
+            <div key={stat}>
+              <p style={{ fontSize: 'clamp(28px, 4vw, 40px)', fontWeight: 800, letterSpacing: '-0.03em', background: 'linear-gradient(135deg, #818cf8 0%, #6366f1 40%, #a78bfa 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text', margin: '0 0 6px' }}>{stat}</p>
+              <p style={{ fontSize: 13, color: '#a1a1aa', lineHeight: 1.5, marginBottom: 4 }}>{label}</p>
+              <p style={{ fontSize: 11, color: '#52525b', fontFamily: "'IBM Plex Mono', monospace" }}>{source}</p>
+            </div>
+          ))}
+        </div>
       </section>
 
       {/* ── Scanner coverage ticker ── */}
@@ -280,8 +293,8 @@ const LandingPage = ({ navigateTo }) => {
         <div style={{ maxWidth: 1120, margin: '0 auto' }}>
           <div style={{ textAlign: 'center', marginBottom: 48 }}>
             <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.12em', color: '#6366f1', marginBottom: 12, fontFamily: "'IBM Plex Mono', monospace" }}>SCANNER SUITE</p>
-            <h2 style={{ fontSize: 'clamp(24px, 3.5vw, 38px)', fontWeight: 800, letterSpacing: '-0.025em', margin: '0 0 12px' }}>26 scanners. One report.</h2>
-            <p style={{ fontSize: 15, color: '#71717a' }}>Passive analysis on every scan. Active probing available for launch audits.</p>
+            <h2 style={{ fontSize: 'clamp(24px, 3.5vw, 38px)', fontWeight: 800, letterSpacing: '-0.025em', margin: '0 0 12px' }}>32 scanners. One report.</h2>
+            <p style={{ fontSize: 15, color: '#71717a' }}>OWASP Web Top 10 · OWASP LLM Top 10 2025 · Accessibility · UX · SEO. Passive on every scan, active probing on launch audits.</p>
           </div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center' }}>
             {SCANNERS.map((s) => (
@@ -379,14 +392,14 @@ const LandingPage = ({ navigateTo }) => {
           border: '1px solid rgba(99,102,241,0.25)',
           borderRadius: 20, padding: '64px 48px', textAlign: 'center',
         }}>
-          <div style={{ width: 52, height: 52, borderRadius: 14, background: 'rgba(99,102,241,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 24px' }}>
-            <Lock size={24} color="#818cf8" />
+          <div style={{ margin: '0 auto 24px', width: 52, height: 52 }}>
+            <img src="/launchguard-icon.svg" alt="LaunchGuard" style={{ width: 52, height: 52 }} />
           </div>
           <h2 style={{ fontSize: 'clamp(28px, 4vw, 44px)', fontWeight: 800, letterSpacing: '-0.03em', margin: '0 0 16px' }}>
             Ready to launch securely?
           </h2>
           <p style={{ fontSize: 16, color: '#71717a', marginBottom: 36, maxWidth: 480, margin: '0 auto 36px' }}>
-            Run your first scan free. No credit card. No agent. Results in minutes.
+            48,174 new CVEs were published in 2025 alone. Run your first scan free and know your exposure before attackers do.
           </p>
           <button onClick={goApp}
             style={{ display: 'inline-flex', alignItems: 'center', gap: 10, padding: '14px 32px', borderRadius: 10, fontSize: 15, fontWeight: 700, background: 'linear-gradient(135deg, #6366f1, #4f46e5)', border: 'none', color: 'white', cursor: 'pointer', fontFamily: 'inherit', boxShadow: '0 0 40px rgba(99,102,241,0.4)' }}>
@@ -399,9 +412,7 @@ const LandingPage = ({ navigateTo }) => {
       <footer style={{ borderTop: '1px solid #27272a', padding: '40px 24px' }}>
         <div style={{ maxWidth: 1120, margin: '0 auto', display: 'flex', flexWrap: 'wrap', gap: 24, alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <div style={{ width: 26, height: 26, borderRadius: 7, background: 'linear-gradient(135deg, #6366f1, #4f46e5)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Shield size={13} color="white" />
-            </div>
+            <img src="/launchguard-icon.svg" alt="LaunchGuard" style={{ width: 26, height: 26 }} />
             <span style={{ fontWeight: 700, fontSize: 13, color: '#52525b' }}>LaunchGuard</span>
           </div>
           <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
