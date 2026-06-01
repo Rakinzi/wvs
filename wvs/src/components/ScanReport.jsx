@@ -31,8 +31,8 @@ const T = {
   warnDim:     'var(--color-warn-dim)',
   info:        'var(--color-info)',
   infoDim:     'var(--color-info-dim)',
-  purple:      '#A78BFA',
-  purpleDim:   '#2D1F4E',
+  purple:      'var(--color-info)',
+  purpleDim:   'var(--color-info-dim)',
 };
 
 const fmt = (d) => {
@@ -81,12 +81,9 @@ const Section = ({ id, label, subLabel, icon: Icon, iconColor, iconBg, expanded,
     <button onClick={() => onToggle(id)}
       className="w-full flex items-center justify-between px-5 py-4 cursor-pointer transition-colors"
       style={{ background: 'var(--color-surface)' }} aria-expanded={expanded}>
-      <div className="flex items-center gap-3">
-        <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: iconBg }}>
-          <Icon size={16} style={{ color: iconColor }} />
-        </div>
+      <div className="flex items-center gap-3" style={{ borderLeft: `2px solid ${iconColor}`, paddingLeft: 10 }}>
         <div className="text-left">
-          <p className="text-sm font-semibold" style={{ color: T.text }}>{label}</p>
+          <p className="text-sm font-semibold" style={{ color: T.text, fontFamily: "'IBM Plex Mono', monospace", fontSize: 11 }}>{label}</p>
           {subLabel && <p className="text-xs mt-0.5" style={{ color: T.muted }}>{subLabel}</p>}
         </div>
       </div>
@@ -132,11 +129,9 @@ const Recs = ({ items }) => (
 /* Clean state */
 const CleanState = ({ icon: Icon, title, body }) => (
   <div className="flex flex-col items-center gap-3 py-8 text-center">
-    <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ background: T.secureDim }}>
-      <Icon size={22} style={{ color: T.secure }} />
-    </div>
+    <Icon size={18} style={{ color: T.secure, opacity: 0.7 }} />
     <div>
-      <p className="text-sm font-semibold" style={{ color: T.text }}>{title}</p>
+      <p className="text-sm font-semibold font-mono" style={{ color: T.text }}>{title}</p>
       {body && <p className="text-xs mt-1" style={{ color: T.muted }}>{body}</p>}
     </div>
   </div>
@@ -207,12 +202,9 @@ const ScreenshotPanel = ({ screenshots }) => {
     <div className="card overflow-hidden">
       <div className="flex items-center justify-between px-5 py-4"
         style={{ background: 'var(--color-surface)', borderBottom: '1px solid var(--color-border)' }}>
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: T.primaryDim }}>
-            <Camera size={16} style={{ color: T.primary }} />
-          </div>
+        <div className="flex items-center gap-3" style={{ borderLeft: `2px solid ${T.primary}`, paddingLeft: 10 }}>
           <div>
-            <p className="text-sm font-semibold" style={{ color: T.text }}>Site Screenshots</p>
+            <p className="text-sm font-semibold" style={{ color: T.text, fontFamily: "'IBM Plex Mono', monospace", fontSize: 11 }}>Site Screenshots</p>
             <p className="text-xs mt-0.5" style={{ color: T.muted }}>Captured at scan time</p>
           </div>
         </div>
@@ -267,7 +259,7 @@ const ScreenshotPanel = ({ screenshots }) => {
 
 /* ─────────────────────────────────────────────── */
 const ScanReport = ({ scanId, navigateTo }) => {
-  const [expanded, setExpanded] = useState({ sql: true, ssl: true, headers: true, wordpress: true, zap: true, malicious: true, xss: true, tech: true, exposure: true, secrets: true, dns: true, redirect: true, takeover: true, ssrf: true, auth: true, integrity: true, logging_monitor: true, accessibility: true, responsive_ux: true, performance_ux: true, form_usability: true, seo: true, broken_links: true, app_controls: true, exposed_services: true, abuse_controls: true, visual_ai: true, comparison: true, owasp: true });
+  const [expanded, setExpanded] = useState({ sql: true, ssl: true, headers: true, wordpress: true, zap: true, nikto: true, malicious: true, xss: true, tech: true, exposure: true, secrets: true, dns: true, redirect: true, takeover: true, ssrf: true, auth: true, integrity: true, logging_monitor: true, accessibility: true, responsive_ux: true, performance_ux: true, form_usability: true, seo: true, broken_links: true, app_controls: true, exposed_services: true, abuse_controls: true, visual_ai: true, comparison: true, owasp: true });
   const { report, loading, error } = useScanReportData(scanId);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState(null);
@@ -329,10 +321,8 @@ const ScanReport = ({ scanId, navigateTo }) => {
   if (error || !report) return (
     <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--color-bg)' }}>
       <div className="flex flex-col items-center gap-4">
-        <div className="w-14 h-14 rounded-2xl flex items-center justify-center" style={{ background: 'var(--color-danger-dim)' }}>
-          <AlertTriangle size={24} style={{ color: 'var(--color-danger)' }} />
-        </div>
-        <p className="text-sm font-medium" style={{ color: T.text }}>{error ? 'Error loading report' : 'Report not found'}</p>
+        <AlertTriangle size={24} style={{ color: 'var(--color-danger)' }} />
+        <p className="text-sm font-medium font-mono" style={{ color: T.text }}>{error ? 'Error loading report' : 'Report not found'}</p>
         <p className="text-xs" style={{ color: T.muted }}>{error || `Report ${scanId} could not be found.`}</p>
         <button onClick={() => navigateTo('dashboard')} className="btn-primary">
           <ArrowLeft size={14} /> Back to Dashboard
@@ -359,6 +349,7 @@ const ScanReport = ({ scanId, navigateTo }) => {
   const hdrIssues    = findings.headers?.issues || [];
   const wpIssues     = findings.wordpress?.issues || [];
   const zapIssues    = findings.zap?.issues || [];
+  const niktoIssues  = findings.nikto?.issues || [];
   const isMal        = findings.malicious?.is_malicious;
   const xssIssues    = findings.xss?.issues || [];
   const hasXss       = xssIssues.some(i => i.type === 'Reflected XSS');
@@ -403,6 +394,7 @@ const ScanReport = ({ scanId, navigateTo }) => {
       hdrIssues.length +
       wpIssues.length +
       zapIssues.length +
+      niktoIssues.length +
       xssIssues.length +
       actionableTechIssues.length +
       exposureIssues.length +
@@ -470,9 +462,7 @@ const ScanReport = ({ scanId, navigateTo }) => {
         <div className="card p-5 mb-6" style={{ borderColor: verdictInfo.color }}>
           <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-5">
             <div className="flex items-start gap-4">
-              <div className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: verdictInfo.bg }}>
-                <VerdictIcon size={22} style={{ color: verdictInfo.color }} />
-              </div>
+              <VerdictIcon size={20} className="flex-shrink-0 mt-1" style={{ color: verdictInfo.color }} />
               <div>
                 <p className="section-label mb-1">Launch Verdict</p>
                 <h1 className="text-2xl font-bold" style={{ color: verdictInfo.color }}>
@@ -872,10 +862,8 @@ const ScanReport = ({ scanId, navigateTo }) => {
               expanded={expanded.wordpress} onToggle={toggle}>
               {!findings.wordpress?.is_wordpress ? (
                 <div className="flex flex-col items-center gap-3 py-6 text-center">
-                  <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ background: T.infoDim }}>
-                    <Info size={20} style={{ color: T.info }} />
-                  </div>
-                  <p className="text-sm font-semibold" style={{ color: T.text }}>Not a WordPress Site</p>
+                  <Info size={18} style={{ color: T.info, opacity: 0.7 }} />
+                  <p className="text-sm font-semibold font-mono" style={{ color: T.text }}>Not a WordPress Site</p>
                   <p className="text-xs" style={{ color: T.muted }}>No WordPress signatures detected.</p>
                 </div>
               ) : (
@@ -925,24 +913,23 @@ const ScanReport = ({ scanId, navigateTo }) => {
 
             {/* ZAP */}
             {isSecurityScan && <Section id="zap" label="OWASP ZAP Analysis"
-              subLabel={findings.zap?.status === 'disabled' ? 'Not enabled' : zapIssues.length > 0 ? `${zapIssues.length} alerts` : 'No alerts'}
+              subLabel={findings.zap?.status === 'not_authorized' ? 'Requires verified target' : findings.zap?.status === 'disabled' ? 'Not enabled' : zapIssues.length > 0 ? `${zapIssues.length} alerts` : 'No alerts'}
               icon={zapIssues.length > 0 ? AlertOctagon : CheckCircle}
               iconColor={zapIssues.length > 0 ? T.danger : T.secure}
               iconBg={zapIssues.length > 0 ? T.dangerDim : T.secureDim}
               expanded={expanded.zap} onToggle={toggle}>
-              {findings.zap?.status === 'disabled' || findings.zap?.status === 'not_run' ? (
+              {['disabled', 'not_run', 'not_authorized'].includes(findings.zap?.status) ? (
                 <div className="flex flex-col gap-4 py-4">
                   <div className="flex items-start gap-3 p-4 rounded-xl" style={{ background: T.surface, border: `1px solid ${T.border}` }}>
                     <Info size={16} className="flex-shrink-0 mt-0.5" style={{ color: T.info }} />
                     <div className="flex flex-col gap-1.5">
-                      <p className="text-sm font-semibold" style={{ color: T.text }}>OWASP ZAP Not Running</p>
+                      <p className="text-sm font-semibold" style={{ color: T.text }}>{findings.zap?.status === 'not_authorized' ? 'OWASP ZAP Requires Verified Target' : 'OWASP ZAP Not Running'}</p>
                       <p className="text-xs leading-relaxed" style={{ color: T.muted }}>
-                        ZAP (Zed Attack Proxy) is an active scanner that must run as a separate process on the same host as the backend.
-                        It performs deeper crawling and active probing that passive scanners cannot do.
+                        {findings.zap?.summary || 'ZAP (Zed Attack Proxy) is an active scanner that must run as a separate process on the same host as the backend. It performs deeper crawling and active probing that passive scanners cannot do.'}
                       </p>
                     </div>
                   </div>
-                  <div className="flex flex-col gap-2">
+                  {findings.zap?.status !== 'not_authorized' && <div className="flex flex-col gap-2">
                     <p className="text-xs font-semibold uppercase tracking-widest font-mono" style={{ color: T.dim }}>To enable ZAP integration:</p>
                     {[
                       'Install OWASP ZAP: brew install zaproxy (macOS) or download from zaproxy.org',
@@ -955,7 +942,7 @@ const ScanReport = ({ scanId, navigateTo }) => {
                         <p className="text-xs font-mono leading-relaxed" style={{ color: T.muted }}>{step}</p>
                       </div>
                     ))}
-                  </div>
+                  </div>}
                 </div>
               ) : zapIssues.length > 0 ? (
                 <div className="flex flex-col gap-3">
@@ -967,6 +954,32 @@ const ScanReport = ({ scanId, navigateTo }) => {
                 </div>
               ) : <CleanState icon={CheckCircle} title="No ZAP Alerts" body="OWASP ZAP found no additional issues." />}
             </Section>}
+
+            {/* Nikto */}
+            {isSecurityScan && findings.nikto && (
+              <Section id="nikto" label="Nikto Web Server Scan"
+                subLabel={findings.nikto?.status === 'not_authorized' ? 'Requires verified target' : findings.nikto?.status === 'unavailable' ? 'Tool unavailable' : findings.nikto?.status === 'disabled' ? 'Not enabled' : niktoIssues.length > 0 ? `${niktoIssues.length} finding${niktoIssues.length !== 1 ? 's' : ''}` : 'No findings'}
+                icon={niktoIssues.length > 0 ? AlertTriangle : CheckCircle}
+                iconColor={niktoIssues.length > 0 ? T.warn : T.secure}
+                iconBg={niktoIssues.length > 0 ? T.warnDim : T.secureDim}
+                expanded={expanded.nikto} onToggle={toggle}>
+                {['disabled', 'unavailable', 'not_run', 'not_authorized'].includes(findings.nikto?.status) ? (
+                  <CleanState icon={Info} title="Nikto Not Available" body={findings.nikto?.summary || 'Install Nikto in the backend scanner environment to enable this integration.'} />
+                ) : niktoIssues.length > 0 ? (
+                  <div className="flex flex-col gap-3">
+                    {niktoIssues.map((issue, i) => (
+                      <FindingCard key={i}
+                        color={T.warn}
+                        bg={T.warnDim}
+                        icon={AlertTriangle}
+                        title={issue.name || 'Nikto finding'}
+                        items={[`Severity: ${issue.severity || 'Medium'}`, issue.path, issue.evidence].filter(Boolean)} />
+                    ))}
+                    {sections.nikto?.recommendations?.length > 0 && <Recs items={sections.nikto.recommendations} />}
+                  </div>
+                ) : <CleanState icon={CheckCircle} title="No Nikto Findings" body="Nikto found no additional web server issues." />}
+              </Section>
+            )}
 
             {/* XSS */}
             {isSecurityScan && findings.xss && (
@@ -1017,6 +1030,24 @@ const ScanReport = ({ scanId, navigateTo }) => {
                 iconBg={actionableTechIssues.length > 0 ? T.infoDim : T.secureDim}
                 expanded={expanded.tech} onToggle={toggle}>
                 <div className="flex flex-col gap-3">
+                  {Object.keys(findings.tech?.identity_meta || {}).length > 0 && (
+                    <div className="rounded-lg overflow-hidden" style={{ border: `1px solid ${T.border}` }}>
+                      <div className="px-3 py-2" style={{ background: T.surface, borderBottom: `1px solid ${T.border}` }}>
+                        <p className="text-xs font-semibold" style={{ color: T.muted }}>Website Identity Metadata</p>
+                      </div>
+                      <div>
+                        {Object.entries(findings.tech.identity_meta).map(([key, value], idx, arr) => (
+                          <div key={key} className="flex items-start gap-3 px-3 py-2.5"
+                            style={{ borderBottom: idx < arr.length - 1 ? `1px solid ${T.border}` : 'none' }}>
+                            <p className="text-xs w-40 flex-shrink-0 font-medium" style={{ color: T.dim }}>
+                              {key.replace(/_/g, ' ')}
+                            </p>
+                            <p className="text-xs break-words" style={{ color: T.text }}>{value}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                   {(findings.tech?.packages || []).length > 0 && (
                     <div className="rounded-lg overflow-hidden" style={{ border: `1px solid ${T.border}` }}>
                       <div className="px-3 py-2" style={{ background: T.surface, borderBottom: `1px solid ${T.border}` }}>

@@ -578,6 +578,7 @@ def generate_report(results):
     hdr_count      = summary.get('header_issue_count', 0)
     wp_count       = summary.get('wordpress_issue_count', 0)
     zap_count      = summary.get('zap_issue_count', 0)
+    nikto_count    = summary.get('nikto_issue_count', 0)
     xss_count      = summary.get('xss_count', 0)
     tech_count     = summary.get('tech_issue_count', 0)
     advisory_count = summary.get('advisory_count', 0)
@@ -770,6 +771,7 @@ def generate_report(results):
             ('HTTP Header Issues',      hdr_count,          INFO),
             ('WordPress Issues',        wp_count,           WARN),
             ('OWASP ZAP Alerts',        zap_count,          DANGER),
+            ('Nikto Findings',          nikto_count,        WARN),
             ('XSS Vulnerabilities',     xss_count,          PURPLE),
             ('Technology Exposure',     tech_count,         INFO),
             ('Dependency Advisories',   advisory_count,     DANGER),
@@ -944,6 +946,27 @@ def generate_report(results):
         story.extend(_findings_block(zap_issues, DANGER, ST))
     else:
         story.append(Paragraph('✓  OWASP ZAP found no additional security alerts.', ST['secure']))
+    story.append(sp(10))
+
+    # Nikto
+    nikto = findings.get('nikto') or results.get('nikto') or {}
+    nikto_issues = nikto.get('issues') or []
+    nikto_disabled = nikto.get('status') in ('not_run', 'disabled', 'unavailable', None) and not nikto_issues
+    story.append(_section_header(
+        'Nikto Web Server Scan',
+        'Not available' if nikto_disabled else
+        (f'{len(nikto_issues)} finding{"s" if len(nikto_issues) != 1 else ""}' if nikto_issues else 'No findings'),
+        '—' if nikto_disabled else ('✗' if nikto_issues else '✓'),
+        DIM if nikto_disabled else (WARN if nikto_issues else SECURE), ST,
+    ))
+    story.append(sp(4))
+    if nikto_disabled:
+        story.append(Paragraph('Nikto was not run in this scan environment.', ST['body']))
+    elif nikto_issues:
+        story.extend(_findings_block(nikto_issues, WARN, ST))
+        story.extend(_recs_block(nikto.get('recommendations') or [], ST))
+    else:
+        story.append(Paragraph('✓  Nikto found no additional web server findings.', ST['secure']))
     story.append(sp(10))
 
     # Malicious Content
@@ -1541,6 +1564,7 @@ def generate_report(results):
             (hdr_count, 'HTTP Headers', 'Add missing security headers (CSP, HSTS, X-Frame-Options, etc.).'),
             (wp_count, 'WordPress', 'Update core, themes and plugins; restrict XML-RPC and REST exposure.'),
             (zap_count, 'ZAP Alerts', 'Triage each alert and patch confirmed vulnerabilities.'),
+            (nikto_count, 'Nikto Findings', 'Review web server defaults, exposed files, and version-specific Nikto findings.'),
             (xss_count, 'XSS', 'Encode all output and implement a Content-Security-Policy header.'),
             (tech_count, 'Technology Exposure', 'Patch outdated client libraries, disable directory indexes, and reduce version disclosure.'),
             (advisory_count, 'Dependency Risk', 'Upgrade vulnerable packages, review CVE/CWE exposure, and automate dependency scanning in CI/CD.'),

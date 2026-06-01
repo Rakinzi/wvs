@@ -7,6 +7,9 @@ from urllib.parse import urlparse
 
 import certifi
 
+from app.scanners.external_tooling import SSLScanRunner
+from app.settings import settings
+
 _WEAK_PROTOCOLS = {"SSLv2", "SSLv3", "TLSv1", "TLSv1.1"}
 _WEAK_CIPHERS = {
     "RC4", "DES", "3DES", "IDEA", "EXPORT", "NULL", "ANON", "MD5",
@@ -23,6 +26,9 @@ def _parse_cert_dt(value: str) -> datetime:
 
 
 class SSLScanner:
+    def __init__(self):
+        self.sslscan = SSLScanRunner(settings.sslscan_cli_path, settings.external_tools_timeout_seconds)
+
     def check(self, url: str) -> dict:
         hostname = urlparse(url).hostname
         if not hostname:
@@ -63,6 +69,7 @@ class SSLScanner:
             "cipher": cipher_name,
             "self_signed": issuer == subject,
             "issues": [],
+            "sslscan": {"status": "disabled", "issues": []},
         }
 
         # Expiry
@@ -186,6 +193,14 @@ class SSLScanner:
 
         if result["issues"] and result["valid"]:
             result["has_warnings"] = True
+
+        if settings.external_tools_enabled and settings.sslscan_enabled:
+            sslscan_result = self.sslscan.scan(url)
+            result["sslscan"] = sslscan_result
+            for issue in sslscan_result.get("issues", []) or []:
+                result["issues"].append(issue)
+            if sslscan_result.get("issues"):
+                result["has_warnings"] = True
 
         return result
 

@@ -13,41 +13,41 @@ import {
   AreaChart, Area,
 } from 'recharts';
 import { useDashboardData } from '../hooks/useDashboardData';
+import { parseApiDate } from '../lib/time';
 
 /* Recharts can't read CSS vars — literals only */
 const C = {
-  border:  '#27272a',
-  dim:     '#52525b',
-  muted:   '#71717a',
-  text:    '#fafafa',
-  primary: '#6366f1',
-  secure:  '#22c55e',
-  warn:    '#f59e0b',
-  danger:  '#ef4444',
-  info:    '#38bdf8',
-  purple:  '#a78bfa',
+  border:  '#1e1e28',
+  dim:     '#44445a',
+  muted:   '#6b6b80',
+  text:    '#eeeef0',
+  primary: '#00d4aa',
+  secure:  '#00d4aa',
+  warn:    '#f0a040',
+  danger:  '#ff4f4f',
+  info:    '#5b9fff',
 };
 
 const VULN_COLORS = {
-  'SQL Injection':     '#ef4444',
-  'SSL Issues':        '#f59e0b',
-  'Malicious Content': '#a78bfa',
-  'Header Issues':     '#38bdf8',
-  'WordPress Issues':  '#f59e0b',
-  'ZAP Alerts':        '#fb7185',
-  'Dependency CVEs':   '#ef4444',
+  'SQL Injection':     '#ff4f4f',
+  'SSL Issues':        '#f0a040',
+  'Malicious Content': '#5b9fff',
+  'Header Issues':     '#00d4aa',
+  'WordPress Issues':  '#f0a040',
+  'ZAP Alerts':        '#ff7a7a',
+  'Dependency CVEs':   '#ff4f4f',
   'Malware Artifacts': '#dc2626',
 };
-const PIE_FALLBACK = ['#6366f1', '#8b5cf6', '#a78bfa', '#38bdf8', '#22c55e'];
+const PIE_FALLBACK = ['#00d4aa', '#00b894', '#5b9fff', '#f0a040', '#22c55e'];
 
 const tooltipStyle = {
-  background: '#1c1c22',
-  border: '1px solid #3f3f46',
-  borderRadius: '10px',
-  color: '#fafafa',
-  fontSize: '12px',
-  fontFamily: 'Plus Jakarta Sans, sans-serif',
-  boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
+  background: 'var(--color-card)',
+  border: '1px solid var(--color-border)',
+  borderRadius: '6px',
+  color: 'var(--color-text)',
+  fontSize: '11px',
+  fontFamily: "'IBM Plex Mono', monospace",
+  boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
   padding: '8px 12px',
 };
 
@@ -74,34 +74,45 @@ const useCountUp = (target, duration = 800) => {
   return display;
 };
 
-/* ── Stat card ── */
+/* ── Stat card — ruled terminal style ── */
 const StatCard = ({ icon: Icon, label, value, sub, danger, warn, secure }) => {
   const accent = danger ? C.danger : warn ? C.warn : secure ? C.secure : C.primary;
-  const dimBg  = danger ? '#ef444418' : warn ? '#f59e0b18' : secure ? '#22c55e18' : '#6366f118';
-  const glowColor = danger ? 'rgba(239,68,68,0.2)' : warn ? 'rgba(245,158,11,0.2)' : secure ? 'rgba(34,197,94,0.15)' : 'rgba(99,102,241,0.2)';
   const count = useCountUp(value);
+  const [hov, setHov] = React.useState(false);
   return (
     <div
-      className="card card-hover card-accent p-5 flex flex-col gap-3"
-      style={{ transition: 'border-color 150ms ease, box-shadow 200ms ease' }}
+      style={{
+        background: hov ? 'var(--color-surface)' : 'var(--color-bg)',
+        borderTop: `2px solid ${hov ? accent : 'transparent'}`,
+        padding: '16px 18px 14px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 10,
+        transition: 'background 120ms ease, border-color 120ms ease',
+        cursor: 'default',
+      }}
+      onMouseEnter={() => setHov(true)}
+      onMouseLeave={() => setHov(false)}
     >
-      <div className="flex items-center justify-between">
-        <div
-          className="w-8 h-8 rounded-lg flex items-center justify-center"
-          style={{ background: dimBg, boxShadow: `0 0 12px ${glowColor}` }}
-        >
-          <Icon size={14} style={{ color: accent }} />
-        </div>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+        <Icon size={11} style={{ color: accent, opacity: 0.6, marginTop: 2 }} />
         <span
-          className="text-2xl font-bold tabular-nums stat-value"
-          style={{ color: accent === C.primary ? 'var(--color-text)' : accent, letterSpacing: '-0.04em' }}
+          className="stat-value"
+          style={{
+            fontFamily: "'IBM Plex Mono', monospace",
+            fontSize: 24,
+            fontWeight: 700,
+            color: accent,
+            letterSpacing: '-0.04em',
+            lineHeight: 1,
+          }}
         >
           {count ?? '—'}
         </span>
       </div>
       <div>
-        <p className="text-xs font-semibold" style={{ color: 'var(--color-text-muted)' }}>{label}</p>
-        {sub && <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-dim)' }}>{sub}</p>}
+        <p style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: '0.08em', textTransform: 'uppercase', fontFamily: "'IBM Plex Mono', monospace" }}>{label}</p>
+        {sub && <p style={{ fontSize: 10, color: C.dim, marginTop: 3 }}>{sub}</p>}
       </div>
     </div>
   );
@@ -110,24 +121,23 @@ const StatCard = ({ icon: Icon, label, value, sub, danger, warn, secure }) => {
 /* ── Activity row ── */
 const ActivityRow = ({ icon: Icon, iconBg, iconColor, primary, badge, badgeColor, meta, onAction }) => (
   <div
-    className="flex items-center gap-3 px-4 py-3 transition-colors duration-100 hover:bg-[var(--color-elevated)] group"
-    style={{ borderBottom: '1px solid var(--color-border)' }}
+    className="flex items-center gap-3 px-4 py-2.5 transition-colors duration-100 group"
+    style={{
+      borderBottom: '1px solid var(--color-border)',
+      borderLeft: `2px solid ${iconColor || 'transparent'}`,
+    }}
+    onMouseEnter={e => { e.currentTarget.style.background = '#0f0f15'; }}
+    onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
   >
-    <div
-      className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0"
-      style={{ background: iconBg, color: iconColor }}
-    >
-      <Icon size={12} />
-    </div>
     <div className="flex-1 min-w-0">
       <p
-        className="text-xs font-medium truncate"
-        style={{ color: 'var(--color-text)', fontFamily: 'IBM Plex Mono, monospace' }}
+        className="text-xs truncate"
+        style={{ color: 'var(--color-text)', fontFamily: "'IBM Plex Mono', monospace", fontWeight: 400 }}
       >
         {primary}
       </p>
       {badge && (
-        <span className="text-xs font-semibold mt-0.5" style={{ color: badgeColor }}>
+        <span className="text-xs font-semibold mt-0.5 block" style={{ color: badgeColor, fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
           {badge}
         </span>
       )}
@@ -135,8 +145,7 @@ const ActivityRow = ({ icon: Icon, iconBg, iconColor, primary, badge, badgeColor
     <div className="flex items-center gap-2 flex-shrink-0">
       {meta && (
         <span
-          className="text-xs"
-          style={{ color: 'var(--color-text-dim)', fontFamily: 'IBM Plex Mono, monospace' }}
+          style={{ color: 'var(--color-text-dim)', fontFamily: "'IBM Plex Mono', monospace", fontSize: 10 }}
         >
           {meta}
         </span>
@@ -144,10 +153,10 @@ const ActivityRow = ({ icon: Icon, iconBg, iconColor, primary, badge, badgeColor
       {onAction && (
         <button
           onClick={onAction}
-          className="text-xs font-medium cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity duration-150 px-2 py-1 rounded"
-          style={{ color: 'var(--color-primary)', background: 'var(--color-primary-dim)' }}
+          className="text-xs font-medium cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity duration-150 px-2 py-0.5"
+          style={{ color: 'var(--color-primary)', fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, border: '1px solid rgba(0,212,170,0.25)', background: 'rgba(0,212,170,0.06)' }}
         >
-          View →
+          view →
         </button>
       )}
     </div>
@@ -157,20 +166,17 @@ const ActivityRow = ({ icon: Icon, iconBg, iconColor, primary, badge, badgeColor
 /* ── Section header ── */
 const SectionHead = ({ icon: Icon, accent, title, action }) => (
   <div
-    className="flex items-center justify-between px-5 py-3.5"
-    style={{ borderBottom: '1px solid var(--color-border)' }}
+    className="flex items-center justify-between px-4 py-2.5"
+    style={{ borderBottom: '1px solid var(--color-border)', borderLeft: `2px solid ${accent || 'var(--color-border-bright)'}` }}
   >
-    <div className="flex items-center gap-2">
-      <Icon size={13} style={{ color: accent || 'var(--color-text-dim)' }} />
-      <span className="section-label">{title}</span>
-    </div>
+    <span className="section-label" style={{ color: 'var(--color-text-muted)' }}>{title}</span>
     {action && (
       <button
         onClick={action.onClick}
-        className="text-xs font-medium flex items-center gap-1 cursor-pointer transition-colors duration-150 hover:underline"
-        style={{ color: 'var(--color-primary)' }}
+        className="flex items-center gap-1 cursor-pointer"
+        style={{ color: 'var(--color-primary)', fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, fontWeight: 600, letterSpacing: '0.04em', background: 'none', border: 'none' }}
       >
-        {action.label} <ArrowRight size={10} />
+        {action.label} <ArrowRight size={9} />
       </button>
     )}
   </div>
@@ -178,19 +184,14 @@ const SectionHead = ({ icon: Icon, accent, title, action }) => (
 
 /* ── Empty state ── */
 const Empty = ({ icon: Icon, label, cta, onCta }) => (
-  <div className="flex flex-col items-center gap-3 py-10">
-    <div
-      className="w-10 h-10 rounded-xl flex items-center justify-center"
-      style={{ background: 'var(--color-elevated)' }}
-    >
-      <Icon size={18} style={{ color: 'var(--color-text-dim)' }} />
-    </div>
-    <p className="text-sm" style={{ color: 'var(--color-text-dim)' }}>{label}</p>
+  <div className="flex flex-col items-center gap-2 py-8">
+    <Icon size={14} style={{ color: 'var(--color-text-dim)' }} />
+    <p style={{ fontSize: 11, color: 'var(--color-text-dim)', fontFamily: "'IBM Plex Mono', monospace" }}>{label}</p>
     {cta && (
       <button
         onClick={onCta}
-        className="text-xs font-semibold cursor-pointer"
-        style={{ color: 'var(--color-primary)' }}
+        className="cursor-pointer"
+        style={{ color: 'var(--color-primary)', fontSize: 11, fontFamily: "'IBM Plex Mono', monospace", background: 'none', border: 'none', fontWeight: 600 }}
       >
         {cta}
       </button>
@@ -209,7 +210,9 @@ const Dashboard = ({ navigateTo }) => {
   useEffect(() => { document.title = 'Dashboard — LaunchGuard'; }, []);
 
   const rel = (d) => {
-    const diff = Math.floor((Date.now() - new Date(d)) / 60000);
+    const date = parseApiDate(d);
+    if (!date) return '';
+    const diff = Math.floor((Date.now() - date.getTime()) / 60000);
     if (diff < 1) return 'just now';
     if (diff < 60) return `${diff}m ago`;
     const h = Math.floor(diff / 60);
@@ -267,11 +270,9 @@ const Dashboard = ({ navigateTo }) => {
           </div>
         ) : statsError ? (
           <div className="card p-8 flex flex-col items-center gap-4 text-center">
-            <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: 'var(--color-danger-dim)' }}>
-              <AlertTriangle size={18} style={{ color: 'var(--color-danger)' }} />
-            </div>
+            <AlertTriangle size={18} style={{ color: 'var(--color-danger)' }} />
             <div>
-              <p className="text-sm font-semibold" style={{ color: 'var(--color-text)' }}>Failed to load statistics</p>
+              <p className="text-sm font-semibold font-mono" style={{ color: 'var(--color-text)' }}>Failed to load statistics</p>
               <p className="text-xs mt-1" style={{ color: 'var(--color-text-muted)' }}>{statsError}</p>
             </div>
             <button onClick={fetchDashboardStats} className="btn-primary">
@@ -279,12 +280,14 @@ const Dashboard = ({ navigateTo }) => {
             </button>
           </div>
         ) : (
-          <div className="grid grid-cols-2 xl:grid-cols-5 gap-3 stagger">
+          <div className="grid grid-cols-2 xl:grid-cols-5 gap-px stagger" style={{ background: 'var(--color-border)' }}>
             <StatCard icon={Search}        label="Total Scans"      value={dashboardStats.totalScans}           sub={`${dashboardStats.today.scans} today`} />
             <StatCard icon={Flame}         label="Vulnerable"       value={dashboardStats.vulnerableScans}      sub={`${dashboardStats.today.vulnerabilities} new today`} danger />
             <StatCard icon={Database}      label="Dependency CVEs"  value={dashboardStats.dependencyAdvisories} sub="Across saved scans" warn />
             <StatCard icon={Shield}        label="Blocked Sites"    value={dashboardStats.blockedSites}         sub={`${dashboardStats.today.blockedAttempts} blocked today`} />
-            <StatCard icon={Activity}      label="Uptime Monitors"  value={dashboardStats.uptimeMonitors}       sub={dashboardStats.averageUptimePercent != null ? `${dashboardStats.averageUptimePercent}% avg 24h` : 'No checks yet'} secure />
+            <div className="col-span-2 xl:col-span-1">
+              <StatCard icon={Activity}    label="Uptime Monitors"  value={dashboardStats.uptimeMonitors}       sub={dashboardStats.averageUptimePercent != null ? `${dashboardStats.averageUptimePercent}% avg 24h` : 'No checks yet'} secure />
+            </div>
           </div>
         )}
 
@@ -326,7 +329,7 @@ const Dashboard = ({ navigateTo }) => {
                   <ActivityRow
                     key={m.id}
                     icon={m.status === 'up' ? CheckCircle : m.status === 'down' ? AlertTriangle : Clock}
-                    iconBg={m.status === 'up' ? '#22c55e20' : m.status === 'down' ? '#ef444420' : '#6366f120'}
+                    iconBg={m.status === 'up' ? '#22c55e20' : m.status === 'down' ? '#ff4f4f20' : '#00d4aa14'}
                     iconColor={m.status === 'up' ? C.secure : m.status === 'down' ? C.danger : C.primary}
                     primary={m.name}
                     badge={typeof m.uptime_percent_24h === 'number' ? `${m.uptime_percent_24h}% uptime` : m.status}
@@ -374,23 +377,17 @@ const Dashboard = ({ navigateTo }) => {
                   dashboardStats.recentBlockedAttempts.slice(0, 5).map((a) => (
                     <div
                       key={a.id}
-                      className="flex items-center gap-3 px-4 py-3"
-                      style={{ borderBottom: '1px solid var(--color-border)' }}
+                      className="flex items-center gap-3 px-4 py-2.5"
+                      style={{ borderBottom: '1px solid var(--color-border)', borderLeft: `2px solid ${C.danger}` }}
                     >
-                      <div
-                        className="w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0"
-                        style={{ background: '#ef444420' }}
-                      >
-                        <AlertTriangle size={11} style={{ color: C.danger }} />
-                      </div>
                       <div className="flex-1 min-w-0">
                         <p
                           className="text-xs truncate"
-                          style={{ color: 'var(--color-text)', fontFamily: 'IBM Plex Mono, monospace' }}
+                          style={{ color: 'var(--color-text)', fontFamily: "'IBM Plex Mono', monospace" }}
                         >
                           {a.url}
                         </p>
-                        <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-dim)' }}>{a.ip_address}</p>
+                        <p style={{ fontSize: 10, marginTop: 2, color: 'var(--color-text-dim)', fontFamily: "'IBM Plex Mono', monospace" }}>{a.ip_address}</p>
                       </div>
                     </div>
                   ))
@@ -402,30 +399,36 @@ const Dashboard = ({ navigateTo }) => {
 
             {/* Capabilities */}
             <div className="card overflow-hidden">
-              <SectionHead icon={Shield} accent={C.purple} title="Capabilities" />
-              <div className="p-3 flex flex-col gap-1">
+              <SectionHead icon={Shield} accent={C.info} title="Capabilities" />
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
                 {[
-                  { icon: Database, color: C.danger,  title: 'SQL Injection',     desc: 'Forms and URL parameters.' },
-                  { icon: Lock,     color: C.secure,  title: 'SSL / TLS',         desc: 'Certificate and cipher checks.' },
-                  { icon: Shield,   color: C.purple,  title: 'Malicious Sites',   desc: 'Phishing and malware domains.' },
-                  { icon: Globe,    color: C.primary, title: 'Access Monitoring', desc: 'Proxy-level blocked attempts.', nav: 'blockedAccess' },
-                ].map(({ icon: Icon, color, title, desc, nav }) => (
+                  { color: C.danger,  title: 'SQL Injection',     desc: 'Forms and URL parameters.' },
+                  { color: C.secure,  title: 'SSL / TLS',         desc: 'Certificate and cipher checks.' },
+                  { color: C.info,    title: 'Malicious Sites',   desc: 'Phishing and malware domains.' },
+                  { color: C.primary, title: 'Access Monitoring', desc: 'Proxy-level blocked attempts.', nav: 'blockedAccess' },
+                ].map(({ color, title, desc, nav }, i, arr) => (
                   <button
                     key={title}
                     onClick={nav ? () => navigateTo(nav) : undefined}
-                    className={`flex items-center gap-3 p-2.5 rounded-lg text-left w-full transition-colors duration-150 ${nav ? 'cursor-pointer hover:bg-[var(--color-elevated)]' : 'cursor-default'}`}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 12,
+                      padding: '10px 16px',
+                      borderTop: 'none',
+                      borderRight: 'none',
+                      borderBottom: i < arr.length - 1 ? '1px solid var(--color-border)' : 'none',
+                      borderLeft: `2px solid ${color}`,
+                      background: 'none', textAlign: 'left', width: '100%',
+                      cursor: nav ? 'pointer' : 'default',
+                      transition: 'background 100ms ease',
+                    }}
+                    onMouseEnter={e => { if (nav) e.currentTarget.style.background = '#0f0f15'; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = 'none'; }}
                   >
-                    <div
-                      className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0"
-                      style={{ background: `${color}18` }}
-                    >
-                      <Icon size={13} style={{ color }} />
-                    </div>
                     <div className="min-w-0 flex-1">
-                      <p className="text-xs font-semibold" style={{ color: 'var(--color-text)' }}>{title}</p>
-                      <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-dim)' }}>{desc}</p>
+                      <p style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text)', fontFamily: "'IBM Plex Mono', monospace" }}>{title}</p>
+                      <p style={{ fontSize: 10, color: 'var(--color-text-dim)', marginTop: 2 }}>{desc}</p>
                     </div>
-                    {nav && <ArrowRight size={11} style={{ color: 'var(--color-text-dim)', flexShrink: 0 }} />}
+                    {nav && <ArrowRight size={10} style={{ color: 'var(--color-text-dim)', flexShrink: 0 }} />}
                   </button>
                 ))}
               </div>
@@ -451,8 +454,8 @@ const Dashboard = ({ navigateTo }) => {
                     <Tooltip contentStyle={tooltipStyle}
                       labelFormatter={(v) => new Date(v).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })} />
                     <Legend wrapperStyle={{ color: C.muted, fontSize: '11px' }} />
-                    <Bar dataKey="scans" name="Scans" fill={C.primary} radius={[4,4,0,0]} />
-                    <Bar dataKey="vulnerabilities" name="Vulnerabilities" fill={C.danger} radius={[4,4,0,0]} />
+                    <Bar dataKey="scans" name="Scans" fill={C.primary} radius={[3,3,0,0]} />
+                    <Bar dataKey="vulnerabilities" name="Vulnerabilities" fill={C.danger} radius={[3,3,0,0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -499,14 +502,14 @@ const Dashboard = ({ navigateTo }) => {
 
             {/* Area chart */}
             <div className="lg:col-span-3 card overflow-hidden">
-              <SectionHead icon={Shield} accent={C.purple} title="Blocked Access Attempts — Last 7 Days" />
+              <SectionHead icon={Shield} accent={C.info} title="Blocked Access Attempts — Last 7 Days" />
               <div className="p-5" style={{ height: 190 }}>
                 <ResponsiveContainer width="100%" height="100%">
                   <AreaChart data={dashboardStats.blockedAttemptsByDay}>
                     <defs>
                       <linearGradient id="blockGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%"  stopColor={C.purple} stopOpacity={0.2} />
-                        <stop offset="95%" stopColor={C.purple} stopOpacity={0} />
+                        <stop offset="5%"  stopColor={C.danger} stopOpacity={0.18} />
+                        <stop offset="95%" stopColor={C.danger} stopOpacity={0} />
                       </linearGradient>
                     </defs>
                     <CartesianGrid strokeDasharray="2 4" stroke={C.border} vertical={false} />
@@ -516,7 +519,7 @@ const Dashboard = ({ navigateTo }) => {
                     <YAxis tick={{ fill: C.dim, fontSize: 11 }} axisLine={false} tickLine={false} width={28} />
                     <Tooltip contentStyle={tooltipStyle} />
                     <Area type="monotone" dataKey="count" name="Blocked"
-                      stroke={C.purple} fill="url(#blockGrad)" strokeWidth={2} dot={false} />
+                      stroke={C.danger} fill="url(#blockGrad)" strokeWidth={1.5} dot={false} />
                   </AreaChart>
                 </ResponsiveContainer>
               </div>

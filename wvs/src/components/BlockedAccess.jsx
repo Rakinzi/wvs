@@ -138,14 +138,9 @@ const BlockedAccess = ({ navigateTo }) => {
           <button onClick={() => navigateTo('dashboard')} className="btn-secondary flex items-center gap-1.5 text-xs">
             <ArrowLeft size={13} /> Back
           </button>
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: 'var(--color-danger-dim)' }}>
-              <AlertOctagon size={15} style={{ color: 'var(--color-danger)' }} />
-            </div>
-            <div>
-              <h1 className="text-base font-bold leading-tight" style={{ color: 'var(--color-text)' }}>Blocked Access Attempts</h1>
-              <p className="text-xs" style={{ color: 'var(--color-text-dim)' }}>{totalCount} total intercepts</p>
-            </div>
+          <div style={{ borderLeft: '2px solid var(--color-danger)', paddingLeft: 10 }}>
+            <h1 style={{ fontSize: 14, fontWeight: 700, color: 'var(--color-text)', letterSpacing: '-0.02em', margin: 0 }}>Blocked Access Attempts</h1>
+            <p style={{ fontSize: 10, color: 'var(--color-text-dim)', fontFamily: "'IBM Plex Mono', monospace", marginTop: 2 }}>{totalCount} total intercepts</p>
           </div>
         </div>
         <button onClick={fetchBlockedRequests} className="btn-secondary flex items-center gap-2 text-xs">
@@ -201,10 +196,8 @@ const BlockedAccess = ({ navigateTo }) => {
             </div>
           ) : error ? (
             <div className="flex flex-col items-center gap-4 py-20">
-              <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ background: 'var(--color-danger-dim)' }}>
-                <AlertTriangle size={20} style={{ color: 'var(--color-danger)' }} />
-              </div>
-              <p className="text-sm font-medium" style={{ color: 'var(--color-text)' }}>Error loading access attempts</p>
+              <AlertTriangle size={20} style={{ color: 'var(--color-danger)' }} />
+              <p className="text-sm font-medium font-mono" style={{ color: 'var(--color-text)' }}>Error loading access attempts</p>
               <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>{error}</p>
               <button onClick={fetchBlockedRequests} className="btn-primary">
                 <RefreshCw size={13} /> Retry
@@ -212,10 +205,8 @@ const BlockedAccess = ({ navigateTo }) => {
             </div>
           ) : blockedRequests.length === 0 ? (
             <div className="flex flex-col items-center gap-4 py-20">
-              <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ background: 'var(--color-elevated)' }}>
-                <Info size={22} style={{ color: 'var(--color-text-dim)' }} />
-              </div>
-              <p className="text-sm font-medium" style={{ color: 'var(--color-text)' }}>No blocked access attempts</p>
+              <Info size={22} style={{ color: 'var(--color-text-dim)' }} />
+              <p className="text-sm font-medium font-mono" style={{ color: 'var(--color-text)' }}>No blocked access attempts</p>
               <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>No one has attempted to access a blocked site yet.</p>
             </div>
           ) : filteredRequests.length === 0 ? (
@@ -242,11 +233,8 @@ const BlockedAccess = ({ navigateTo }) => {
                       <tr key={r.id} className="transition-colors hover:bg-[var(--color-elevated)]"
                         style={{ borderBottom: '1px solid var(--color-border-subtle)' }}>
                         <td className="px-5 py-4">
-                          <div className="flex items-center gap-2.5">
-                            <div className="w-6 h-6 rounded flex items-center justify-center flex-shrink-0"
-                              style={{ background: 'var(--color-danger-dim)' }}>
-                              <Globe size={11} style={{ color: 'var(--color-danger)' }} />
-                            </div>
+                          <div className="flex items-center gap-2">
+                            <Globe size={11} className="flex-shrink-0" style={{ color: 'var(--color-danger)', opacity: 0.7 }} />
                             <p className="text-xs font-mono font-medium truncate max-w-xs" style={{ color: 'var(--color-text)' }}>{r.url}</p>
                           </div>
                         </td>

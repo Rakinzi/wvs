@@ -19,16 +19,19 @@ const fmt = (d) => {
 
 const StatPill = ({ icon: Icon, label, value, danger, warn }) => {
   const accent = danger ? 'var(--color-danger)' : warn ? 'var(--color-warn)' : 'var(--color-primary)';
-  const bg     = danger ? 'var(--color-danger-dim)' : warn ? 'var(--color-warn-dim)' : 'var(--color-primary-dim)';
   return (
-    <div className="card p-4 flex items-center gap-3">
-      <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: bg }}>
-        <Icon size={14} style={{ color: accent }} />
+    <div style={{
+      background: 'var(--color-card)',
+      borderTop: `2px solid ${accent}`,
+      border: '1px solid var(--color-border)',
+      borderTop: `2px solid ${accent}`,
+      padding: '14px 16px',
+    }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+        <Icon size={11} style={{ color: accent, opacity: 0.6, marginTop: 2 }} />
+        <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 22, fontWeight: 700, color: accent, letterSpacing: '-0.04em', lineHeight: 1 }}>{value}</span>
       </div>
-      <div>
-        <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>{label}</p>
-        <p className="text-xl font-bold leading-tight tabular-nums" style={{ color: 'var(--color-text)', letterSpacing: '-0.03em' }}>{value}</p>
-      </div>
+      <p style={{ fontSize: 10, fontWeight: 700, color: 'var(--color-text-muted)', letterSpacing: '0.08em', textTransform: 'uppercase', fontFamily: "'IBM Plex Mono', monospace", marginTop: 8 }}>{label}</p>
     </div>
   );
 };
@@ -235,14 +238,9 @@ const ScanHistory = ({ navigateTo }) => {
           <button onClick={() => navigateTo('dashboard')} className="btn-secondary flex items-center gap-1.5 text-xs">
             <ArrowLeft size={13} /> Back
           </button>
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: 'var(--color-primary-dim)' }}>
-              <Clock size={15} style={{ color: 'var(--color-primary)' }} />
-            </div>
-            <div>
-              <h1 className="text-base font-bold leading-tight" style={{ color: 'var(--color-text)' }}>Scan History</h1>
-              <p className="text-xs" style={{ color: 'var(--color-text-dim)' }}>{scans.length} total records</p>
-            </div>
+          <div style={{ borderLeft: '2px solid var(--color-primary)', paddingLeft: 10 }}>
+            <h1 style={{ fontSize: 14, fontWeight: 700, color: 'var(--color-text)', letterSpacing: '-0.02em', margin: 0 }}>Scan History</h1>
+            <p style={{ fontSize: 10, color: 'var(--color-text-dim)', fontFamily: "'IBM Plex Mono', monospace", marginTop: 2 }}>{scans.length} total records</p>
           </div>
         </div>
         <button onClick={fetchScans} className="btn-secondary flex items-center gap-2 text-xs">
@@ -253,7 +251,7 @@ const ScanHistory = ({ navigateTo }) => {
       <div className="px-6 lg:px-10 py-6 flex flex-col gap-5">
 
         {/* Stats strip */}
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-3 gap-px" style={{ background: 'var(--color-border)' }}>
           <StatPill icon={Activity}    label="Total Scans" value={scans.length} />
           <StatPill icon={ShieldAlert} label="Vulnerable"  value={vulnCount}    danger />
           <StatPill icon={ShieldCheck} label="Secure"      value={secureCount} />
@@ -332,21 +330,17 @@ const ScanHistory = ({ navigateTo }) => {
               <Spinner size="md" label="Loading scan history…" />
             </div>
           ) : error ? (
-            <div className="flex flex-col items-center gap-4 py-20">
-              <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ background: 'var(--color-danger-dim)' }}>
-                <AlertTriangle size={20} style={{ color: 'var(--color-danger)' }} />
-              </div>
-              <p className="text-sm font-medium" style={{ color: 'var(--color-text)' }}>Error loading history</p>
-              <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>{error}</p>
+            <div className="flex flex-col items-center gap-3 py-16">
+              <AlertTriangle size={16} style={{ color: 'var(--color-danger)' }} />
+              <p style={{ fontSize: 12, color: 'var(--color-text-muted)', fontFamily: "'IBM Plex Mono', monospace" }}>Error loading history</p>
+              <p style={{ fontSize: 11, color: 'var(--color-text-dim)', fontFamily: "'IBM Plex Mono', monospace" }}>{error}</p>
               <button onClick={fetchScans} className="btn-primary">
                 <RefreshCw size={13} /> Retry
               </button>
             </div>
           ) : filtered.length === 0 ? (
-            <div className="flex flex-col items-center gap-4 py-20">
-              <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ background: 'var(--color-elevated)' }}>
-                <Search size={20} style={{ color: 'var(--color-text-dim)' }} />
-              </div>
+            <div className="flex flex-col items-center gap-3 py-16">
+              <Search size={14} style={{ color: 'var(--color-text-dim)' }} />
               {q || filter !== 'all' ? (
                 <>
                   <p className="text-sm font-medium" style={{ color: 'var(--color-text)' }}>No matching scans</p>

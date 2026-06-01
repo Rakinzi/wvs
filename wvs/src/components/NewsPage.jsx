@@ -1,32 +1,33 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   Shield, ArrowLeft, AlertTriangle, ChevronRight, RefreshCw,
-  Tag, ExternalLink, Clock, Search, Filter, ChevronDown, Menu, X,
+  Tag, ExternalLink, Clock, Search, Filter, ChevronDown,
 } from 'lucide-react';
 import { apiJson } from '../lib/api';
 import Footer from './Footer';
+import PublicNav from './PublicNav';
 
 const T = {
-  bg:      '#09090b',
-  surface: '#0f0f11',
-  card:    '#141418',
-  elev:    '#1c1c22',
-  border:  '#27272a',
-  borderSubtle: '#1e1e21',
-  text:    '#fafafa',
-  muted:   '#71717a',
-  dim:     '#3f3f46',
-  primary: '#6366f1',
-  danger:  '#ef4444',
-  dangerDim: 'rgba(239,68,68,0.1)',
-  warn:    '#f59e0b',
-  warnDim: 'rgba(245,158,11,0.1)',
-  info:    '#38bdf8',
-  infoDim: 'rgba(56,189,248,0.1)',
-  secure:  '#22c55e',
-  secureDim: 'rgba(34,197,94,0.1)',
-  purple:  '#a78bfa',
-  purpleDim: 'rgba(167,139,250,0.1)',
+  bg:      'var(--color-bg)',
+  surface: 'var(--color-surface)',
+  card:    'var(--color-card)',
+  elev:    'var(--color-elevated)',
+  border:  'var(--color-border)',
+  borderSubtle: 'var(--color-border-subtle)',
+  text:    'var(--color-text)',
+  muted:   'var(--color-text-muted)',
+  dim:     'var(--color-text-dim)',
+  primary: 'var(--color-primary)',
+  danger:  'var(--color-danger)',
+  dangerDim: 'var(--color-danger-dim)',
+  warn:    'var(--color-warn)',
+  warnDim: 'var(--color-warn-dim)',
+  info:    'var(--color-info)',
+  infoDim: 'var(--color-info-dim)',
+  secure:  'var(--color-secure)',
+  secureDim: 'var(--color-secure-dim)',
+  purple:  'var(--color-info)',
+  purpleDim: 'var(--color-info-dim)',
 };
 
 const CATEGORIES = ['All', 'Vulnerability', 'Advisory', 'Research', 'Tool', 'General'];
@@ -50,7 +51,7 @@ const ArticleCard = ({ article, onClick }) => {
   const sev = severityColor(article.severity);
   return (
     <button onClick={() => onClick(article)}
-      style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 14, padding: 0, textAlign: 'left', width: '100%', cursor: 'pointer', transition: 'border-color 200ms', fontFamily: 'inherit', overflow: 'hidden' }}
+      style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 10, padding: 0, textAlign: 'left', width: '100%', cursor: 'pointer', transition: 'border-color 200ms', fontFamily: 'inherit', overflow: 'hidden' }}
       onMouseEnter={e => e.currentTarget.style.borderColor = T.primary + '60'}
       onMouseLeave={e => e.currentTarget.style.borderColor = T.border}>
       {article.image_url && (
@@ -182,11 +183,6 @@ const ArticleDetail = ({ article, onBack }) => {
   );
 };
 
-const NAV_LINKS = [
-  { label: 'Features', href: '/landing#features' },
-  { label: 'How it works', href: '/landing#how-it-works' },
-  { label: 'Pricing', href: '/landing#pricing' },
-];
 
 const NewsPage = ({ navigateTo, isAuthenticated }) => {
   const [articles, setArticles] = useState([]);
@@ -201,7 +197,6 @@ const NewsPage = ({ navigateTo, isAuthenticated }) => {
   const [selected, setSelected] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [filterOpen, setFilterOpen] = useState(false);
-  const [mobileOpen, setMobileOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
 
   useEffect(() => {
@@ -258,81 +253,15 @@ const NewsPage = ({ navigateTo, isAuthenticated }) => {
     <div style={{ background: T.bg, minHeight: '100vh', color: T.text, fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif" }}>
 
       {/* Navbar */}
-      <header style={{
-        position: 'sticky', top: 0, zIndex: 40,
-        background: scrolled ? 'rgba(9,9,11,0.92)' : T.surface,
-        backdropFilter: scrolled ? 'blur(16px)' : 'none',
-        borderBottom: `1px solid ${scrolled ? 'rgba(39,39,42,0.8)' : T.border}`,
-        transition: 'all 300ms ease',
-      }}>
-        <div style={{ maxWidth: 1120, margin: '0 auto', padding: '0 24px', height: 64, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          {/* Logo + breadcrumb */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <button onClick={() => navigateTo('landing')}
-              style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
-              <img src="/launchguard-icon.svg" alt="LaunchGuard" style={{ width: 30, height: 30 }} />
-              <span style={{ fontWeight: 700, fontSize: 15, letterSpacing: '-0.02em', background: 'linear-gradient(135deg, #818cf8 0%, #6366f1 40%, #a78bfa 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>
-                LaunchGuard
-              </span>
-            </button>
-            <ChevronRight size={13} color={T.dim} />
-            <span style={{ fontSize: 13, fontWeight: 600, color: T.muted }}>Security News</span>
-          </div>
+      <PublicNav
+        scrolled={scrolled}
+        onLogoClick={() => navigateTo('landing')}
+        onLogin={() => isAuthenticated ? navigateTo('dashboard') : navigateTo('login')}
+        isAuthenticated={isAuthenticated}
+        breadcrumb="Security News"
+      />
 
-          {/* Desktop nav links */}
-          <nav style={{ display: 'flex', alignItems: 'center', gap: 4 }} className="hidden-mobile">
-            {NAV_LINKS.map(({ label, href }) => (
-              <a key={label} href={href}
-                style={{ padding: '6px 14px', borderRadius: 8, fontSize: 14, color: T.muted, textDecoration: 'none', transition: 'color 150ms' }}
-                onMouseEnter={e => e.target.style.color = T.text}
-                onMouseLeave={e => e.target.style.color = T.muted}>
-                {label}
-              </a>
-            ))}
-          </nav>
-
-          {/* CTA */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            {isAuthenticated ? (
-              <button onClick={() => navigateTo('dashboard')}
-                style={{ padding: '7px 16px', borderRadius: 8, fontSize: 13, fontWeight: 700, background: 'linear-gradient(135deg, #6366f1, #4f46e5)', border: 'none', color: 'white', cursor: 'pointer', fontFamily: 'inherit', boxShadow: '0 0 18px rgba(99,102,241,0.3)' }}>
-                Dashboard
-              </button>
-            ) : (
-              <>
-                <button onClick={() => navigateTo('login')}
-                  style={{ padding: '7px 14px', borderRadius: 8, fontSize: 13, fontWeight: 600, background: 'none', border: `1px solid ${T.border}`, color: T.muted, cursor: 'pointer', fontFamily: 'inherit' }}
-                  className="show-desktop">
-                  Sign in
-                </button>
-                <button onClick={() => navigateTo('login')}
-                  style={{ padding: '7px 16px', borderRadius: 8, fontSize: 13, fontWeight: 700, background: 'linear-gradient(135deg, #6366f1, #4f46e5)', border: 'none', color: 'white', cursor: 'pointer', fontFamily: 'inherit', boxShadow: '0 0 18px rgba(99,102,241,0.3)' }}>
-                  Get started
-                </button>
-              </>
-            )}
-            <button onClick={() => setMobileOpen(o => !o)}
-              style={{ display: 'none', background: 'none', border: `1px solid ${T.border}`, borderRadius: 8, padding: 7, cursor: 'pointer', color: T.muted }}
-              className="show-mobile" aria-label="Menu">
-              {mobileOpen ? <X size={16} /> : <Menu size={16} />}
-            </button>
-          </div>
-        </div>
-
-        {/* Mobile nav */}
-        {mobileOpen && (
-          <div style={{ borderTop: `1px solid ${T.border}`, padding: '8px 16px 16px', display: 'flex', flexDirection: 'column', gap: 4 }}>
-            {NAV_LINKS.map(({ label, href }) => (
-              <a key={label} href={href} onClick={() => setMobileOpen(false)}
-                style={{ padding: '10px 12px', borderRadius: 8, fontSize: 14, color: T.muted, textDecoration: 'none', display: 'block' }}>
-                {label}
-              </a>
-            ))}
-          </div>
-        )}
-      </header>
-
-      <div style={{ maxWidth: 1120, margin: '0 auto', padding: '40px 24px' }}>
+      <div style={{ maxWidth: 1040, margin: '0 auto', padding: '48px 24px' }}>
 
         {selected ? (
           detailLoading ? (
@@ -347,7 +276,7 @@ const NewsPage = ({ navigateTo, isAuthenticated }) => {
             {/* Page header */}
             <div style={{ marginBottom: 40 }}>
               <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.12em', color: T.primary, marginBottom: 12, fontFamily: "'IBM Plex Mono', monospace" }}>SECURITY INTELLIGENCE</p>
-              <h1 style={{ fontSize: 'clamp(28px, 4vw, 40px)', fontWeight: 800, letterSpacing: '-0.025em', margin: '0 0 10px' }}>
+              <h1 style={{ fontFamily: "'Syne', system-ui, sans-serif", fontSize: 'clamp(26px, 3.5vw, 38px)', fontWeight: 800, letterSpacing: '-0.04em', margin: '0 0 10px' }}>
                 Security News & Advisories
               </h1>
               <p style={{ fontSize: 15, color: T.muted }}>
@@ -363,14 +292,14 @@ const NewsPage = ({ navigateTo, isAuthenticated }) => {
                   value={search}
                   onChange={e => setSearch(e.target.value)}
                   placeholder="Search articles, tags, CVEs…"
-                  style={{ width: '100%', paddingLeft: 36, paddingRight: 14, paddingTop: 9, paddingBottom: 9, borderRadius: 9, background: T.card, border: `1px solid ${T.border}`, color: T.text, fontSize: 13, fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box' }}
+                  style={{ width: '100%', paddingLeft: 36, paddingRight: 14, paddingTop: 8, paddingBottom: 8, borderRadius: 6, background: T.card, border: `1px solid ${T.border}`, color: T.text, fontSize: 13, fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box' }}
                 />
               </div>
 
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 {CATEGORIES.map((c) => (
                   <button key={c} onClick={() => { setCategory(c); setPage(1); }}
-                    style={{ padding: '7px 14px', borderRadius: 8, fontSize: 12, fontWeight: 600, background: category === c ? T.primary + '20' : T.card, border: `1px solid ${category === c ? T.primary + '60' : T.border}`, color: category === c ? T.primary : T.muted, cursor: 'pointer', fontFamily: 'inherit', transition: 'all 150ms' }}>
+                    style={{ padding: '6px 12px', borderRadius: 4, fontSize: 11, fontWeight: 600, background: category === c ? T.primary + '15' : T.card, border: `1px solid ${category === c ? T.primary + '50' : T.border}`, color: category === c ? T.primary : T.muted, cursor: 'pointer', fontFamily: "'IBM Plex Mono', monospace", letterSpacing: '0.04em', transition: 'all 150ms' }}>
                     {c}
                   </button>
                 ))}
@@ -440,7 +369,7 @@ const NewsPage = ({ navigateTo, isAuthenticated }) => {
                     )}
                     {Array.from({ length: Math.min(pages, 7) }, (_, i) => i + 1).map((p) => (
                       <button key={p} onClick={() => fetchArticles(p)}
-                        style={{ padding: '7px 12px', borderRadius: 8, fontSize: 13, background: p === page ? T.primary : T.card, border: `1px solid ${p === page ? T.primary : T.border}`, color: p === page ? 'white' : T.muted, cursor: 'pointer', fontFamily: 'inherit', minWidth: 36 }}>
+                        style={{ padding: '7px 12px', borderRadius: 5, fontSize: 13, background: p === page ? T.primary : T.card, border: `1px solid ${p === page ? T.primary : T.border}`, color: p === page ? '#060608' : T.muted, cursor: 'pointer', fontFamily: "'IBM Plex Mono', monospace", fontWeight: p === page ? 700 : 400, minWidth: 36 }}>
                         {p}
                       </button>
                     ))}

@@ -8,6 +8,9 @@ import httpx
 from bs4 import BeautifulSoup
 from playwright.sync_api import sync_playwright
 
+from app.scanners.external_tooling import Wafw00fRunner, WhatWebRunner
+from app.settings import settings
+
 
 # ── Signature database ───────────────────────────────────────────────────────
 # Each entry: pattern matched against HTML/headers/scripts, mapped to a category and tech name.
@@ -690,6 +693,8 @@ def _advisory_severity(vuln: dict[str, Any]) -> str:
 class TechScanner:
     def __init__(self, timeout: int = 20):
         self.timeout = timeout
+        self.whatweb = WhatWebRunner(settings.whatweb_cli_path, settings.external_tools_timeout_seconds)
+        self.wafw00f = Wafw00fRunner(settings.wafw00f_cli_path, settings.external_tools_timeout_seconds)
         self.advisory_client = httpx.Client(
             timeout=min(timeout, 10),
             headers={"User-Agent": "WVS-TechScanner/2.0"},
@@ -760,6 +765,9 @@ class TechScanner:
             "status": "ok",
             "url": url,
             "technologies": {},
+            "identity_meta": {},
+            "whatweb": {"status": "disabled", "plugins": {}, "issues": []},
+            "waf": {"status": "disabled", "issues": []},
             "versions": {},
             "packages": [],
             "advisories": [],
@@ -781,6 +789,35 @@ class TechScanner:
                 }
 
         result["technologies"] = _fingerprint(html, headers)
+        soup = BeautifulSoup(html, "html.parser")
+        identity_meta: dict[str, str] = {}
+        for selector, key in [
+            ('meta[name="application-name"]', "application_name"),
+            ('meta[name="generator"]', "generator"),
+            ('meta[property="og:site_name"]', "og_site_name"),
+            ('meta[property="og:title"]', "og_title"),
+            ('meta[name="twitter:site"]', "twitter_site"),
+        ]:
+            tag = soup.select_one(selector)
+            if tag and tag.get("content"):
+                identity_meta[key] = str(tag.get("content")).strip()[:200]
+        result["identity_meta"] = identity_meta
+
+        if settings.external_tools_enabled and settings.whatweb_enabled:
+            result["whatweb"] = self.whatweb.scan(url)
+            for plugin_name in (result["whatweb"].get("plugins") or {}).keys():
+                bucket = result["technologies"].setdefault("external-fingerprints", [])
+                if plugin_name not in bucket:
+                    bucket.append(plugin_name)
+
+        if settings.external_tools_enabled and settings.wafw00f_enabled:
+            result["waf"] = self.wafw00f.scan(url)
+            for issue in result["waf"].get("issues", []) or []:
+                result["issues"].append(issue)
+            for firewall in result["waf"].get("firewalls", []) or []:
+                bucket = result["technologies"].setdefault("edge-security", [])
+                if firewall not in bucket:
+                    bucket.append(firewall)
         result["versions"] = _extract_versions(html)
         result["packages"] = _extract_packages(html, url)
         result["advisories"] = self._query_osv(result["packages"])
@@ -846,7 +883,7 @@ class TechScanner:
                 result["issues"].append({
                     "name": f"Detected: {next(t for t in all_techs_lower if risky in t).title()}",
                     "severity": "Info",
-                    "evidence": f"Identified in the tech stack.",
+                    "evidence": "Identified in the tech stack.",
                 })
                 result["recommendations"].append(rec)
 

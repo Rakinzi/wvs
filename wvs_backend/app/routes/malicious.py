@@ -3,7 +3,6 @@ from app.auth import get_current_user
 from app.models import MaliciousSite, BlockedRequest
 from app.schemas import AddMaliciousPayload, BlockedLogPayload
 from app.utils.db_manager import DBManager
-from app.scanners import SecurityScanner
 from flask_jwt_extended import jwt_required
 from app.utils.scan_helpers import normalize_target_url
 from app import db, limiter
@@ -33,6 +32,8 @@ def check_malicious():
         }), 200
     
     # If not in database, use the malicious detector
+    from app.scanners import SecurityScanner
+
     scanner = SecurityScanner()
     malicious_result = scanner.malicious_detector.analyze_url(url)
     

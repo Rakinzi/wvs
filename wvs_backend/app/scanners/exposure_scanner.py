@@ -8,6 +8,9 @@ from urllib.parse import urljoin, urlparse
 import httpx
 from html.parser import HTMLParser
 
+from app.scanners.external_tooling import FFufRunner
+from app.settings import settings
+
 EMAIL_PATTERN = re.compile(r"\b[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}\b", re.I)
 
 SENSITIVE_PATHS: list[dict] = [
@@ -404,7 +407,6 @@ CONTENT_SIGNALS: dict[str, re.Pattern] = {
     # Ruby Rails extras
     "/rails/info/properties":   re.compile(r'Rails version|Ruby version|RubyGems', re.I),
     "/rails/info/routes":       re.compile(r'GET|POST|PATCH|DELETE.*#', re.I),
-    "/log/production.log":      re.compile(r'Started (GET|POST)|Completed \d{3}', re.I),
     # API schema docs
     "/graphiql":                re.compile(r'GraphiQL|graphiql|__schema', re.I),
     "/graphql/console":         re.compile(r'GraphQL|graphql|__schema', re.I),
@@ -475,6 +477,11 @@ REC_BY_STACK = {
 class ExposureScanner:
     def __init__(self, timeout: int = 8):
         self.timeout = timeout
+        self.ffuf = FFufRunner(
+            settings.ffuf_cli_path,
+            settings.ffuf_wordlist,
+            settings.external_tools_timeout_seconds,
+        )
         self.client = httpx.Client(
             timeout=timeout,
             follow_redirects=False,
@@ -541,7 +548,7 @@ class ExposureScanner:
                 break
         return emails
 
-    def scan(self, url: str) -> dict[str, Any]:
+    def scan(self, url: str, enable_active_checks: bool = False) -> dict[str, Any]:
         base = self._base(url)
         findings = []
         stacks_hit: set[str] = set()
@@ -598,6 +605,9 @@ class ExposureScanner:
                 recommendations.append("Set `management.endpoints.web.exposure.include=health` only, or add IP allowlist via Spring Security.")
 
         score = max(0, 100 - sum(SEVERITY_SCORE.get(f["severity"], 5) for f in findings))
+        ffuf_result = {"status": "disabled", "issues": [], "discovered": []}
+        if settings.external_tools_enabled and settings.ffuf_enabled:
+            ffuf_result = self.ffuf.scan(url, enabled=enable_active_checks)
 
         return {
             "status": "issues_found" if findings else "ok",
@@ -605,6 +615,7 @@ class ExposureScanner:
             "score": score,
             "recommendations": recommendations,
             "discovered_emails": discovered_emails,
+            "ffuf": ffuf_result,
         }
 
     def close(self):

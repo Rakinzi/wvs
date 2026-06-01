@@ -9,6 +9,7 @@ from urllib.parse import urlparse
 import httpx
 
 from app.settings import settings
+from app.scanners.external_tooling import NmapRunner
 from app.utils.finding_normalizer import normalize_ux_findings
 from app.utils.remediation_prompts import build_builder_prompt
 from app.utils.scan_helpers import normalize_target_url
@@ -37,6 +38,9 @@ class ExposedServicesScanner:
         8025: "Common local mail catcher web UI port is reachable.",
     }
     HTTP_LIKE_PORTS = {80, 443, 3000, 5000, 5173, 8000, 8080, 8443, 9200, 8025}
+
+    def __init__(self):
+        self.nmap = NmapRunner(settings.nmap_cli_path, settings.external_tools_timeout_seconds)
 
     def _ports(self, explicit_ports: list[int] | None = None) -> list[int]:
         raw_ports = explicit_ports or [
@@ -203,12 +207,44 @@ class ExposedServicesScanner:
             for issue in (self._issue_for_service(normalized, service) for service in open_services)
             if issue is not None
         ]
+        nmap_result = {"status": "disabled", "issues": [], "open_services": []}
+        if settings.external_tools_enabled and settings.nmap_enabled:
+            nmap_result = self.nmap.scan(normalized, ports=selected_ports)
+            seen_ports = {int(service["port"]) for service in open_services}
+            for service in nmap_result.get("open_services", []) or []:
+                port = int(service.get("port") or 0)
+                if port and port not in seen_ports:
+                    open_services.append(service)
+                    seen_ports.add(port)
+            for issue in nmap_result.get("issues", []) or []:
+                raw_issues.append(
+                    ux_finding_defaults(
+                        "exposed_services",
+                        "Exposed Services",
+                        normalized,
+                        "network",
+                        title=issue.get("name") or "Public service detected by nmap",
+                        severity=str(issue.get("severity") or "medium").lower(),
+                        confidence="measured",
+                        evidence={
+                            "rule_id": "nmap-public-service",
+                            "description": issue.get("evidence") or "nmap detected a reachable service.",
+                            "metric": "open_port",
+                            "value": issue.get("port"),
+                            "threshold": "public-web-only",
+                        },
+                        user_impact="Unexpected reachable services increase the target attack surface.",
+                        technical_remediation="Close unused ports and restrict administrative or data services to trusted networks.",
+                        references=["nmap service/version detection"],
+                    )
+                )
         issues = normalize_ux_findings(raw_issues, default_scanner="exposed_services", default_category="Exposed Services")
         return {
             "status": "issues_found" if issues else "ok",
             "issues": issues,
             "open_services": open_services,
             "ports_checked": selected_ports,
+            "nmap": nmap_result,
             "recommendations": [
                 "Expose only required public web ports and place databases, caches, admin tools, and dev servers behind private network controls.",
                 "Remove Vite/Flask/Next development servers before launch and verify firewall rules from outside the deployment network.",

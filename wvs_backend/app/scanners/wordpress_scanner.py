@@ -4,11 +4,11 @@ import re
 from typing import Any
 from urllib.parse import parse_qs, urljoin, urlparse
 
-import requests
 import requests_cache
 from bs4 import BeautifulSoup
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
+from app.scanners.external_tooling import WPScanRunner
 from app.settings import settings
 
 # InfinityFree / VistaPanel AES anti-bot challenge
@@ -85,6 +85,7 @@ def compare_versions(left: str | None, right: str | None) -> int:
 class WordPressScanner:
     def __init__(self, timeout: int = 10):
         self.timeout = timeout
+        self.wpscan = WPScanRunner(settings.wpscan_cli_path, settings.external_tools_timeout_seconds)
         self.session = requests_cache.CachedSession(
             cache_name=f"{settings.requests_cache_name}_wordpress",
             backend="sqlite",
@@ -246,7 +247,7 @@ class WordPressScanner:
             return first_offer.get("current")
         return None
 
-    def check(self, url: str) -> dict[str, Any]:
+    def check(self, url: str, enable_active_checks: bool = False) -> dict[str, Any]:
         result: dict[str, Any] = {
             "status": "not_wordpress",
             "is_wordpress": False,
@@ -257,6 +258,7 @@ class WordPressScanner:
             "issues": [],
             "recommendations": [],
             "endpoints": {},
+            "wpscan": {"status": "disabled", "issues": []},
             "score": 100,
         }
 
@@ -324,6 +326,20 @@ class WordPressScanner:
             return result
 
         result["status"] = "detected"
+        if settings.external_tools_enabled and settings.wpscan_enabled and not enable_active_checks:
+            result["wpscan"] = {
+                "enabled": False,
+                "status": "not_authorized",
+                "issues": [],
+                "summary": "WPScan requires verified target ownership and active checks.",
+            }
+        elif settings.external_tools_enabled and settings.wpscan_enabled:
+            result["wpscan"] = self.wpscan.scan(url)
+            for issue in result["wpscan"].get("issues", []) or []:
+                result["issues"].append(issue)
+            if result["wpscan"].get("issues"):
+                result["recommendations"].append("Review WPScan findings and patch affected WordPress core, plugin, or theme components.")
+
         result["plugins"] = self._detect_plugins(html, site_base)
         result["themes"] = self._detect_themes(html)
 

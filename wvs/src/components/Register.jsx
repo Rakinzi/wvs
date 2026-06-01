@@ -192,7 +192,10 @@ const Register = () => {
             </button>
           </p>
           <p style={{ fontSize: 11, color: 'var(--color-text-dim)', textAlign: 'center', marginTop: 28 }}>
-            By creating an account you agree to our Terms of Service
+            By creating an account you agree to our{' '}
+            <a href="/terms" style={{ color: 'var(--color-primary)', textDecoration: 'none' }}>Terms of Service</a>
+            {' '}and{' '}
+            <a href="/privacy" style={{ color: 'var(--color-primary)', textDecoration: 'none' }}>Privacy Policy</a>
           </p>
         </>
       )}

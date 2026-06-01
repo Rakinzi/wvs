@@ -65,6 +65,23 @@ def test_product_readiness_scan_requires_verified_target_when_enabled(auth_clien
     assert "verified target" in response.get_json()["message"].lower()
 
 
+def test_active_checks_require_verified_target_even_when_global_gate_disabled(auth_client, auth_headers, app):
+    app.config["REQUIRE_VERIFIED_TARGETS"] = False
+
+    response = auth_client.post(
+        "/scan",
+        json={
+            "url": "https://example.com",
+            "scan_profile": "security_only",
+            "enable_active_checks": True,
+        },
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 400
+    assert "active checks require verified target ownership" in response.get_json()["message"].lower()
+
+
 def test_product_readiness_scan_queues_when_verified_target_exists(auth_client, auth_headers, app, user, monkeypatch):
     app.config["REQUIRE_VERIFIED_TARGETS"] = True
 
@@ -112,5 +129,7 @@ def test_product_readiness_scan_queues_when_verified_target_exists(auth_client, 
         assert job.scan_type == "product_readiness"
         assert job.findings["_config"]["page_paths"] == ["/", "/signup"]
         assert job.findings["_config"]["enable_active_checks"] is True
+        assert job.findings["_config"]["active_checks_authorized"] is True
+        assert job.findings["_config"]["verified_domain"] == "example.com"
         assert job.findings["_config"]["active_check_paths"] == ["POST /login"]
         assert job.findings["_config"]["active_check_budget"] == 5

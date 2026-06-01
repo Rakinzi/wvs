@@ -86,11 +86,11 @@ const ForgotPasswordModal = ({ onClose }) => {
 /* Shared split-screen wrapper used by Login and Register */
 export const AuthLayout = ({ visible, isDark, heroContent, children }) => {
   const heroBg = isDark
-    ? 'linear-gradient(140deg, #0c0c16 0%, #0a0a13 60%, #0e0e1c 100%)'
-    : 'linear-gradient(140deg, #eef2ff 0%, #e0e7ff 55%, #ede9fe 100%)';
+    ? 'linear-gradient(140deg, #060608 0%, #08080e 60%, #0a0a10 100%)'
+    : 'linear-gradient(140deg, #f0fdf8 0%, #e6faf5 55%, #f0f7ff 100%)';
   const heroMesh = isDark
-    ? 'radial-gradient(ellipse 70% 55% at 65% 25%, rgba(99,102,241,0.13) 0%, transparent 65%), radial-gradient(ellipse 45% 45% at 25% 85%, rgba(79,70,229,0.07) 0%, transparent 60%)'
-    : 'radial-gradient(ellipse 70% 55% at 65% 25%, rgba(99,102,241,0.2) 0%, transparent 65%), radial-gradient(ellipse 45% 45% at 25% 85%, rgba(79,70,229,0.1) 0%, transparent 60%)';
+    ? 'radial-gradient(ellipse 70% 55% at 65% 25%, rgba(0,212,170,0.08) 0%, transparent 65%), radial-gradient(ellipse 45% 45% at 25% 85%, rgba(91,159,255,0.05) 0%, transparent 60%)'
+    : 'radial-gradient(ellipse 70% 55% at 65% 25%, rgba(0,212,170,0.15) 0%, transparent 65%), radial-gradient(ellipse 45% 45% at 25% 85%, rgba(91,159,255,0.08) 0%, transparent 60%)';
   const dotColor = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(99,102,241,0.15)';
 
   return (
@@ -157,15 +157,13 @@ const HeroContent = ({ isDark }) => {
     <>
       {/* Headline */}
       <div>
-        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(99,102,241,0.14)', border: '1px solid rgba(99,102,241,0.3)', borderRadius: 100, padding: '4px 12px', marginBottom: 18 }}>
-          <span style={{ position: 'relative', display: 'inline-block' }}>
-            <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#22c55e', display: 'block', boxShadow: '0 0 8px #22c55e' }} />
-          </span>
-          <span style={{ fontSize: 10.5, fontWeight: 700, color: '#a5b4fc', letterSpacing: '0.08em', textTransform: 'uppercase' }}>Live protection active</span>
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(0,212,170,0.08)', border: '1px solid rgba(0,212,170,0.25)', borderRadius: 4, padding: '4px 12px', marginBottom: 18 }}>
+          <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#00d4aa', display: 'block', boxShadow: '0 0 8px #00d4aa' }} />
+          <span style={{ fontSize: 10, fontWeight: 700, color: '#00d4aa', letterSpacing: '0.1em', textTransform: 'uppercase', fontFamily: "'IBM Plex Mono', monospace" }}>Live protection active</span>
         </div>
-        <h2 style={{ fontSize: 30, fontWeight: 800, lineHeight: 1.2, color: txt, letterSpacing: '-0.035em', margin: '0 0 12px' }}>
+        <h2 style={{ fontFamily: "'Syne', system-ui, sans-serif", fontSize: 30, fontWeight: 800, lineHeight: 1.15, color: txt, letterSpacing: '-0.04em', margin: '0 0 12px' }}>
           Security intelligence<br />
-          <span style={{ background: 'linear-gradient(135deg, #818cf8 0%, #6366f1 50%, #a78bfa 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>
+          <span style={{ color: '#00d4aa' }}>
             for modern teams.
           </span>
         </h2>
@@ -183,14 +181,14 @@ const HeroContent = ({ isDark }) => {
               1,284 <span style={{ fontSize: 12, fontWeight: 500, color: dim }}>this month</span>
             </p>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.2)', borderRadius: 100, padding: '3px 9px' }}>
-            <Activity size={10} color="#22c55e" />
-            <span style={{ fontSize: 10.5, fontWeight: 700, color: '#22c55e' }}>+18%</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'rgba(0,212,170,0.08)', border: '1px solid rgba(0,212,170,0.2)', borderRadius: 4, padding: '3px 9px' }}>
+            <Activity size={10} color="#00d4aa" />
+            <span style={{ fontSize: 10, fontWeight: 700, color: '#00d4aa', fontFamily: "'IBM Plex Mono', monospace" }}>+18%</span>
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'flex-end', gap: 3, height: 44 }}>
           {bars.map((h, i) => (
-            <div key={i} style={{ flex: 1, borderRadius: 3, background: i === bars.length - 1 ? '#6366f1' : bar, height: `${h}%` }} />
+            <div key={i} style={{ flex: 1, borderRadius: 2, background: i === bars.length - 1 ? '#00d4aa' : bar, height: `${h}%` }} />
           ))}
         </div>
       </div>
@@ -249,7 +247,7 @@ const Login = () => {
     try {
       const { data } = await apiJson('/login', { method: 'POST', json: true, credentials: 'include', body: { identifier, password } });
       saveSession({ username: data.username, userId: data.user_id, expiresInSeconds: data.expires_in, isAdmin: data.is_admin });
-      navigate('/');
+      navigate('/', { replace: true });
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Failed to connect to server');
     } finally {

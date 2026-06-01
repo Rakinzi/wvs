@@ -212,7 +212,7 @@ const NewsAdmin = ({ navigateTo }) => {
     setError(null);
     try {
       const { data } = await apiJson(`/news/admin/all?page=${p}&per_page=20`, { auth: true });
-      setArticles(data.articles);
+      setArticles(data.articles || []);
       setTotal(data.total);
       setPage(data.page);
       setPages(data.pages);
@@ -272,8 +272,8 @@ const NewsAdmin = ({ navigateTo }) => {
   };
 
   const filtered = search
-    ? articles.filter(a => a.title.toLowerCase().includes(search.toLowerCase()) || a.category.toLowerCase().includes(search.toLowerCase()))
-    : articles;
+    ? (articles || []).filter(a => a.title.toLowerCase().includes(search.toLowerCase()) || a.category.toLowerCase().includes(search.toLowerCase()))
+    : (articles || []);
 
   if (editing || isNew) {
     return (

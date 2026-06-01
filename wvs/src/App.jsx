@@ -20,6 +20,8 @@ const UptimeMonitors = React.lazy(() => import('./components/UptimeMonitors'));
 const LandingPage = React.lazy(() => import('./components/LandingPage'));
 const NewsPage = React.lazy(() => import('./components/NewsPage'));
 const NewsAdmin = React.lazy(() => import('./components/NewsAdmin'));
+const TermsOfService = React.lazy(() => import('./components/TermsOfService'));
+const PrivacyPolicy = React.lazy(() => import('./components/PrivacyPolicy'));
 
 const RouteFallback = () => (
     <div
@@ -54,6 +56,14 @@ const ProtectedRoute = ({ children }) => {
   return children;
 };
 
+const GuestRoute = ({ children }) => {
+  if (isAuthenticated()) {
+    return <Navigate to="/" replace />;
+  }
+
+  return children;
+};
+
 const AdminRoute = ({ children }) => {
   const [isAdmin, setIsAdmin] = React.useState(getSessionIsAdmin());
 
@@ -82,7 +92,7 @@ const AdminRoute = ({ children }) => {
 };
 
 const AUTH_ROUTES = ['/login', '/register', '/reset-password', '/verify-email'];
-const PUBLIC_ROUTES = ['/', '/news', '/landing'];
+const PUBLIC_ROUTES = ['/', '/news', '/landing', '/terms', '/privacy'];
 
 // Layout component that includes the Sidebar and Footer
 const Layout = ({ children }) => {
@@ -90,7 +100,11 @@ const Layout = ({ children }) => {
   const authenticated = isAuthenticated();
   const navigate = useNavigate();
   const isAuthRoute = AUTH_ROUTES.includes(location.pathname);
-  const isPublicRoute = PUBLIC_ROUTES.some(p => location.pathname === p || location.pathname.startsWith('/news'));
+  const isPublicNewsRoute = location.pathname === '/news';
+  const isPublicRoute =
+    (!authenticated && location.pathname === '/') ||
+    ['/landing', '/terms', '/privacy'].includes(location.pathname) ||
+    isPublicNewsRoute;
   const [isAdmin, setIsAdmin] = React.useState(getSessionIsAdmin());
 
   React.useEffect(() => {
@@ -260,9 +274,16 @@ const UptimeMonitorsWrapper = () => {
 
 const LandingPageWrapper = () => {
   const navigate = useNavigate();
+  if (isAuthenticated()) {
+    return <Navigate to="/" replace />;
+  }
+
   const navigateTo = (page) => {
     if (page === 'login') navigate('/login');
     else if (page === 'news') navigate('/news');
+    else if (page === 'terms') navigate('/terms');
+    else if (page === 'privacy') navigate('/privacy');
+    else if (page === 'dashboard') navigate('/');
     else navigate('/');
   };
   return <LandingPage navigateTo={navigateTo} />;
@@ -288,6 +309,16 @@ const NewsAdminWrapper = () => {
   return <NewsAdmin navigateTo={navigateTo} />;
 };
 
+const TermsWrapper = () => {
+  const navigate = useNavigate();
+  return <TermsOfService navigateTo={(page) => navigate(page === 'landing' ? '/landing' : `/${page}`)} />;
+};
+
+const PrivacyWrapper = () => {
+  const navigate = useNavigate();
+  return <PrivacyPolicy navigateTo={(page) => navigate(page === 'landing' ? '/landing' : `/${page}`)} />;
+};
+
 const App = () => {
   const themeValue = useThemeProvider();
   return (
@@ -296,13 +327,17 @@ const App = () => {
       <Routes>
         <Route path="/login" element={
           <Layout>
-            <Login />
+            <GuestRoute>
+              <Login />
+            </GuestRoute>
           </Layout>
         } />
         
         <Route path="/register" element={
           <Layout>
-            <Register />
+            <GuestRoute>
+              <Register />
+            </GuestRoute>
           </Layout>
         } />
 
@@ -320,7 +355,9 @@ const App = () => {
         
         <Route path="/landing" element={
           <Layout>
-            <LandingPageWrapper />
+            <GuestRoute>
+              <LandingPageWrapper />
+            </GuestRoute>
           </Layout>
         } />
 
@@ -418,6 +455,18 @@ const App = () => {
           </Layout>
         } />
         
+        <Route path="/terms" element={
+          <Layout>
+            <TermsWrapper />
+          </Layout>
+        } />
+
+        <Route path="/privacy" element={
+          <Layout>
+            <PrivacyWrapper />
+          </Layout>
+        } />
+
         {/* Catch-all route to redirect to dashboard */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

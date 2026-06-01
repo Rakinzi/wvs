@@ -5,6 +5,7 @@ from .ai_scanner import AI_Scanner
 from .header_scanner import HeaderScanner
 from .wordpress_scanner import WordPressScanner
 from .zap_scanner import ZAPScanner
+from .nikto_scanner import NiktoScanner
 from .xss_scanner import XSSScanner
 from .tech_scanner import TechScanner
 from .exposure_scanner import ExposureScanner, SecretScanner
@@ -37,6 +38,7 @@ class SecurityScanner:
         self.header_scanner = HeaderScanner()
         self.wordpress_scanner = WordPressScanner()
         self.zap_scanner = ZAPScanner()
+        self.nikto_scanner = NiktoScanner()
         self.xss_scanner = XSSScanner()
         self.tech_scanner = TechScanner()
         self.exposure_scanner = ExposureScanner()
@@ -61,8 +63,8 @@ class SecurityScanner:
         self.auth_scanner = AuthScanner()
         self.integrity_scanner = IntegrityScanner()
 
-    def check_sql_injection(self, url):
-        return self.sql_scanner.scan(url)
+    def check_sql_injection(self, url, enable_active_checks: bool = False):
+        return self.sql_scanner.scan(url, enable_active_checks=enable_active_checks)
 
     def check_ssl(self, url):
         return self.ssl_scanner.check(url)
@@ -70,11 +72,14 @@ class SecurityScanner:
     def check_headers(self, url):
         return self.header_scanner.check(url)
 
-    def check_zap(self, url):
-        return self.zap_scanner.scan(url)
+    def check_zap(self, url, enable_active_checks: bool = False):
+        return self.zap_scanner.scan(url, enable_active_checks=enable_active_checks)
 
-    def check_wordpress(self, url):
-        return self.wordpress_scanner.check(url)
+    def check_nikto(self, url, enable_active_checks: bool = False):
+        return self.nikto_scanner.scan(url, enable_active_checks=enable_active_checks)
+
+    def check_wordpress(self, url, enable_active_checks: bool = False):
+        return self.wordpress_scanner.check(url, enable_active_checks=enable_active_checks)
 
     def check_xss(self, url):
         return self.xss_scanner.scan(url)
@@ -82,8 +87,8 @@ class SecurityScanner:
     def check_tech(self, url):
         return self.tech_scanner.scan(url)
 
-    def check_exposure(self, url):
-        return self.exposure_scanner.scan(url)
+    def check_exposure(self, url, enable_active_checks: bool = False):
+        return self.exposure_scanner.scan(url, enable_active_checks=enable_active_checks)
 
     def check_secrets(self, url):
         return self.secret_scanner.scan(url)

@@ -147,6 +147,7 @@ def build_scan_summary(findings: dict[str, Any]) -> dict[str, Any]:
     header_findings = findings.get("headers", {}) or {}
     wordpress_findings = findings.get("wordpress", {}) or {}
     zap_findings = findings.get("zap", {}) or {}
+    nikto_findings = findings.get("nikto", {}) or {}
     xss_findings = findings.get("xss", {}) or {}
     tech_findings = findings.get("tech", {}) or {}
     exposure_findings = findings.get("exposure", {}) or {}
@@ -173,6 +174,7 @@ def build_scan_summary(findings: dict[str, Any]) -> dict[str, Any]:
     header_issues = header_findings.get("issues", []) or []
     wordpress_issues = wordpress_findings.get("issues", []) or []
     zap_issues = zap_findings.get("issues", []) or []
+    nikto_issues = nikto_findings.get("issues", []) or []
     xss_issues = xss_findings.get("issues", []) or []
     tech_issues = tech_findings.get("issues", []) or []
     actionable_tech_issues = [i for i in tech_issues if str(i.get("severity", "Info")).title() != "Info"]
@@ -212,6 +214,7 @@ def build_scan_summary(findings: dict[str, Any]) -> dict[str, Any]:
         or bool(header_issues)
         or bool(wordpress_issues)
         or bool(zap_issues)
+        or bool(nikto_issues)
         or bool([i for i in xss_issues if i.get("severity") in ("High", "Critical")])
         or bool(actionable_tech_issues)
         or bool(tech_advisories)
@@ -226,7 +229,7 @@ def build_scan_summary(findings: dict[str, Any]) -> dict[str, Any]:
 
     total_issues = (
         len(sqli_findings) + len(header_issues) + len(wordpress_issues) +
-        len(zap_issues) + len(xss_issues) + len(actionable_tech_issues) + len(tech_advisories) +
+        len(zap_issues) + len(nikto_issues) + len(xss_issues) + len(actionable_tech_issues) + len(tech_advisories) +
         len(exposure_issues) + len(secrets_issues) + len(dns_issues) + len(redirect_issues) + len(takeover_issues) +
         len(malware_analysis_issues) + len(accessibility_issues) + len(responsive_issues) + len(performance_issues) + len(form_issues) + len(seo_issues) + len(broken_link_issues) + len(app_control_issues) + len(exposed_service_issues) + len(abuse_issues) + len(discovery_issues) +
         len(ssrf_issues) + len(logging_monitor_issues) + len(auth_issues) + len(integrity_issues)
@@ -242,7 +245,7 @@ def build_scan_summary(findings: dict[str, Any]) -> dict[str, Any]:
         malicious=malicious_findings.get("is_malicious", False),
         malicious_score=malicious_findings.get("score", 0),
         all_issues=(
-            header_issues + wordpress_issues + zap_issues + xss_issues +
+            header_issues + wordpress_issues + zap_issues + nikto_issues + xss_issues +
             actionable_tech_issues + tech_advisories + exposure_issues + secrets_issues +
             dns_issues + redirect_issues + takeover_issues + malware_analysis_issues +
             accessibility_issues + responsive_issues + performance_issues + form_issues + seo_issues + broken_link_issues + app_control_issues + exposed_service_issues + abuse_issues + discovery_issues +
@@ -261,6 +264,7 @@ def build_scan_summary(findings: dict[str, Any]) -> dict[str, Any]:
         "header_issue_count": len(header_issues),
         "wordpress_issue_count": len(wordpress_issues),
         "zap_issue_count": len(zap_issues),
+        "nikto_issue_count": len(nikto_issues),
         "xss_count": len([i for i in xss_issues if i.get("type") == "Reflected XSS"]),
         "tech_issue_count": len(actionable_tech_issues),
         "package_count": len(tech_packages),
@@ -319,6 +323,7 @@ def build_scan_sections(findings: dict[str, Any]) -> dict[str, dict[str, Any]]:
     header_findings = findings.get("headers", {}) or {}
     wordpress_findings = findings.get("wordpress", {}) or {}
     zap_findings = findings.get("zap", {}) or {}
+    nikto_findings = findings.get("nikto", {}) or {}
     tech_findings = findings.get("tech", {}) or {}
 
     ssl_issues = []
@@ -418,6 +423,14 @@ def build_scan_sections(findings: dict[str, Any]) -> dict[str, dict[str, Any]]:
             "severity_counts": _severity_counts(zap_findings.get("issues", []) or []),
             "top_findings": (zap_findings.get("issues", []) or [])[:5],
             "recommendations": zap_findings.get("recommendations", []) or [],
+        },
+        "nikto": {
+            "label": "Nikto Web Server Scan",
+            "status": nikto_findings.get("status", "not_run"),
+            "issue_count": len(nikto_findings.get("issues", []) or []),
+            "severity_counts": _severity_counts(nikto_findings.get("issues", []) or []),
+            "top_findings": (nikto_findings.get("issues", []) or [])[:5],
+            "recommendations": nikto_findings.get("recommendations", []) or [],
         },
         "xss": {
             "label": "Cross-Site Scripting (XSS)",

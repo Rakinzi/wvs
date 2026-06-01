@@ -295,16 +295,9 @@ const VerifiedTargets = ({ navigateTo }) => {
           <button onClick={() => navigateTo('scanners')} className="btn-secondary flex items-center gap-1.5 text-xs">
             <ArrowLeft size={13} /> Back
           </button>
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: 'var(--color-primary-dim)' }}>
-              <Shield size={15} style={{ color: 'var(--color-primary)' }} />
-            </div>
-            <div>
-              <h1 className="text-base font-bold leading-tight" style={{ color: 'var(--color-text)' }}>Verified Targets</h1>
-              <p className="text-xs" style={{ color: 'var(--color-text-dim)' }}>
-                Manage ownership verification before running product-readiness scans.
-              </p>
-            </div>
+          <div style={{ borderLeft: '2px solid var(--color-primary)', paddingLeft: 10 }}>
+            <h1 style={{ fontSize: 14, fontWeight: 700, color: 'var(--color-text)', letterSpacing: '-0.02em', margin: 0 }}>Verified Targets</h1>
+            <p style={{ fontSize: 10, color: 'var(--color-text-dim)', fontFamily: "'IBM Plex Mono', monospace", marginTop: 2 }}>Manage ownership verification before running product-readiness scans.</p>
           </div>
         </div>
       </div>
@@ -329,16 +322,9 @@ const VerifiedTargets = ({ navigateTo }) => {
 
           {/* Add target panel */}
           <section className="card p-5 flex flex-col gap-5">
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: 'var(--color-primary-dim)' }}>
-                <Globe size={16} style={{ color: 'var(--color-primary)' }} />
-              </div>
-              <div>
-                <h2 className="text-sm font-semibold" style={{ color: 'var(--color-text)' }}>Add a Target</h2>
-                <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-dim)' }}>
-                  Generate a token, add it to your site, then verify.
-                </p>
-              </div>
+            <div style={{ borderLeft: '2px solid var(--color-primary)', paddingLeft: 10 }}>
+              <h2 style={{ fontSize: 13, fontWeight: 700, color: 'var(--color-text)', letterSpacing: '-0.02em', margin: 0 }}>Add a Target</h2>
+              <p style={{ fontSize: 10, color: 'var(--color-text-dim)', fontFamily: "'IBM Plex Mono', monospace", marginTop: 2 }}>Generate a token, add it to your site, then verify.</p>
             </div>
 
             <form className="flex flex-col gap-4" onSubmit={handleCreate}>

@@ -3,9 +3,7 @@ import copy
 
 from flask import Blueprint, current_app, jsonify, request, send_file
 from flask_jwt_extended import jwt_required
-from celery.exceptions import TimeoutError as CeleryTimeoutError
 from app.auth import get_current_user
-from app.scanners import SecurityScanner
 from app.models import ScanJob, ScanResult, VerifiedTarget
 from app.schemas import ScanRequestPayload
 from app.utils.db_manager import DBManager
@@ -17,27 +15,39 @@ from app.utils.scan_helpers import (
     normalize_target_url,
 )
 from app.utils.scan_comparison import build_scan_comparison
-from app.utils.scan_pipeline import attach_launch_verdict, persist_scan_result
 from app.utils.reports import generate_report
 from app.utils.ux_screenshot_manager import collect_screenshot_paths
-from app.tasks.scan_jobs import run_full_scan_job
-from app import celery, db, limiter
+from app import db, init_celery, limiter
 from pydantic import ValidationError
 from app.utils.time_utils import utc_now, utc_now_isoformat
 
 bp = Blueprint('scans', __name__)
 
 
+def _celery_app():
+    return init_celery(current_app)
+
+
+def _security_scanner():
+    from app.scanners import SecurityScanner
+
+    return SecurityScanner()
+
+
+def _scan_pipeline():
+    from app.utils.scan_pipeline import attach_launch_verdict, persist_scan_result
+
+    return attach_launch_verdict, persist_scan_result
+
+
 def persist_scan(current_user, findings, prefix="scan"):
+    attach_launch_verdict, persist_scan_result = _scan_pipeline()
     if 'launch_verdict' not in findings:
         attach_launch_verdict(findings)
     return persist_scan_result(findings["url"], findings, current_user.id, prefix=prefix)
 
 
-def _ensure_verified_target(current_user, url: str, verified_target_id: str | None):
-    if not current_app.config.get("REQUIRE_VERIFIED_TARGETS", False):
-        return None
-
+def _find_verified_target(current_user, url: str, verified_target_id: str | None = None):
     normalized = normalize_target_url(url)
     hostname = normalized.split("://", 1)[1].split("/", 1)[0].split(":", 1)[0].lower()
     query = VerifiedTarget.query.filter_by(user_id=current_user.id, verification_status="verified")
@@ -48,7 +58,30 @@ def _ensure_verified_target(current_user, url: str, verified_target_id: str | No
         if candidate.normalized_domain.lower() == hostname:
             return candidate
 
-    raise ValueError("A verified target is required for this scan profile")
+    return None
+
+
+def _ensure_verified_target(
+    current_user,
+    url: str,
+    verified_target_id: str | None,
+    *,
+    message: str = "A verified target is required for this scan profile",
+):
+    target = _find_verified_target(current_user, url, verified_target_id)
+    if target:
+        return target
+
+    raise ValueError(message)
+
+
+def _ensure_active_checks_authorized(current_user, url: str, verified_target_id: str | None) -> None:
+    _ensure_verified_target(
+        current_user,
+        url,
+        verified_target_id,
+        message="Active checks require verified target ownership before they can run.",
+    )
 
 
 def _resolve_job_failure_message(task_result) -> str:
@@ -73,7 +106,7 @@ def _resolve_job_failure_message(task_result) -> str:
 
 
 def _read_task_result_snapshot(task_id: str) -> tuple[str | None, dict]:
-    task_result = celery.AsyncResult(task_id)
+    task_result = _celery_app().AsyncResult(task_id)
 
     try:
         state = task_result.state
@@ -84,6 +117,51 @@ def _read_task_result_snapshot(task_id: str) -> tuple[str | None, dict]:
     return state, info
 
 
+def _progress_last_seen_at(progress: dict | None):
+    if not isinstance(progress, dict):
+        return None
+
+    logs = progress.get('logs') if isinstance(progress.get('logs'), list) else []
+    candidates = []
+    if isinstance(progress.get('timestamp'), str):
+        candidates.append(progress['timestamp'])
+    for entry in reversed(logs):
+        if isinstance(entry, dict) and isinstance(entry.get('timestamp'), str):
+            candidates.append(entry['timestamp'])
+            break
+
+    for value in candidates:
+        try:
+            return utc_now().__class__.fromisoformat(value.replace('Z', '+00:00')).replace(tzinfo=None)
+        except ValueError:
+            continue
+    return None
+
+
+def _progress_stale_seconds(progress: dict | None) -> int | None:
+    last_seen_at = _progress_last_seen_at(progress)
+    if not last_seen_at:
+        return None
+    return max(0, int((utc_now() - last_seen_at).total_seconds()))
+
+
+def _decorate_progress(job: ScanJob, progress: dict | None) -> dict | None:
+    if not isinstance(progress, dict):
+        return progress
+
+    stale_after_seconds = 120
+    stale_seconds = _progress_stale_seconds(progress)
+    decorated = dict(progress)
+    if job.status in {"queued", "running"} and stale_seconds is not None and stale_seconds >= stale_after_seconds:
+        decorated["stale"] = True
+        decorated["stale_seconds"] = stale_seconds
+        decorated["message"] = "The worker has not reported progress recently."
+    else:
+        decorated["stale"] = False
+        decorated["stale_seconds"] = stale_seconds
+    return decorated
+
+
 def _serialize_task_progress(job: ScanJob) -> dict | None:
     stored_progress = None
     if isinstance(job.findings, dict):
@@ -92,13 +170,13 @@ def _serialize_task_progress(job: ScanJob) -> dict | None:
             stored_progress = candidate
 
     if not job.task_id:
-        return stored_progress
+        return _decorate_progress(job, stored_progress)
 
     task_state, info = _read_task_result_snapshot(job.task_id)
     logs = info.get('logs') if isinstance(info.get('logs'), list) else []
 
     if not info and stored_progress:
-        return stored_progress
+        return _decorate_progress(job, stored_progress)
 
     if not info and task_state is None:
         if job.status == "failed":
@@ -112,9 +190,9 @@ def _serialize_task_progress(job: ScanJob) -> dict | None:
                 'message': job.error_message or "Scan job failed in Celery worker.",
                 'logs': stored_progress.get('logs') if stored_progress else [],
             }
-        return stored_progress
+        return _decorate_progress(job, stored_progress)
 
-    return {
+    return _decorate_progress(job, {
         'task_state': task_state,
         'current_step': info.get('current_step'),
         'current_step_label': info.get('current_step_label'),
@@ -123,7 +201,7 @@ def _serialize_task_progress(job: ScanJob) -> dict | None:
         'percent': info.get('percent'),
         'message': info.get('message'),
         'logs': logs,
-    }
+    })
 
 
 def _safe_commit() -> bool:
@@ -139,7 +217,7 @@ def _sync_scan_job_status(job: ScanJob) -> ScanJob:
     if job.status not in {"queued", "running"} or not job.task_id:
         return job
 
-    task_result = celery.AsyncResult(job.task_id)
+    task_result = _celery_app().AsyncResult(job.task_id)
     try:
         task_state = task_result.state
     except Exception:
@@ -148,6 +226,30 @@ def _sync_scan_job_status(job: ScanJob) -> ScanJob:
         if not job.error_message:
             progress = _serialize_task_progress(job) or {}
             job.error_message = progress.get("message") or "Scan job failed in Celery worker."
+        _safe_commit()
+        return job
+
+    current_progress = _serialize_task_progress(job) or {}
+    stale_seconds = current_progress.get("stale_seconds") if isinstance(current_progress, dict) else None
+    stale_failure_seconds = int(current_app.config.get("MAX_SCAN_TIME", 900)) + 120
+    if job.status == "running" and isinstance(stale_seconds, int) and stale_seconds >= stale_failure_seconds:
+        job.status = "failed"
+        job.completed_at = utc_now()
+        job.error_message = (
+            "Scan worker stopped reporting progress. The job was likely interrupted; please start a new scan."
+        )
+        current_findings = job.findings if isinstance(job.findings, dict) else {}
+        progress = current_findings.get("_progress", {}) if isinstance(current_findings, dict) else {}
+        job.findings = {
+            **current_findings,
+            "_progress": {
+                **progress,
+                "task_state": "FAILURE",
+                "message": job.error_message,
+                "stale": True,
+                "stale_seconds": stale_seconds,
+            },
+        }
         _safe_commit()
         return job
 
@@ -195,14 +297,15 @@ def _sync_scan_job_status(job: ScanJob) -> ScanJob:
 
     try:
         task_result.get(timeout=0)
-    except CeleryTimeoutError:
-        return job
-    except Exception:
+    except Exception as exc:
+        if exc.__class__.__name__ == "TimeoutError":
+            return job
         job.status = "failed"
         job.completed_at = utc_now()
         if not job.error_message:
             job.error_message = _resolve_job_failure_message(task_result)
         _safe_commit()
+        return job
 
     return job
 
@@ -273,8 +376,18 @@ def start_scan():
         url = normalize_target_url(payload.url)
         scan_profile = payload.scan_profile or 'security_only'
 
+        verified_target = None
         if scan_profile in {'product_readiness', 'full_launch_audit'}:
-            _ensure_verified_target(current_user, url, payload.verified_target_id)
+            verified_target = _ensure_verified_target(current_user, url, payload.verified_target_id)
+        elif current_app.config.get("REQUIRE_VERIFIED_TARGETS", False):
+            verified_target = _ensure_verified_target(current_user, url, payload.verified_target_id)
+        elif payload.enable_active_checks:
+            verified_target = _ensure_verified_target(
+                current_user,
+                url,
+                payload.verified_target_id,
+                message="Active checks require verified target ownership before they can run.",
+            )
         
         # Check if URL is known to be malicious first
         is_malicious, reason = DBManager.check_malicious_url(url)
@@ -301,7 +414,9 @@ def start_scan():
                     'auth_test_accounts': [account.model_dump() for account in payload.auth_test_accounts],
                     'protected_paths': payload.protected_paths,
                     'idor_paths': payload.idor_paths,
-                    'verified_target_id': payload.verified_target_id,
+                    'verified_target_id': verified_target.public_id if verified_target else payload.verified_target_id,
+                    'verified_domain': verified_target.normalized_domain if verified_target else None,
+                    'active_checks_authorized': bool(payload.enable_active_checks and verified_target),
                 }
             },
         )
@@ -310,6 +425,9 @@ def start_scan():
 
         try:
             queue_name = current_app.config["UX_SCAN_QUEUE"] if scan_profile in {"product_readiness", "full_launch_audit"} else current_app.config["SECURITY_SCAN_QUEUE"]
+            _celery_app()
+            from app.tasks.scan_jobs import run_full_scan_job
+
             task = run_full_scan_job.apply_async(args=[job.id], queue=queue_name)
             job.task_id = task.id
             db.session.commit()
@@ -353,9 +471,12 @@ def check_sql_injection():
         payload = ScanRequestPayload.model_validate(request.get_json(silent=True) or {})
         url = normalize_target_url(payload.url)
         
+        if payload.enable_active_checks:
+            _ensure_active_checks_authorized(current_user, url, payload.verified_target_id)
+
         # Perform the scan synchronously
-        scanner = SecurityScanner()
-        results = scanner.check_sql_injection(url)
+        scanner = _security_scanner()
+        results = scanner.check_sql_injection(url, enable_active_checks=payload.enable_active_checks)
         
         # Generate recommendations based on findings
         recommendations = []
@@ -410,7 +531,7 @@ def check_ssl():
         payload = ScanRequestPayload.model_validate(request.get_json(silent=True) or {})
         url = normalize_target_url(payload.url)
         
-        scanner = SecurityScanner()
+        scanner = _security_scanner()
         results = scanner.check_ssl(url)
         
         # Generate recommendations based on findings
@@ -472,7 +593,7 @@ def check_wordpress():
         payload = ScanRequestPayload.model_validate(request.get_json(silent=True) or {})
         url = normalize_target_url(payload.url)
 
-        scanner = SecurityScanner()
+        scanner = _security_scanner()
         results = scanner.check_wordpress(url)
         recommendations = list(results.get('recommendations', []))
 
@@ -578,9 +699,11 @@ def get_report(scan_id):
         if 'sections' not in findings:
             findings['sections'] = build_scan_sections(findings)
         if 'launch_verdict' not in findings:
+            attach_launch_verdict, _ = _scan_pipeline()
             attach_launch_verdict(findings)
 
         if report_format == 'json':
+            attach_launch_verdict, _ = _scan_pipeline()
             public_findings = _publicize_scan_assets(scan.public_id, copy.deepcopy(findings))
             public_findings['summary'] = build_scan_summary(public_findings)
             public_findings['sections'] = build_scan_sections(public_findings)
@@ -735,7 +858,7 @@ def check_xss():
         payload = ScanRequestPayload.model_validate(request.get_json(silent=True) or {})
         url = normalize_target_url(payload.url)
 
-        scanner = SecurityScanner()
+        scanner = _security_scanner()
         results = scanner.check_xss(url)
 
         recommendations = []
@@ -789,7 +912,7 @@ def check_tech():
         payload = ScanRequestPayload.model_validate(request.get_json(silent=True) or {})
         url = normalize_target_url(payload.url)
 
-        scanner = SecurityScanner()
+        scanner = _security_scanner()
         results = scanner.check_tech(url)
 
         findings = {
@@ -835,8 +958,11 @@ def check_exposure():
         payload = ScanRequestPayload.model_validate(request.get_json(silent=True) or {})
         url = normalize_target_url(payload.url)
 
-        scanner = SecurityScanner()
-        results = scanner.check_exposure(url)
+        if payload.enable_active_checks:
+            _ensure_active_checks_authorized(current_user, url, payload.verified_target_id)
+
+        scanner = _security_scanner()
+        results = scanner.check_exposure(url, enable_active_checks=payload.enable_active_checks)
 
         findings = {
             'url': url,
@@ -884,7 +1010,7 @@ def check_malware():
         payload = ScanRequestPayload.model_validate(request.get_json(silent=True) or {})
         url = normalize_target_url(payload.url)
 
-        scanner = SecurityScanner()
+        scanner = _security_scanner()
         results = scanner.check_malware_analysis(url)
 
         findings = {
@@ -970,7 +1096,7 @@ def check_dns():
         payload = ScanRequestPayload.model_validate(request.get_json(silent=True) or {})
         url = normalize_target_url(payload.url)
 
-        scanner = SecurityScanner()
+        scanner = _security_scanner()
         results = scanner.check_dns(url)
 
         findings = {
@@ -1016,7 +1142,7 @@ def check_redirect():
         payload = ScanRequestPayload.model_validate(request.get_json(silent=True) or {})
         url = normalize_target_url(payload.url)
 
-        scanner = SecurityScanner()
+        scanner = _security_scanner()
         results = scanner.check_redirect(url)
 
         findings = {
@@ -1062,7 +1188,7 @@ def check_takeover():
         payload = ScanRequestPayload.model_validate(request.get_json(silent=True) or {})
         url = normalize_target_url(payload.url)
 
-        scanner = SecurityScanner()
+        scanner = _security_scanner()
         results = scanner.check_takeover(url)
 
         findings = {
@@ -1109,7 +1235,7 @@ def check_auth():
         payload = ScanRequestPayload.model_validate(request.get_json(silent=True) or {})
         url = normalize_target_url(payload.url)
 
-        scanner = SecurityScanner()
+        scanner = _security_scanner()
         results = scanner.check_auth(url)
 
         findings = {
@@ -1154,7 +1280,7 @@ def check_integrity():
         payload = ScanRequestPayload.model_validate(request.get_json(silent=True) or {})
         url = normalize_target_url(payload.url)
 
-        scanner = SecurityScanner()
+        scanner = _security_scanner()
         results = scanner.check_integrity(url)
 
         findings = {
@@ -1199,7 +1325,7 @@ def check_logging_monitor():
         payload = ScanRequestPayload.model_validate(request.get_json(silent=True) or {})
         url = normalize_target_url(payload.url)
 
-        scanner = SecurityScanner()
+        scanner = _security_scanner()
         results = scanner.check_logging_monitor(url)
 
         findings = {
@@ -1244,7 +1370,10 @@ def check_ssrf():
         payload = ScanRequestPayload.model_validate(request.get_json(silent=True) or {})
         url = normalize_target_url(payload.url)
 
-        scanner = SecurityScanner()
+        if payload.enable_active_checks:
+            _ensure_active_checks_authorized(current_user, url, payload.verified_target_id)
+
+        scanner = _security_scanner()
         results = scanner.check_ssrf(url, enable_active_checks=payload.enable_active_checks)
 
         findings = {
@@ -1281,15 +1410,7 @@ def check_ssrf():
 
 @bp.route('/health', methods=['GET'])
 def health_check():
-    try:
-        # Simple database check
-        db.session.query(ScanResult).first()
-        return jsonify({
-            'status': 'OK', 
-            'message': 'Service is healthy'
-        }), 200
-    except Exception as e:
-        return jsonify({
-            'status': 'ERROR',
-            'message': str(e)
-        }), 503
+    return jsonify({
+        'status': 'OK',
+        'message': 'Service is healthy'
+    }), 200

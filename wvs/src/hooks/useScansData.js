@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import { apiJson, ApiError } from '../lib/api';
+import { apiDateMs } from '../lib/time';
 
 const normalizeUrl = (value) => {
   if (!value.startsWith('http://') && !value.startsWith('https://')) {
@@ -39,9 +40,7 @@ const TERMINAL_JOB_STATUSES = ['completed', 'failed'];
 const ACTIVE_JOB_STATUSES = ['queued', 'running'];
 
 const toTimestamp = (value) => {
-  if (!value) return 0;
-  const parsed = new Date(value).getTime();
-  return Number.isFinite(parsed) ? parsed : 0;
+  return apiDateMs(value);
 };
 
 const chooseLatestJob = (storedJob, jobs) => {

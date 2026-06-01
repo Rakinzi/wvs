@@ -7,8 +7,9 @@ from sqlalchemy import func
 from sqlalchemy import update as sa_update
 
 from app import celery, db
-from app.models import ScanJob
+from app.models import ScanJob, VerifiedTarget
 from app.settings import settings
+from app.utils.scan_helpers import normalize_target_url
 from app.utils.time_utils import utc_now, utc_now_isoformat
 from app.utils.scan_pipeline import (
     build_full_launch_audit,
@@ -19,6 +20,39 @@ from app.utils.scan_pipeline import (
 )
 
 _TIMEOUT = max(settings.max_scan_time, 60)
+_VERIFIED_SCAN_TYPES = {'product_readiness', 'full_launch_audit'}
+
+
+def _job_verified_target(job: ScanJob, config: dict[str, Any]) -> VerifiedTarget | None:
+    normalized = normalize_target_url(job.url)
+    hostname = normalized.split("://", 1)[1].split("/", 1)[0].split(":", 1)[0].lower()
+    query = VerifiedTarget.query.filter_by(user_id=job.user_id, verification_status="verified")
+    if config.get("verified_target_id"):
+        query = query.filter_by(public_id=config["verified_target_id"])
+
+    for candidate in query.all():
+        if candidate.normalized_domain.lower() == hostname:
+            return candidate
+
+    return None
+
+
+def _resolve_active_checks(job: ScanJob, config: dict[str, Any]) -> bool:
+    requested = bool(config.get('enable_active_checks'))
+    requires_verified_target = requested or job.scan_type in _VERIFIED_SCAN_TYPES
+    if not requires_verified_target:
+        return False
+
+    verified_target = _job_verified_target(job, config)
+    if not verified_target:
+        if requested:
+            raise ValueError("Active checks require verified target ownership before they can run.")
+        raise ValueError("A verified target is required for this scan profile.")
+
+    config['verified_target_id'] = verified_target.public_id
+    config['verified_domain'] = verified_target.normalized_domain
+    config['active_checks_authorized'] = requested
+    return requested
 
 
 @celery.task(
@@ -107,13 +141,14 @@ def run_full_scan_job(self, job_id: int) -> dict:
         config = {}
         if isinstance(job.findings, dict):
             config = job.findings.get('_config', {}) or {}
+        enable_active_checks = _resolve_active_checks(job, config)
 
         if job.scan_type == 'product_readiness':
             findings = build_product_readiness_scan(
                 job.url,
                 page_paths=config.get('page_paths') or [],
                 enable_ai_review=bool(config.get('enable_ai_review')),
-                enable_active_checks=bool(config.get('enable_active_checks')),
+                enable_active_checks=enable_active_checks,
                 active_check_paths=config.get('active_check_paths') or [],
                 active_check_budget=config.get('active_check_budget'),
                 auth_test_accounts=config.get('auth_test_accounts') or [],
@@ -127,7 +162,7 @@ def run_full_scan_job(self, job_id: int) -> dict:
                 job.url,
                 page_paths=config.get('page_paths') or [],
                 enable_ai_review=bool(config.get('enable_ai_review')),
-                enable_active_checks=bool(config.get('enable_active_checks')),
+                enable_active_checks=enable_active_checks,
                 active_check_paths=config.get('active_check_paths') or [],
                 active_check_budget=config.get('active_check_budget'),
                 auth_test_accounts=config.get('auth_test_accounts') or [],
@@ -137,7 +172,11 @@ def run_full_scan_job(self, job_id: int) -> dict:
                 progress_callback=push_progress,
             )
         else:
-            findings = build_full_scan(job.url, progress_callback=push_progress)
+            findings = build_full_scan(
+                job.url,
+                progress_callback=push_progress,
+                enable_active_checks=enable_active_checks,
+            )
             tag_malicious_result(job.url, findings)
         push_progress(
             {

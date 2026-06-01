@@ -113,14 +113,9 @@ const Settings = ({ navigateTo, userData }) => {
           <button onClick={() => navigateTo('dashboard')} className="btn-secondary flex items-center gap-1.5 text-xs">
             <ArrowLeft size={13} /> Back
           </button>
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: 'var(--color-primary-dim)' }}>
-              <SettingsIcon size={15} style={{ color: 'var(--color-primary)' }} />
-            </div>
-            <div>
-              <h1 className="text-base font-bold leading-tight" style={{ color: 'var(--color-text)' }}>Settings</h1>
-              <p className="text-xs" style={{ color: 'var(--color-text-dim)' }}>{activeTab?.desc}</p>
-            </div>
+          <div style={{ borderLeft: '2px solid var(--color-primary)', paddingLeft: 10 }}>
+            <h1 style={{ fontSize: 14, fontWeight: 700, color: 'var(--color-text)', letterSpacing: '-0.02em', margin: 0 }}>Settings</h1>
+            <p style={{ fontSize: 10, color: 'var(--color-text-dim)', fontFamily: "'IBM Plex Mono', monospace", marginTop: 2 }}>{activeTab?.desc}</p>
           </div>
         </div>
       </div>
@@ -143,21 +138,25 @@ const Settings = ({ navigateTo, userData }) => {
         <div className="grid grid-cols-1 lg:grid-cols-[220px_1fr] gap-6 items-start">
 
           {/* Left nav */}
-          <div className="lg:sticky lg:top-20 card overflow-hidden">
-            {TABS.map(({ id, label, icon: Icon, desc }) => (
+          <div className="lg:sticky lg:top-20 overflow-hidden" style={{ border: '1px solid var(--color-border)', background: 'var(--color-card)' }}>
+            {TABS.map(({ id, label, icon: Icon, desc }, i) => (
               <button key={id} onClick={() => setTab(id)}
-                className="w-full flex items-center gap-3 px-4 py-3.5 text-left cursor-pointer transition-all"
                 style={{
-                  background: tab === id ? 'var(--color-primary-dim)' : 'transparent',
+                  display: 'flex', alignItems: 'center', gap: 10,
+                  width: '100%', textAlign: 'left', cursor: 'pointer',
+                  padding: '11px 14px',
+                  borderTop: 'none', borderRight: 'none',
+                  borderBottom: i < TABS.length - 1 ? '1px solid var(--color-border)' : 'none',
                   borderLeft: `2px solid ${tab === id ? 'var(--color-primary)' : 'transparent'}`,
-                }}>
-                <div className="w-7 h-7 rounded-md flex items-center justify-center flex-shrink-0"
-                  style={{ background: tab === id ? 'rgba(99,102,241,0.15)' : 'var(--color-surface)' }}>
-                  <Icon size={13} style={{ color: tab === id ? 'var(--color-primary)' : 'var(--color-text-dim)' }} />
-                </div>
+                  background: tab === id ? 'var(--color-elevated)' : 'transparent',
+                  transition: 'background 100ms ease',
+                }}
+                onMouseEnter={e => { if (tab !== id) e.currentTarget.style.background = 'var(--color-surface)'; }}
+                onMouseLeave={e => { if (tab !== id) e.currentTarget.style.background = 'transparent'; }}
+              >
                 <div>
-                  <p className="text-xs font-semibold" style={{ color: tab === id ? 'var(--color-text)' : 'var(--color-text-muted)' }}>{label}</p>
-                  <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-dim)' }}>{desc}</p>
+                  <p style={{ fontSize: 11, fontWeight: tab === id ? 600 : 500, fontFamily: "'IBM Plex Mono', monospace", color: tab === id ? 'var(--color-text)' : 'var(--color-text-muted)' }}>{label}</p>
+                  <p style={{ fontSize: 10, marginTop: 2, color: 'var(--color-text-dim)' }}>{desc}</p>
                 </div>
               </button>
             ))}

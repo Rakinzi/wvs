@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import re
+import time
 from typing import Any
 from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
@@ -44,9 +44,11 @@ def _is_external_redirect(original_host: str, location: str) -> bool:
 
 
 class OpenRedirectScanner:
-    def __init__(self, timeout: int = 8):
+    def __init__(self, timeout: int = 3, max_requests: int = 24, deadline_seconds: int = 45):
+        self.max_requests = max_requests
+        self.deadline_seconds = deadline_seconds
         self.client = httpx.Client(
-            timeout=timeout,
+            timeout=httpx.Timeout(timeout, connect=2),
             follow_redirects=False,
             headers={"User-Agent": "WVS-RedirectScanner/1.0"},
         )
@@ -64,16 +66,20 @@ class OpenRedirectScanner:
         new_query = urlencode({k: v[0] for k, v in qs.items()})
         return urlunparse(parsed._replace(query=new_query))
 
-    def _probe(self, base_url: str, host: str, issues: list, seen_params: set) -> None:
+    def _probe(self, base_url: str, host: str, issues: list, seen_params: set, budget: dict) -> None:
         params_to_test = self._extract_redirect_params(base_url)
 
         for param in params_to_test:
             for payload in _EXTERNAL_PAYLOADS:
+                if budget["requests"] >= self.max_requests or time.monotonic() >= budget["deadline"]:
+                    return
+
                 test_url = self._inject_param(base_url, param, payload)
                 dedup_key = f"{param}:{payload}"
                 if dedup_key in seen_params:
                     continue
                 seen_params.add(dedup_key)
+                budget["requests"] += 1
 
                 try:
                     resp = self.client.get(test_url)
@@ -127,15 +133,18 @@ class OpenRedirectScanner:
         host = parsed.hostname or ""
         issues: list[dict] = []
         seen_params: set[str] = set()
+        budget = {"requests": 0, "deadline": time.monotonic() + self.deadline_seconds}
 
         # Probe the target URL itself
-        self._probe(url, host, issues, seen_params)
+        self._probe(url, host, issues, seen_params, budget)
 
         # Also probe common redirect-bearing paths if the base URL has no query params
-        if not parsed.query:
+        if not parsed.query and budget["requests"] < self.max_requests and time.monotonic() < budget["deadline"]:
             for suffix in ["/login", "/logout", "/signin", "/auth/callback", "/oauth/callback", "/sso"]:
+                if budget["requests"] >= self.max_requests or time.monotonic() >= budget["deadline"]:
+                    break
                 candidate = urlunparse(parsed._replace(path=suffix, query=""))
-                self._probe(candidate, host, issues, seen_params)
+                self._probe(candidate, host, issues, seen_params, budget)
 
         recs: list[str] = []
         if issues:
@@ -152,6 +161,8 @@ class OpenRedirectScanner:
             "recommendations": recs,
             "score": score,
             "params_tested": list(seen_params),
+            "requests_made": budget["requests"],
+            "truncated": budget["requests"] >= self.max_requests or time.monotonic() >= budget["deadline"],
         }
 
     def close(self):

@@ -3,6 +3,9 @@ from bs4 import BeautifulSoup
 import time
 import string
 
+from app.scanners.external_tooling import SQLMapRunner
+from app.settings import settings
+
 class AdvancedSQLiScanner:
     def __init__(self):
         self.sql_errors = {
@@ -32,6 +35,7 @@ class AdvancedSQLiScanner:
         self.session = requests.Session()
         self.time_based_threshold = 5  # Seconds for time-based detection
         self.session.headers.update({'User-Agent': 'SQLiScanner/1.0'})
+        self.sqlmap = SQLMapRunner(settings.sqlmap_cli_path, settings.external_tools_timeout_seconds)
         
     def _determine_severity(self, payload, response):
         """Dynamic severity assessment"""
@@ -82,7 +86,7 @@ class AdvancedSQLiScanner:
                 return db_type.upper()
         return "Unknown"
 
-    def scan(self, url):
+    def scan(self, url, enable_active_checks: bool = False):
         results = []
         
         try:
@@ -96,6 +100,18 @@ class AdvancedSQLiScanner:
             # Test headers and cookies
             results += self._test_headers(url)
             results += self._test_cookies(url)
+
+            if settings.external_tools_enabled and settings.sqlmap_enabled:
+                sqlmap_result = self.sqlmap.scan(url, enabled=enable_active_checks)
+                for issue in sqlmap_result.get("issues", []) or []:
+                    results.append({
+                        "parameter": "sqlmap",
+                        "payload": "external sqlmap validation",
+                        "type": "External Tool",
+                        "severity": issue.get("severity", "Critical"),
+                        "evidence": issue.get("evidence"),
+                        "tool": "sqlmap",
+                    })
             
         except Exception as e:
             print(f"Scan error: {str(e)}")

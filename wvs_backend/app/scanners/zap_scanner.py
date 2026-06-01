@@ -86,7 +86,16 @@ class ZAPScanner:
 
         return False, last_percent
 
-    def scan(self, url: str) -> dict[str, Any]:
+    def scan(self, url: str, enable_active_checks: bool = False) -> dict[str, Any]:
+        if not enable_active_checks:
+            return {
+                "enabled": False,
+                "status": "not_authorized",
+                "issues": [],
+                "alerts": [],
+                "summary": "ZAP active scanning requires verified target ownership and active checks.",
+            }
+
         if not self.enabled or self.client is None:
             return {
                 "enabled": False,

@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   BarChart2, Clock, Settings, LogOut,
-  AlertTriangle, Globe, User, Bell, X, Menu, ChevronDown,
-  Zap, Sun, Moon, BadgeCheck, Activity, ChevronRight, Newspaper, BookOpen,
+  AlertTriangle, Globe, User, Bell, ChevronDown,
+  Zap, Sun, Moon, BadgeCheck, Activity, Newspaper, BookOpen,
 } from 'lucide-react';
 import { useTheme } from '../hooks/useTheme';
 import { getSessionUsername } from '../lib/auth';
@@ -25,7 +25,6 @@ const NOTIFICATIONS = [
 ];
 
 const Sidebar = ({ isAuthenticated, onLogout, navigateTo, currentPage, isAdmin = false }) => {
-  const [mobileOpen, setMobileOpen] = useState(false);
   const [notifOpen, setNotifOpen]   = useState(false);
   const [userOpen, setUserOpen]     = useState(false);
   const notifRef = useRef(null);
@@ -47,76 +46,68 @@ const Sidebar = ({ isAuthenticated, onLogout, navigateTo, currentPage, isAdmin =
     setUserOpen(false);
   };
 
-  const SidebarContent = ({ mobile = false }) => (
-    <div
-      className="flex flex-col h-full"
-      style={{
-        background: 'var(--color-surface)',
-        borderRight: '1px solid var(--color-border)',
-        width: mobile ? '256px' : '216px',
-      }}
-    >
-      {/* ── Logo ── */}
-      <div
-        className="flex items-center gap-3 h-[60px] px-4 flex-shrink-0"
-        style={{ borderBottom: '1px solid var(--color-border)' }}
-      >
-        <button
-          onClick={() => isAuthenticated && go('dashboard')}
-          className="flex items-center gap-2.5 focus-visible:outline-none group"
-          aria-label="Go to dashboard"
-        >
-          <img
-            src="/launchguard-icon.svg"
-            alt=""
-            className="w-8 h-8 rounded-lg flex-shrink-0 glow-pulse transition-all duration-200"
-            style={{ boxShadow: '0 0 18px rgba(45,212,191,0.35)' }}
-          />
-          <span
-            className="font-bold tracking-tight text-sm gradient-text"
-            style={{ letterSpacing: '-0.02em' }}
-          >
-            LaunchGuard
-          </span>
-        </button>
+  const username = getSessionUsername() || 'Account';
+  const initial  = username[0].toUpperCase();
 
-        {mobile && (
-          <button
-            onClick={() => setMobileOpen(false)}
-            className="ml-auto w-7 h-7 rounded-md flex items-center justify-center cursor-pointer transition-colors duration-150"
-            style={{ color: 'var(--color-text-dim)' }}
-            aria-label="Close menu"
-          >
-            <X size={14} />
-          </button>
-        )}
+  const SidebarContent = () => (
+    <div style={{
+      display: 'flex', flexDirection: 'column', height: '100%',
+      background: 'var(--color-surface)',
+      borderRight: '1px solid var(--color-border)',
+      width: '200px',
+    }}>
+
+      {/* ── Logo ── */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 0,
+        height: 52, padding: '0 12px',
+        borderBottom: '1px solid var(--color-border)',
+        flexShrink: 0,
+      }}>
+        <button onClick={() => isAuthenticated && go('dashboard')}
+          style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'none', border: 'none', cursor: 'pointer', padding: '6px 8px', borderRadius: 6, flex: 1 }}
+          aria-label="Go to dashboard">
+          <img src="/launchguard-icon.svg" alt="" style={{ width: 24, height: 24, flexShrink: 0 }} />
+          <span style={{
+            fontFamily: "'Syne', system-ui, sans-serif",
+            fontWeight: 700, fontSize: 14, letterSpacing: '-0.02em',
+            color: 'var(--color-text)',
+          }}>LaunchGuard</span>
+        </button>
       </div>
 
       {/* ── Nav items ── */}
       {isAuthenticated && (
-        <nav className="flex flex-col gap-0.5 p-2 flex-1 overflow-y-auto">
-          {NAV_ITEMS.filter((item) => !item.adminOnly || isAdmin).map(({ key, label, icon: Icon }) => {
+        <nav style={{ display: 'flex', flexDirection: 'column', gap: 1, padding: '8px', flex: 1, overflowY: 'auto' }}>
+
+          {/* Group label */}
+          <p style={{
+            fontSize: 9, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase',
+            color: 'var(--color-text-dim)', fontFamily: "'IBM Plex Mono', monospace",
+            padding: '8px 8px 4px', margin: 0,
+          }}>Navigation</p>
+
+          {NAV_ITEMS.filter(item => !item.adminOnly || isAdmin).map(({ key, label, icon: Icon }) => {
             const active = currentPage === key;
             return (
-              <button
-                key={key}
-                onClick={() => go(key)}
-                className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-150 cursor-pointer w-full text-left group ${active ? 'nav-active-glow' : 'hover:bg-[var(--color-elevated)]'}`}
-                style={active ? {} : { color: 'var(--color-text-muted)' }}
-                aria-current={active ? 'page' : undefined}
-              >
-                <Icon
-                  size={15}
-                  className="flex-shrink-0 transition-colors duration-150"
-                  style={{ color: active ? 'var(--color-primary)' : 'var(--color-text-dim)' }}
-                />
-                <span className="truncate">{label}</span>
-                {active && (
-                  <span
-                    className="ml-auto w-1.5 h-1.5 rounded-full flex-shrink-0"
-                    style={{ background: 'var(--color-primary)', boxShadow: '0 0 6px rgba(99,102,241,0.8)' }}
-                  />
-                )}
+              <button key={key} onClick={() => go(key)}
+                className={active ? 'nav-active-glow' : ''}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 8,
+                  padding: '7px 8px', borderRadius: 6,
+                  fontSize: 13, fontWeight: active ? 600 : 400,
+                  cursor: 'pointer', width: '100%', textAlign: 'left',
+                  background: active ? undefined : 'none',
+                  border: active ? undefined : '1px solid transparent',
+                  color: active ? 'var(--color-text)' : 'var(--color-text-muted)',
+                  transition: 'background 120ms, color 120ms',
+                  letterSpacing: '-0.005em',
+                }}
+                onMouseEnter={e => { if (!active) e.currentTarget.style.background = 'var(--color-elevated)'; }}
+                onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'none'; }}
+                aria-current={active ? 'page' : undefined}>
+                <Icon size={14} style={{ flexShrink: 0, color: active ? 'var(--color-primary)' : 'var(--color-text-dim)' }} />
+                <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
               </button>
             );
           })}
@@ -125,53 +116,65 @@ const Sidebar = ({ isAuthenticated, onLogout, navigateTo, currentPage, isAdmin =
 
       {/* ── Bottom section ── */}
       {isAuthenticated && (
-        <div
-          className="p-2 flex flex-col gap-0.5 flex-shrink-0"
-          style={{ borderTop: '1px solid var(--color-border)' }}
-        >
+        <div style={{ padding: '8px', borderTop: '1px solid var(--color-border)', display: 'flex', flexDirection: 'column', gap: 1, flexShrink: 0 }}>
+
           {/* Notifications */}
-          <div ref={notifRef} className="relative">
-            <button
-              onClick={() => { setNotifOpen(o => !o); setUserOpen(false); }}
-              className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm w-full transition-all duration-150 cursor-pointer hover:bg-[var(--color-elevated)]"
-              style={{ color: 'var(--color-text-muted)' }}
-              aria-label="Notifications"
-            >
-              <Bell size={15} className="flex-shrink-0" style={{ color: 'var(--color-text-dim)' }} />
-              <span className="flex-1 text-left truncate">Notifications</span>
+          <div ref={notifRef} style={{ position: 'relative' }}>
+            <button onClick={() => { setNotifOpen(o => !o); setUserOpen(false); }}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 8,
+                padding: '7px 8px', borderRadius: 6,
+                fontSize: 13, fontWeight: 400, width: '100%', textAlign: 'left',
+                background: 'none', border: '1px solid transparent', cursor: 'pointer',
+                color: 'var(--color-text-muted)', transition: 'background 120ms',
+              }}
+              onMouseEnter={e => e.currentTarget.style.background = 'var(--color-elevated)'}
+              onMouseLeave={e => e.currentTarget.style.background = 'none'}
+              aria-label="Notifications">
+              <Bell size={14} style={{ flexShrink: 0, color: 'var(--color-text-dim)' }} />
+              <span style={{ flex: 1 }}>Notifications</span>
               {NOTIFICATIONS.length > 0 && (
-                <span
-                  className="w-4 h-4 rounded-full flex items-center justify-center text-white flex-shrink-0"
-                  style={{ background: 'var(--color-danger)', fontSize: '9px', fontWeight: 700 }}
-                >
-                  {NOTIFICATIONS.length}
-                </span>
+                <span style={{
+                  width: 16, height: 16, borderRadius: 3,
+                  background: 'var(--color-danger)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: 9, fontWeight: 700, color: '#fff',
+                  fontFamily: "'IBM Plex Mono', monospace", flexShrink: 0,
+                }}>{NOTIFICATIONS.length}</span>
               )}
             </button>
 
             {notifOpen && (
-              <div
-                className="absolute bottom-full mb-2 left-0 w-72 rounded-xl shadow-2xl overflow-hidden z-50 fade-up"
-                style={{ background: 'var(--color-overlay)', border: '1px solid var(--color-border-bright)' }}
-              >
-                <div className="px-4 py-3 flex items-center justify-between" style={{ borderBottom: '1px solid var(--color-border)' }}>
-                  <p className="text-sm font-semibold" style={{ color: 'var(--color-text)' }}>Notifications</p>
+              <div className="fade-up" style={{
+                position: 'absolute', bottom: '100%', marginBottom: 6, left: 0,
+                width: 264, borderRadius: 8, overflow: 'hidden', zIndex: 50,
+                background: 'var(--color-overlay)', border: '1px solid var(--color-border-bright)',
+                boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
+              }}>
+                <div style={{ padding: '10px 14px 8px', borderBottom: '1px solid var(--color-border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--color-text)', fontFamily: "'IBM Plex Mono', monospace", letterSpacing: '0.06em', textTransform: 'uppercase' }}>Notifications</span>
                   <span className="section-label">recent</span>
                 </div>
                 {NOTIFICATIONS.map(n => (
-                  <div key={n.id} className="flex items-start gap-3 px-4 py-3 hover:bg-[var(--color-elevated)] transition-colors duration-100" style={{ borderBottom: '1px solid var(--color-border-subtle)' }}>
-                    <div
-                      className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5"
-                      style={{
-                        background: n.type === 'alert' ? 'var(--color-danger-dim)' : 'var(--color-info-dim)',
-                        color:      n.type === 'alert' ? 'var(--color-danger)'     : 'var(--color-info)',
-                      }}
-                    >
-                      {n.type === 'alert' ? <AlertTriangle size={12} /> : <Bell size={12} />}
+                  <div key={n.id} style={{
+                    display: 'flex', alignItems: 'flex-start', gap: 10,
+                    padding: '10px 14px',
+                    borderBottom: '1px solid var(--color-border-subtle)',
+                    transition: 'background 100ms',
+                  }}
+                    onMouseEnter={e => e.currentTarget.style.background = 'var(--color-elevated)'}
+                    onMouseLeave={e => e.currentTarget.style.background = 'none'}>
+                    <div style={{
+                      width: 24, height: 24, borderRadius: 5, flexShrink: 0, marginTop: 1,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      background: n.type === 'alert' ? 'var(--color-danger-dim)' : 'var(--color-info-dim)',
+                      color: n.type === 'alert' ? 'var(--color-danger)' : 'var(--color-info)',
+                    }}>
+                      {n.type === 'alert' ? <AlertTriangle size={11} /> : <Bell size={11} />}
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm" style={{ color: 'var(--color-text)' }}>{n.message}</p>
-                      <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-dim)', fontFamily: 'IBM Plex Mono, monospace' }}>{n.time}</p>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <p style={{ fontSize: 12, color: 'var(--color-text)', margin: 0, lineHeight: 1.4 }}>{n.message}</p>
+                      <p style={{ fontSize: 10, color: 'var(--color-text-dim)', margin: '2px 0 0', fontFamily: "'IBM Plex Mono', monospace" }}>{n.time}</p>
                     </div>
                   </div>
                 ))}
@@ -180,74 +183,85 @@ const Sidebar = ({ isAuthenticated, onLogout, navigateTo, currentPage, isAdmin =
           </div>
 
           {/* Theme toggle */}
-          <button
-            onClick={toggleTheme}
-            className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-all duration-150 cursor-pointer w-full text-left hover:bg-[var(--color-elevated)]"
-            style={{ color: 'var(--color-text-muted)' }}
-            aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-          >
+          <button onClick={toggleTheme}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 8,
+              padding: '7px 8px', borderRadius: 6,
+              fontSize: 13, fontWeight: 400, width: '100%', textAlign: 'left',
+              background: 'none', border: '1px solid transparent', cursor: 'pointer',
+              color: 'var(--color-text-muted)', transition: 'background 120ms',
+            }}
+            onMouseEnter={e => e.currentTarget.style.background = 'var(--color-elevated)'}
+            onMouseLeave={e => e.currentTarget.style.background = 'none'}
+            aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}>
             {theme === 'dark'
-              ? <Sun size={15} className="flex-shrink-0" style={{ color: 'var(--color-text-dim)' }} />
-              : <Moon size={15} className="flex-shrink-0" style={{ color: 'var(--color-text-dim)' }} />}
-            <span className="truncate">{theme === 'dark' ? 'Light mode' : 'Dark mode'}</span>
+              ? <Sun size={14} style={{ flexShrink: 0, color: 'var(--color-text-dim)' }} />
+              : <Moon size={14} style={{ flexShrink: 0, color: 'var(--color-text-dim)' }} />}
+            <span>{theme === 'dark' ? 'Light mode' : 'Dark mode'}</span>
           </button>
 
           {/* Settings */}
-          <button
-            onClick={() => go('settings')}
-            className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-all duration-150 cursor-pointer w-full text-left ${currentPage === 'settings' ? 'nav-active-glow' : 'hover:bg-[var(--color-elevated)]'}`}
-            style={currentPage === 'settings' ? {} : { color: 'var(--color-text-muted)' }}
-          >
-            <Settings size={15} className="flex-shrink-0" style={{ color: currentPage === 'settings' ? 'var(--color-primary)' : 'var(--color-text-dim)' }} />
-            <span className="truncate">Settings</span>
+          <button onClick={() => go('settings')}
+            className={currentPage === 'settings' ? 'nav-active-glow' : ''}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 8,
+              padding: '7px 8px', borderRadius: 6,
+              fontSize: 13, fontWeight: currentPage === 'settings' ? 600 : 400,
+              width: '100%', textAlign: 'left', cursor: 'pointer',
+              background: currentPage === 'settings' ? undefined : 'none',
+              border: currentPage === 'settings' ? undefined : '1px solid transparent',
+              color: currentPage === 'settings' ? 'var(--color-text)' : 'var(--color-text-muted)',
+              transition: 'background 120ms',
+            }}
+            onMouseEnter={e => { if (currentPage !== 'settings') e.currentTarget.style.background = 'var(--color-elevated)'; }}
+            onMouseLeave={e => { if (currentPage !== 'settings') e.currentTarget.style.background = 'none'; }}>
+            <Settings size={14} style={{ flexShrink: 0, color: currentPage === 'settings' ? 'var(--color-primary)' : 'var(--color-text-dim)' }} />
+            <span>Settings</span>
           </button>
 
           {/* User menu */}
-          <div ref={userRef} className="relative">
-            <button
-              onClick={() => { setUserOpen(o => !o); setNotifOpen(false); }}
-              className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm w-full transition-all duration-150 cursor-pointer hover:bg-[var(--color-elevated)]"
-              style={{ color: 'var(--color-text-muted)' }}
-              aria-label="User menu"
-              aria-expanded={userOpen}
-            >
-              <div
-                className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 text-white font-bold"
-                style={{
-                  background: 'linear-gradient(135deg, #6366f1, #4f46e5)',
-                  fontSize: '10px',
-                  letterSpacing: 0,
-                }}
-              >
-                {(getSessionUsername() || 'U')[0].toUpperCase()}
-              </div>
-              <span className="flex-1 text-left truncate text-sm" style={{ color: 'var(--color-text)' }}>
-                {getSessionUsername() || 'Account'}
-              </span>
-              <ChevronDown
-                size={12}
-                className="flex-shrink-0 transition-transform duration-200"
-                style={{
-                  color: 'var(--color-text-dim)',
-                  transform: userOpen ? 'rotate(180deg)' : 'rotate(0deg)',
-                }}
-              />
+          <div ref={userRef} style={{ position: 'relative' }}>
+            <button onClick={() => { setUserOpen(o => !o); setNotifOpen(false); }}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 8,
+                padding: '7px 8px', borderRadius: 6,
+                fontSize: 13, fontWeight: 400, width: '100%', textAlign: 'left',
+                background: 'none', border: '1px solid transparent', cursor: 'pointer',
+                color: 'var(--color-text-muted)', transition: 'background 120ms',
+              }}
+              onMouseEnter={e => e.currentTarget.style.background = 'var(--color-elevated)'}
+              onMouseLeave={e => e.currentTarget.style.background = 'none'}
+              aria-label="User menu" aria-expanded={userOpen}>
+              <div style={{
+                width: 22, height: 22, borderRadius: 4, flexShrink: 0,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                background: 'var(--color-primary-dim)', color: 'var(--color-primary)',
+                fontSize: 10, fontWeight: 700, fontFamily: "'IBM Plex Mono', monospace",
+              }}>{initial}</div>
+              <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--color-text)' }}>{username}</span>
+              <ChevronDown size={11} style={{ flexShrink: 0, color: 'var(--color-text-dim)', transform: userOpen ? 'rotate(180deg)' : 'none', transition: 'transform 150ms' }} />
             </button>
 
             {userOpen && (
-              <div
-                className="absolute bottom-full mb-2 left-0 w-48 rounded-xl shadow-2xl overflow-hidden z-50 fade-up"
-                style={{ background: 'var(--color-overlay)', border: '1px solid var(--color-border-bright)' }}
-              >
-                <div className="px-4 py-2.5" style={{ borderBottom: '1px solid var(--color-border)' }}>
-                  <p className="text-xs font-semibold" style={{ color: 'var(--color-text)' }}>{getSessionUsername() || 'Account'}</p>
-                  <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-dim)' }}>Free plan</p>
+              <div className="fade-up" style={{
+                position: 'absolute', bottom: '100%', marginBottom: 6, left: 0,
+                width: 180, borderRadius: 8, overflow: 'hidden', zIndex: 50,
+                background: 'var(--color-overlay)', border: '1px solid var(--color-border-bright)',
+                boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
+              }}>
+                <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--color-border)' }}>
+                  <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-text)', margin: 0 }}>{username}</p>
+                  <p style={{ fontSize: 10, color: 'var(--color-text-dim)', margin: '2px 0 0', fontFamily: "'IBM Plex Mono', monospace" }}>Free plan</p>
                 </div>
-                <button
-                  onClick={() => { setUserOpen(false); onLogout(); }}
-                  className="flex items-center gap-2.5 w-full px-4 py-2.5 text-sm text-left transition-colors duration-150 cursor-pointer hover:bg-[var(--color-elevated)]"
-                  style={{ color: 'var(--color-danger)' }}
-                >
+                <button onClick={() => { setUserOpen(false); onLogout(); }}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 8,
+                    width: '100%', padding: '9px 14px', fontSize: 13, textAlign: 'left',
+                    background: 'none', border: 'none', cursor: 'pointer',
+                    color: 'var(--color-danger)', transition: 'background 100ms',
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.background = 'var(--color-elevated)'}
+                  onMouseLeave={e => e.currentTarget.style.background = 'none'}>
                   <LogOut size={13} />
                   Sign out
                 </button>
@@ -260,40 +274,9 @@ const Sidebar = ({ isAuthenticated, onLogout, navigateTo, currentPage, isAdmin =
   );
 
   return (
-    <>
-      {/* Desktop sidebar */}
-      <aside className="hidden md:flex flex-col h-screen sticky top-0 flex-shrink-0">
-        <SidebarContent />
-      </aside>
-
-      {/* Mobile hamburger */}
-      <button
-        onClick={() => setMobileOpen(true)}
-        className="md:hidden fixed top-4 left-4 z-40 w-9 h-9 rounded-xl flex items-center justify-center cursor-pointer shadow-lg transition-all duration-150 active:scale-95"
-        style={{
-          background: 'var(--color-card)',
-          border: '1px solid var(--color-border)',
-          color: 'var(--color-text-muted)',
-        }}
-        aria-label="Open menu"
-      >
-        <Menu size={16} />
-      </button>
-
-      {/* Mobile drawer */}
-      {mobileOpen && (
-        <>
-          <div
-            className="fixed inset-0 z-40 md:hidden"
-            style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)' }}
-            onClick={() => setMobileOpen(false)}
-          />
-          <aside className="fixed inset-y-0 left-0 z-50 md:hidden flex flex-col h-full shadow-2xl">
-            <SidebarContent mobile />
-          </aside>
-        </>
-      )}
-    </>
+    <aside className="flex flex-col h-screen sticky top-0 flex-shrink-0">
+      <SidebarContent />
+    </aside>
   );
 };
 

@@ -1,4 +1,3 @@
-from celery import Celery
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 from flask_jwt_extended import JWTManager
@@ -11,11 +10,17 @@ from app.config import get_config
 
 db = SQLAlchemy()
 jwt = JWTManager()
-celery = Celery("wvs")
+celery = None
 limiter = Limiter(key_func=get_remote_address, default_limits=[])
 
 
-def init_celery(app: Flask) -> None:
+def init_celery(app: Flask):
+    global celery
+    if celery is None:
+        from celery import Celery
+
+        celery = Celery("wvs")
+
     celery.conf.update(
         broker_url=app.config["CELERY_BROKER_URL"],
         result_backend=app.config["CELERY_RESULT_BACKEND"],
@@ -41,6 +46,7 @@ def init_celery(app: Flask) -> None:
                 return self.run(*args, **kwargs)
 
     celery.Task = FlaskTask
+    return celery
 
 
 def register_blueprints(app: Flask) -> None:
@@ -144,8 +150,6 @@ def create_app(config_class=None):
     from app.commands import register_commands
 
     register_commands(app)
-    init_celery(app)
-
     if app.config["AUTO_CREATE_TABLES"]:
         with app.app_context():
             db.create_all()

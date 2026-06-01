@@ -92,14 +92,9 @@ const UptimeMonitors = ({ navigateTo }) => {
 
       {/* Page header */}
       <div className="page-header px-6 lg:px-10 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: 'var(--color-primary-dim)' }}>
-            <Activity size={15} style={{ color: 'var(--color-primary)' }} />
-          </div>
-          <div>
-            <h1 className="text-base font-bold leading-tight" style={{ color: 'var(--color-text)' }}>Uptime Monitors</h1>
-            <p className="text-xs" style={{ color: 'var(--color-text-dim)' }}>Track website availability and response times</p>
-          </div>
+        <div style={{ borderLeft: '2px solid var(--color-primary)', paddingLeft: 10 }}>
+          <h1 style={{ fontSize: 14, fontWeight: 700, color: 'var(--color-text)', letterSpacing: '-0.02em', margin: 0 }}>Uptime Monitors</h1>
+          <p style={{ fontSize: 10, color: 'var(--color-text-dim)', fontFamily: "'IBM Plex Mono', monospace", marginTop: 2 }}>Track website availability and response times</p>
         </div>
         <div className="flex items-center gap-2">
           <button onClick={() => navigateTo('dashboard')} className="btn-secondary text-xs">
@@ -120,28 +115,26 @@ const UptimeMonitors = ({ navigateTo }) => {
             { label: 'Currently Up',   value: summary.up,                              icon: TrendingUp },
             { label: 'Currently Down', value: summary.down,                            icon: AlertTriangle, danger: summary.down > 0 },
             { label: 'Avg Uptime 24h', value: summary.avg ? `${summary.avg}%` : '—',  icon: Clock3 },
-          ].map(({ label, value, icon: Icon, danger }) => (
-            <div key={label} className="card p-4 flex items-center gap-3">
-              <div className="w-7 h-7 rounded-md flex items-center justify-center flex-shrink-0"
-                style={{ background: danger ? 'var(--color-danger-dim)' : 'var(--color-primary-dim)' }}>
-                <Icon size={13} style={{ color: danger ? 'var(--color-danger)' : 'var(--color-primary)' }} />
+          ].map(({ label, value, icon: Icon, danger }) => {
+            const accent = danger ? 'var(--color-danger)' : 'var(--color-primary)';
+            return (
+            <div key={label} style={{
+              background: 'var(--color-card)', border: '1px solid var(--color-border)',
+              borderTop: `2px solid ${accent}`, padding: '14px 16px',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+                <Icon size={11} style={{ color: accent, opacity: 0.6, marginTop: 2 }} />
+                <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 22, fontWeight: 700, color: accent, letterSpacing: '-0.04em', lineHeight: 1 }}>{value}</span>
               </div>
-              <div>
-                <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>{label}</p>
-                <p className="text-lg font-bold tabular-nums" style={{ color: 'var(--color-text)', letterSpacing: '-0.03em' }}>{value}</p>
-              </div>
+              <p style={{ fontSize: 10, fontWeight: 700, color: 'var(--color-text-muted)', letterSpacing: '0.08em', textTransform: 'uppercase', fontFamily: "'IBM Plex Mono', monospace", marginTop: 8 }}>{label}</p>
             </div>
-          ))}
+            );
+          })}
         </div>
 
         {/* Add monitor card */}
         <div className="card p-5">
-          <div className="flex items-center gap-2 mb-4">
-            <div className="w-6 h-6 rounded-md flex items-center justify-center" style={{ background: 'var(--color-primary-dim)' }}>
-              <Plus size={12} style={{ color: 'var(--color-primary)' }} />
-            </div>
-            <p className="text-sm font-semibold" style={{ color: 'var(--color-text)' }}>Add Monitor</p>
-          </div>
+          <p className="section-label mb-4" style={{ borderLeft: '2px solid var(--color-primary)', paddingLeft: 8 }}>Add Monitor</p>
           <div className="grid grid-cols-1 lg:grid-cols-[1fr_1.4fr_180px_140px] gap-3">
             <input value={name} onChange={(e) => setName(e.target.value)}
               placeholder="Production Website"
@@ -183,10 +176,8 @@ const UptimeMonitors = ({ navigateTo }) => {
             </div>
           ) : monitors.length === 0 ? (
             <div className="flex flex-col items-center gap-3 py-16">
-              <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: 'var(--color-elevated)' }}>
-                <Activity size={18} style={{ color: 'var(--color-text-dim)' }} />
-              </div>
-              <p className="text-sm" style={{ color: 'var(--color-text-dim)' }}>No uptime monitors added yet.</p>
+              <Activity size={18} style={{ color: 'var(--color-text-dim)' }} />
+              <p className="text-sm font-mono" style={{ color: 'var(--color-text-dim)' }}>No uptime monitors added yet.</p>
             </div>
           ) : (
             <div style={{ borderColor: 'var(--color-border)' }}>

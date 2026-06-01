@@ -83,14 +83,9 @@ const BlockedSites = ({ navigateTo }) => {
           <button onClick={() => navigateTo('dashboard')} className="btn-secondary flex items-center gap-1.5 text-xs">
             <ArrowLeft size={13} /> Back
           </button>
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: 'var(--color-danger-dim)' }}>
-              <ShieldOff size={15} style={{ color: 'var(--color-danger)' }} />
-            </div>
-            <div>
-              <h1 className="text-base font-bold leading-tight" style={{ color: 'var(--color-text)' }}>Blocked Sites</h1>
-              <p className="text-xs" style={{ color: 'var(--color-text-dim)' }}>{blockedSites.length} domains on blocklist</p>
-            </div>
+          <div style={{ borderLeft: '2px solid var(--color-danger)', paddingLeft: 10 }}>
+            <h1 style={{ fontSize: 14, fontWeight: 700, color: 'var(--color-text)', letterSpacing: '-0.02em', margin: 0 }}>Blocked Sites</h1>
+            <p style={{ fontSize: 10, color: 'var(--color-text-dim)', fontFamily: "'IBM Plex Mono', monospace", marginTop: 2 }}>{blockedSites.length} domains on blocklist</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -154,10 +149,8 @@ const BlockedSites = ({ navigateTo }) => {
             </div>
           ) : current.length === 0 ? (
             <div className="flex flex-col items-center gap-4 py-20">
-              <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ background: 'var(--color-elevated)' }}>
-                <Globe size={22} style={{ color: 'var(--color-text-dim)' }} />
-              </div>
-              <p className="text-sm font-medium" style={{ color: 'var(--color-text)' }}>No blocked sites</p>
+              <Globe size={22} style={{ color: 'var(--color-text-dim)' }} />
+              <p className="text-sm font-medium font-mono" style={{ color: 'var(--color-text)' }}>No blocked sites</p>
               <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Sites flagged as malicious will appear here.</p>
             </div>
           ) : (
@@ -177,10 +170,7 @@ const BlockedSites = ({ navigateTo }) => {
                         style={{ borderBottom: '1px solid var(--color-border-subtle)' }}>
                         <td className="px-5 py-4">
                           <div className="flex items-center gap-2.5">
-                            <div className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0"
-                              style={{ background: 'var(--color-danger-dim)' }}>
-                              <AlertOctagon size={12} style={{ color: 'var(--color-danger)' }} />
-                            </div>
+                            <AlertOctagon size={12} className="flex-shrink-0" style={{ color: 'var(--color-danger)' }} />
                             <div>
                               <p className="text-xs font-mono font-medium" style={{ color: 'var(--color-text)' }}>{site.domain}</p>
                               <a href={`https://${site.domain}`} target="_blank" rel="noopener noreferrer"
@@ -275,10 +265,7 @@ const BlockedSites = ({ navigateTo }) => {
           <div className="w-full max-w-sm rounded-2xl overflow-hidden shadow-2xl fade-up"
             style={{ background: 'var(--color-card)', border: '1px solid var(--color-border-bright)' }}>
             <div className="px-6 py-6 flex flex-col items-center gap-4">
-              <div className="w-12 h-12 rounded-xl flex items-center justify-center"
-                style={{ background: 'var(--color-danger-dim)' }}>
-                <Trash2 size={20} style={{ color: 'var(--color-danger)' }} />
-              </div>
+              <Trash2 size={20} style={{ color: 'var(--color-danger)' }} />
               <div className="text-center">
                 <h3 className="text-sm font-semibold mb-1.5" style={{ color: 'var(--color-text)' }}>Remove from blocklist?</h3>
                 <p className="text-xs font-mono" style={{ color: 'var(--color-text-muted)' }}>{confirmDelete.domain}</p>

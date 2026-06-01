@@ -17,6 +17,22 @@ RUN apt-get update \
         libmagic1 \
         npm \
         pkg-config \
+        ruby \
+        ruby-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN apt-get update \
+    && for pkg in nmap nikto whatweb wafw00f sslscan sqlmap ffuf; do \
+        if apt-cache show "$pkg" >/dev/null 2>&1; then \
+            apt-get install -y --no-install-recommends "$pkg"; \
+        fi; \
+    done \
+    && curl -fsSL https://codeload.github.com/sullo/nikto/tar.gz/main -o /tmp/nikto.tgz \
+    && mkdir -p /opt/nikto \
+    && tar -xzf /tmp/nikto.tgz -C /opt/nikto --strip-components=1 \
+    && chmod +x /opt/nikto/program/nikto.pl \
+    && ln -sf /opt/nikto/program/nikto.pl /usr/local/bin/nikto \
+    && gem install wpscan --no-document \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=ghcr.io/astral-sh/uv:0.5.30 /uv /uvx /usr/local/bin/

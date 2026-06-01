@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { useScansData } from '../hooks/useScansData';
 import { useVerifiedTargetsData } from '../hooks/useVerifiedTargetsData';
+import { apiDateMs, formatApiDateTime, formatApiTime } from '../lib/time';
 import { apiJson } from '../lib/api';
 import Spinner from './Spinner';
 
@@ -16,7 +17,7 @@ const V = {
   warn:    'var(--color-warn)',
   danger:  'var(--color-danger)',
   info:    'var(--color-info)',
-  purple:  '#A78BFA',
+  purple:  'var(--color-info)',
 };
 
 /* Keep T as alias for backwards compat with scan result panels */
@@ -117,22 +118,21 @@ const VulnBadge = ({ vulnerable, label }) => (
 );
 
 const FindingItem = ({ color, bg, icon, title, meta }) => (
-  <div className="flex items-start gap-3 p-3 rounded-lg" style={{ background: bg, border: `1px solid ${color}25` }}>
-    {React.createElement(icon, { size: 13, className: 'flex-shrink-0 mt-0.5', style: { color } })}
-    <div>
-      <p className="text-xs font-semibold" style={{ color }}>{title}</p>
-      {meta && <p className="text-xs mt-0.5" style={{ color: T.muted }}>{meta}</p>}
+  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '8px 12px', borderLeft: `2px solid ${color}`, background: 'var(--color-surface)' }}>
+    <div style={{ minWidth: 0, flex: 1 }}>
+      <p style={{ fontSize: 11, fontWeight: 600, color, fontFamily: "'IBM Plex Mono', monospace" }}>{title}</p>
+      {meta && <p style={{ fontSize: 10, marginTop: 2, color: T.muted, fontFamily: "'IBM Plex Mono', monospace" }}>{meta}</p>}
     </div>
   </div>
 );
 
 const Recs = ({ items }) => (
-  <div className="rounded-lg p-3" style={{ background: 'var(--color-info-dim)', border: '1px solid rgba(56,189,248,0.2)' }}>
-    <p className="text-xs font-semibold mb-2" style={{ color: 'var(--color-info)' }}>Recommendations</p>
-    <ul className="flex flex-col gap-1">
+  <div style={{ borderLeft: '2px solid var(--color-info)', paddingLeft: 12, paddingTop: 4, paddingBottom: 4 }}>
+    <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--color-info)', fontFamily: "'IBM Plex Mono', monospace", marginBottom: 6 }}>Recommendations</p>
+    <ul style={{ display: 'flex', flexDirection: 'column', gap: 4, margin: 0, padding: 0, listStyle: 'none' }}>
       {items.map((r, i) => (
-        <li key={i} className="text-xs flex items-start gap-1.5" style={{ color: 'var(--color-text-muted)' }}>
-          <span style={{ color: 'var(--color-info)' }}>›</span> {r}
+        <li key={i} style={{ fontSize: 11, color: 'var(--color-text-muted)', display: 'flex', gap: 6, alignItems: 'flex-start' }}>
+          <span style={{ color: 'var(--color-info)', flexShrink: 0 }}>›</span> {r}
         </li>
       ))}
     </ul>
@@ -141,12 +141,10 @@ const Recs = ({ items }) => (
 
 const ProgressBar = ({ value, color }) => (
   <div
-    className="w-full h-2 rounded-full overflow-hidden"
-    style={{ background: `${color}18`, border: `1px solid ${color}20` }}
+    style={{ width: '100%', height: 2, background: 'var(--color-border)' }}
   >
     <div
-      className="h-full transition-all duration-500"
-      style={{ width: `${Math.max(0, Math.min(value ?? 0, 100))}%`, background: color }}
+      style={{ width: `${Math.max(0, Math.min(value ?? 0, 100))}%`, height: '100%', background: color, transition: 'width 500ms ease' }}
     />
   </div>
 );
@@ -168,13 +166,11 @@ const StatusBadge = ({ status }) => {
 const ScanInput = ({ url, setUrl, onScan, isScanning }) => (
   <div className="flex gap-2">
     <div className="relative flex-1">
-      <div className="absolute left-3 top-1/2 -translate-y-1/2 w-1.5 h-1.5 rounded-full"
-        style={{ background: isScanning ? 'var(--color-warn)' : 'var(--color-primary)' }} />
       <input type="url" value={url}
         onChange={(e) => setUrl(e.target.value)}
         onKeyDown={(e) => e.key === 'Enter' && !isScanning && onScan()}
         placeholder="https://target.example.com"
-        className="input pl-7 font-mono" style={{ fontSize: '13px' }} />
+        className="input font-mono" style={{ fontSize: '13px' }} />
     </div>
     <button onClick={onScan} disabled={isScanning}
       className="btn-primary whitespace-nowrap" style={{ opacity: isScanning ? 0.75 : 1 }}>
@@ -188,26 +184,29 @@ const FullScanStatus = ({ job, navigateTo }) => {
   if (!job) return null;
 
   const statusColor = job.status === 'completed' ? T.secure : job.status === 'failed' ? T.danger : T.warn;
-  const fmt = (d) => new Date(d).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' });
+  const fmt = (d) => formatApiDateTime(d, { dateStyle: 'short', timeStyle: 'short' });
   const progress = job.progress || null;
+  const isStale = Boolean(progress?.stale) && ['queued', 'running'].includes(job.status);
   const progressPercent = progress?.percent ?? (job.status === 'completed' ? 100 : 0);
-  const queuedForMs = job.created_at ? Date.now() - new Date(job.created_at).getTime() : 0;
+  const queuedForMs = job.created_at ? Date.now() - apiDateMs(job.created_at) : 0;
   const queueName = job.scan_type === 'product_readiness' || job.scan_type === 'full_launch_audit'
     ? 'ux_scans'
     : 'security_scans';
   const queueWarning = job.status === 'queued' && queuedForMs > 15000;
   const progressMessage =
-    progress?.message
+    (isStale ? 'The worker has not reported progress recently.' : progress?.message)
     || (job.status === 'queued' ? 'Waiting for worker to pick up the job' : null);
   const logs = Array.isArray(progress?.logs) ? progress.logs.slice(-6).reverse() : [];
+  const statusLabel = isStale ? 'stalled' : job.status;
+  const shownStatusColor = isStale ? T.danger : statusColor;
 
   return (
     <div className="rounded-xl overflow-hidden mt-4" style={{ border: '1px solid var(--color-border)' }}>
       <div className="flex items-center justify-between px-4 py-3" style={{ background: 'var(--color-surface)' }}>
         <p className="section-label">Job Status</p>
-        <span className="badge" style={{ background: `${statusColor}15`, color: statusColor }}>
-          {['queued','running'].includes(job.status) && <Spinner size="sm" style={{ width: 10, height: 10 }} />}
-          {job.status}
+        <span className="badge" style={{ background: `${shownStatusColor}15`, color: shownStatusColor }}>
+          {['queued','running'].includes(job.status) && !isStale && <Spinner size="sm" style={{ width: 10, height: 10 }} />}
+          {statusLabel}
         </span>
       </div>
       <div className="p-4 flex flex-col gap-2">
@@ -219,11 +218,11 @@ const FullScanStatus = ({ job, navigateTo }) => {
               <p className="text-xs font-medium" style={{ color: 'var(--color-text)' }}>
                 {progressMessage || 'Preparing status…'}
               </p>
-              <span className="text-xs font-mono" style={{ color: statusColor }}>
+              <span className="text-xs font-mono" style={{ color: shownStatusColor }}>
                 {progressPercent}%
               </span>
             </div>
-            <ProgressBar value={progressPercent} color={statusColor} />
+            <ProgressBar value={progressPercent} color={shownStatusColor} />
             {progress?.current_step_label && (
               <p className="text-xs" style={{ color: 'var(--color-text-dim)' }}>
                 Current step: {progress.current_step_label}
@@ -235,6 +234,16 @@ const FullScanStatus = ({ job, navigateTo }) => {
           </>
         )}
         {job.status === 'failed' && <p className="text-xs mt-1" style={{ color: 'var(--color-danger)' }}>{job.error_message || 'Scan failed'}</p>}
+        {isStale && (
+          <div className="mt-2 rounded-lg p-3" style={{ background: 'var(--color-danger-dim)', border: '1px solid rgba(239,68,68,0.2)' }}>
+            <p className="text-xs font-semibold" style={{ color: 'var(--color-danger)' }}>
+              This scan stopped updating.
+            </p>
+            <p className="text-xs mt-1" style={{ color: 'var(--color-text-muted)' }}>
+              The worker may have restarted while the scan was running. If this does not recover shortly, start a new scan.
+            </p>
+          </div>
+        )}
         {queueWarning && (
           <div className="mt-2 rounded-lg p-3" style={{ background: 'var(--color-warn-dim)', border: '1px solid rgba(245,158,11,0.2)' }}>
             <p className="text-xs font-semibold" style={{ color: 'var(--color-warn)' }}>
@@ -251,12 +260,12 @@ const FullScanStatus = ({ job, navigateTo }) => {
             <p className="section-label">Activity</p>
             {logs.map((entry, index) => (
               <div key={`${entry.timestamp || index}-${entry.message || index}`} className="flex items-start gap-2">
-                <span className="mt-1 w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: statusColor }} />
+                <span className="mt-1 w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: shownStatusColor }} />
                 <div className="min-w-0">
                   <p className="text-xs" style={{ color: 'var(--color-text)' }}>{entry.message}</p>
                   {entry.timestamp && (
                     <p className="text-xs font-mono" style={{ color: 'var(--color-text-dim)' }}>
-                      {new Date(entry.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                      {formatApiTime(entry.timestamp, { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
                     </p>
                   )}
                 </div>
@@ -270,7 +279,9 @@ const FullScanStatus = ({ job, navigateTo }) => {
             View Report <ArrowRight size={13} />
           </button>
         ) : !['completed','failed'].includes(job.status) && (
-          <p className="text-xs mt-1" style={{ color: 'var(--color-text-dim)' }}>Processing in background — auto-refreshing every 3s</p>
+          <p className="text-xs mt-1" style={{ color: 'var(--color-text-dim)' }}>
+            {isStale ? 'Waiting for the backend to mark the interrupted job or recover it.' : 'Processing in background — auto-refreshing every 3s'}
+          </p>
         )}
       </div>
     </div>
@@ -320,8 +331,7 @@ const Scanners = ({ navigateTo }) => {
 
   useEffect(() => { document.title = 'Scanners — LaunchGuard'; }, []);
 
-  const fmt = (d) => new Date(d).toLocaleDateString() + ' ' +
-    new Date(d).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const fmt = (d) => formatApiDateTime(d, { dateStyle: 'short', timeStyle: 'short' });
 
   const active = SCANNERS.find(s => s.id === activeId);
 
@@ -373,34 +383,46 @@ const Scanners = ({ navigateTo }) => {
         <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-6 items-start">
 
           {/* Left: scanner picker */}
-          <div className="lg:sticky lg:top-20 flex flex-col gap-1.5">
-            {SCANNERS.map((s) => {
-              const Icon = s.icon;
+          <div className="lg:sticky lg:top-20 overflow-hidden"
+            style={{ border: '1px solid var(--color-border)', background: 'var(--color-card)' }}>
+            {SCANNERS.map((s, i) => {
               const isActive = s.id === activeId;
               return (
                 <button key={s.id} onClick={() => setActiveId(s.id)}
-                  className="flex items-center gap-3 p-3.5 rounded-xl text-left transition-all duration-150 cursor-pointer w-full"
                   style={{
-                    background: isActive ? 'var(--color-elevated)' : 'var(--color-card)',
-                    border: `1px solid ${isActive ? s.color + '40' : 'var(--color-border)'}`,
-                  }}>
-                  <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
-                    style={{ background: `${s.color}${isActive ? '20' : '12'}` }}>
-                    <Icon size={14} style={{ color: s.color }} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <p className="text-xs font-semibold truncate" style={{ color: isActive ? 'var(--color-text)' : 'var(--color-text-muted)' }}>{s.title}</p>
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    width: '100%', textAlign: 'left', cursor: 'pointer',
+                    padding: '10px 14px',
+                    borderTop: 'none', borderRight: 'none', borderBottom: i < SCANNERS.length - 1 ? '1px solid var(--color-border)' : 'none',
+                    borderLeft: `2px solid ${isActive ? s.color : 'transparent'}`,
+                    background: isActive ? 'var(--color-elevated)' : 'transparent',
+                    transition: 'background 100ms ease, border-color 100ms ease',
+                  }}
+                  onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = 'var(--color-surface)'; }}
+                  onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}
+                >
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                      <span style={{
+                        fontSize: 11, fontWeight: isActive ? 600 : 500,
+                        color: isActive ? 'var(--color-text)' : 'var(--color-text-muted)',
+                        fontFamily: "'IBM Plex Mono', monospace",
+                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                      }}>{s.title}</span>
                       {s.badge && (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded font-semibold flex-shrink-0"
-                          style={{ background: 'var(--color-primary-dim)', color: 'var(--color-primary)' }}>
+                        <span style={{
+                          fontSize: 9, padding: '1px 5px', fontWeight: 700, letterSpacing: '0.06em',
+                          textTransform: 'uppercase', fontFamily: "'IBM Plex Mono', monospace", flexShrink: 0,
+                          background: isActive ? `${s.color}18` : 'var(--color-primary-dim)',
+                          color: isActive ? s.color : 'var(--color-primary)',
+                        }}>
                           {s.badge}
                         </span>
                       )}
                     </div>
-                    <p className="text-[11px] mt-0.5 font-mono" style={{ color: 'var(--color-text-dim)' }}>{s.subtitle}</p>
+                    <p style={{ fontSize: 10, marginTop: 2, color: 'var(--color-text-dim)', fontFamily: "'IBM Plex Mono', monospace" }}>{s.subtitle}</p>
                   </div>
-                  <ChevronRight size={12} style={{ color: isActive ? s.color : 'var(--color-text-dim)', flexShrink: 0 }} />
+                  <ChevronRight size={10} style={{ color: isActive ? s.color : 'var(--color-text-dim)', flexShrink: 0, marginLeft: 8 }} />
                 </button>
               );
             })}
@@ -410,22 +432,20 @@ const Scanners = ({ navigateTo }) => {
           <div className="flex flex-col gap-5">
 
             {/* Scanner description header */}
-            <div className="card p-5 flex items-start gap-4">
-              <div className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0"
-                style={{ background: `${active.color}18`, border: `1px solid ${active.color}30` }}>
-                <active.icon size={22} style={{ color: active.color }} />
+            <div style={{ borderLeft: `3px solid ${active.color}`, paddingLeft: 16, paddingTop: 4, paddingBottom: 4 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--color-text)', fontFamily: "'Syne', system-ui, sans-serif", letterSpacing: '-0.02em', margin: 0 }}>{active.title}</h2>
+                {active.badge && (
+                  <span style={{
+                    fontSize: 9, padding: '2px 6px', fontWeight: 700, letterSpacing: '0.08em',
+                    textTransform: 'uppercase', fontFamily: "'IBM Plex Mono', monospace",
+                    background: `${active.color}18`, color: active.color,
+                  }}>
+                    {active.badge}
+                  </span>
+                )}
               </div>
-              <div className="flex-1">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <h2 className="text-base font-bold" style={{ color: 'var(--color-text)' }}>{active.title}</h2>
-                  {active.badge && (
-                    <span className="badge" style={{ background: 'var(--color-primary-dim)', color: 'var(--color-primary)' }}>
-                      {active.badge}
-                    </span>
-                  )}
-                </div>
-                <p className="text-xs mt-1 leading-relaxed" style={{ color: 'var(--color-text-muted)' }}>{active.desc}</p>
-              </div>
+              <p style={{ fontSize: 12, marginTop: 4, color: 'var(--color-text-muted)', lineHeight: 1.6 }}>{active.desc}</p>
             </div>
 
             {/* ── FULL SCAN ── */}
