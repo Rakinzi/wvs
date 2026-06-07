@@ -159,9 +159,9 @@ const HeroContent = ({ isDark }) => {
       <div>
         <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(0,212,170,0.08)', border: '1px solid rgba(0,212,170,0.25)', borderRadius: 4, padding: '4px 12px', marginBottom: 18 }}>
           <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#00d4aa', display: 'block', boxShadow: '0 0 8px #00d4aa' }} />
-          <span style={{ fontSize: 10, fontWeight: 700, color: '#00d4aa', letterSpacing: '0.1em', textTransform: 'uppercase', fontFamily: "'IBM Plex Mono', monospace" }}>Live protection active</span>
+          <span style={{ fontSize: 10, fontWeight: 700, color: '#00d4aa', letterSpacing: '0.1em', textTransform: 'uppercase', fontFamily: "var(--font-mono)" }}>Live protection active</span>
         </div>
-        <h2 style={{ fontFamily: "'Syne', system-ui, sans-serif", fontSize: 30, fontWeight: 800, lineHeight: 1.15, color: txt, letterSpacing: '-0.04em', margin: '0 0 12px' }}>
+        <h2 style={{ fontFamily: "var(--font-display)", fontSize: 30, fontWeight: 800, lineHeight: 1.15, color: txt, letterSpacing: '-0.04em', margin: '0 0 12px' }}>
           Security intelligence<br />
           <span style={{ color: '#00d4aa' }}>
             for modern teams.
@@ -183,7 +183,7 @@ const HeroContent = ({ isDark }) => {
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'rgba(0,212,170,0.08)', border: '1px solid rgba(0,212,170,0.2)', borderRadius: 4, padding: '3px 9px' }}>
             <Activity size={10} color="#00d4aa" />
-            <span style={{ fontSize: 10, fontWeight: 700, color: '#00d4aa', fontFamily: "'IBM Plex Mono', monospace" }}>+18%</span>
+            <span style={{ fontSize: 10, fontWeight: 700, color: '#00d4aa', fontFamily: "var(--font-mono)" }}>+18%</span>
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'flex-end', gap: 3, height: 44 }}>

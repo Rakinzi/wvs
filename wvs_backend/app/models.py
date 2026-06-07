@@ -5,6 +5,10 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from app.utils.time_utils import utc_now
 
 class ScanResult(db.Model):
+    __table_args__ = (
+        db.Index('ix_scan_result_user_timestamp', 'user_id', 'timestamp'),
+    )
+
     id = db.Column(db.Integer, primary_key=True)
     public_id = db.Column(db.String(36), unique=True, nullable=False, default=lambda: str(uuid.uuid4()), index=True)
     url = db.Column(db.String(500))
@@ -16,6 +20,10 @@ class ScanResult(db.Model):
 
 
 class ScanJob(db.Model):
+    __table_args__ = (
+        db.Index('ix_scan_job_user_created_at', 'user_id', 'created_at'),
+    )
+
     id = db.Column(db.Integer, primary_key=True)
     public_id = db.Column(db.String(36), unique=True, nullable=False, default=lambda: str(uuid.uuid4()), index=True)
     url = db.Column(db.String(500), nullable=False)

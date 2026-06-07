@@ -26,7 +26,7 @@ const T = {
   infoDim:     'var(--color-info-dim)',
 };
 
-const CATEGORIES = ['General', 'Vulnerability', 'Advisory', 'Research', 'Tool'];
+const CATEGORIES = ['General', 'Breach', 'Vulnerability', 'Advisory', 'Research', 'Tool'];
 const SEVERITIES = ['', 'Critical', 'High', 'Medium', 'Low'];
 
 const EMPTY_FORM = {
@@ -140,7 +140,7 @@ const ArticleForm = ({ article, onSave, onCancel, saving, error }) => {
             Body <span style={{ color: T.danger }}>*</span>
           </label>
           <textarea value={form.body} onChange={e => set('body')(e.target.value)} rows={14} placeholder="Full article content. Plain text or light markdown."
-            style={{ width: '100%', padding: '9px 12px', borderRadius: 9, background: T.elev, border: `1px solid ${T.border}`, color: T.text, fontSize: 13, fontFamily: "'IBM Plex Mono', monospace", outline: 'none', resize: 'vertical', lineHeight: 1.7, boxSizing: 'border-box' }} />
+            style={{ width: '100%', padding: '9px 12px', borderRadius: 9, background: T.elev, border: `1px solid ${T.border}`, color: T.text, fontSize: 13, fontFamily: "var(--font-mono)", outline: 'none', resize: 'vertical', lineHeight: 1.7, boxSizing: 'border-box' }} />
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16 }}>
@@ -188,6 +188,7 @@ const ArticleForm = ({ article, onSave, onCancel, saving, error }) => {
 };
 
 const NewsAdmin = ({ navigateTo }) => {
+  useEffect(() => { document.title = 'News Admin — LaunchGuard'; }, []);
   const [articles, setArticles] = useState([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -353,7 +354,7 @@ const NewsAdmin = ({ navigateTo }) => {
               <thead>
                 <tr style={{ background: T.surface, borderBottom: `1px solid ${T.border}` }}>
                   {['Title', 'Category', 'Severity', 'Status', 'Published', 'Actions'].map((h) => (
-                    <th key={h} style={{ padding: '10px 16px', textAlign: 'left', fontSize: 11, fontWeight: 700, color: T.dim, letterSpacing: '0.06em', textTransform: 'uppercase', fontFamily: "'IBM Plex Mono', monospace", whiteSpace: 'nowrap' }}>
+                    <th key={h} style={{ padding: '10px 16px', textAlign: 'left', fontSize: 11, fontWeight: 700, color: T.dim, letterSpacing: '0.06em', textTransform: 'uppercase', fontFamily: "var(--font-mono)", whiteSpace: 'nowrap' }}>
                       {h}
                     </th>
                   ))}
@@ -375,11 +376,11 @@ const NewsAdmin = ({ navigateTo }) => {
                       <p className="text-xs mt-0.5 font-mono truncate" style={{ color: T.dim, maxWidth: 260 }}>{a.slug}</p>
                     </td>
                     <td style={{ padding: '12px 16px', whiteSpace: 'nowrap' }}>
-                      <span style={{ fontSize: 11, padding: '3px 8px', borderRadius: 6, background: T.elev, color: T.muted, fontFamily: "'IBM Plex Mono', monospace" }}>{a.category}</span>
+                      <span style={{ fontSize: 11, padding: '3px 8px', borderRadius: 6, background: T.elev, color: T.muted, fontFamily: "var(--font-mono)" }}>{a.category}</span>
                     </td>
                     <td style={{ padding: '12px 16px', whiteSpace: 'nowrap' }}>
                       {a.severity ? (
-                        <span style={{ fontSize: 11, padding: '3px 8px', borderRadius: 6, fontFamily: "'IBM Plex Mono', monospace", fontWeight: 700,
+                        <span style={{ fontSize: 11, padding: '3px 8px', borderRadius: 6, fontFamily: "var(--font-mono)", fontWeight: 700,
                           color: a.severity === 'Critical' ? T.danger : a.severity === 'High' ? T.warn : a.severity === 'Medium' ? T.info : T.secure,
                           background: a.severity === 'Critical' ? T.dangerDim : a.severity === 'High' ? T.warnDim : a.severity === 'Medium' ? T.infoDim : T.secureDim,
                         }}>{a.severity}</span>
@@ -393,7 +394,7 @@ const NewsAdmin = ({ navigateTo }) => {
                       </div>
                     </td>
                     <td style={{ padding: '12px 16px', whiteSpace: 'nowrap' }}>
-                      <span style={{ fontSize: 12, color: T.muted, fontFamily: "'IBM Plex Mono', monospace" }}>{fmt(a.published_at)}</span>
+                      <span style={{ fontSize: 12, color: T.muted, fontFamily: "var(--font-mono)" }}>{fmt(a.published_at)}</span>
                     </td>
                     <td style={{ padding: '12px 16px', whiteSpace: 'nowrap' }}>
                       <div style={{ display: 'flex', gap: 6 }}>

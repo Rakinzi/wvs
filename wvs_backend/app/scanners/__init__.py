@@ -1,5 +1,6 @@
 from .malicious import EnhancedMaliciousDetector
 from .sql_scanner import AdvancedSQLiScanner
+from .nosql_scanner import NoSQLInjectionScanner
 from .ssl_scanner import SSLScanner
 from .ai_scanner import AI_Scanner
 from .header_scanner import HeaderScanner
@@ -33,6 +34,7 @@ class SecurityScanner:
     def __init__(self):
         self.malicious_detector = EnhancedMaliciousDetector()
         self.sql_scanner = AdvancedSQLiScanner()
+        self.nosql_scanner = NoSQLInjectionScanner()
         self.ssl_scanner = SSLScanner()
         self.ai_scanner = None
         self.header_scanner = HeaderScanner()
@@ -65,6 +67,9 @@ class SecurityScanner:
 
     def check_sql_injection(self, url, enable_active_checks: bool = False):
         return self.sql_scanner.scan(url, enable_active_checks=enable_active_checks)
+
+    def check_nosql_injection(self, url, enable_active_checks: bool = False):
+        return self.nosql_scanner.scan(url, enable_active_checks=enable_active_checks)
 
     def check_ssl(self, url):
         return self.ssl_scanner.check(url)

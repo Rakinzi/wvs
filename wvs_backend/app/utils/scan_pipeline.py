@@ -63,6 +63,7 @@ def build_full_scan(url: str, progress_callback=None, enable_active_checks: bool
     steps = [
         ('screenshots', 'site screenshots', scanner.capture_screenshots),
         ('sqli', 'SQL injection', lambda target: scanner.check_sql_injection(target, enable_active_checks=enable_active_checks)),
+        ('nosqli', 'NoSQL injection', lambda target: scanner.check_nosql_injection(target, enable_active_checks=enable_active_checks)),
         ('ssl', 'SSL/TLS', scanner.check_ssl),
         ('headers', 'security headers', scanner.check_headers),
         ('wordpress', 'WordPress', lambda target: scanner.check_wordpress(target, enable_active_checks=enable_active_checks)),

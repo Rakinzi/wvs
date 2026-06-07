@@ -30,7 +30,7 @@ const T = {
   purpleDim: 'var(--color-info-dim)',
 };
 
-const CATEGORIES = ['All', 'Vulnerability', 'Advisory', 'Research', 'Tool', 'General'];
+const DEFAULT_CATEGORIES = ['All'];
 const SEVERITIES = ['All', 'Critical', 'High', 'Medium', 'Low'];
 
 const severityColor = (s) => {
@@ -66,11 +66,11 @@ const ArticleCard = ({ article, onClick }) => {
       )}
       <div style={{ padding: 24 }}>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
-          <span style={{ padding: '3px 10px', borderRadius: 100, fontSize: 11, fontWeight: 700, background: T.elev, color: T.muted, fontFamily: "'IBM Plex Mono', monospace", letterSpacing: '0.04em' }}>
+          <span style={{ padding: '3px 10px', borderRadius: 100, fontSize: 11, fontWeight: 700, background: T.elev, color: T.muted, fontFamily: "var(--font-mono)", letterSpacing: '0.04em' }}>
             {article.category}
           </span>
           {article.severity && (
-            <span style={{ padding: '3px 10px', borderRadius: 100, fontSize: 11, fontWeight: 700, background: sev.bg, color: sev.color, fontFamily: "'IBM Plex Mono', monospace" }}>
+            <span style={{ padding: '3px 10px', borderRadius: 100, fontSize: 11, fontWeight: 700, background: sev.bg, color: sev.color, fontFamily: "var(--font-mono)" }}>
               {article.severity.toUpperCase()}
             </span>
           )}
@@ -80,11 +80,11 @@ const ArticleCard = ({ article, onClick }) => {
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <Clock size={12} color={T.dim} />
-            <span style={{ fontSize: 12, color: T.dim, fontFamily: "'IBM Plex Mono', monospace" }}>{fmt(article.published_at)}</span>
+            <span style={{ fontSize: 12, color: T.dim, fontFamily: "var(--font-mono)" }}>{fmt(article.published_at)}</span>
             {article.author && <span style={{ fontSize: 12, color: T.dim }}>· {article.author}</span>}
           </div>
           {(article.cve_ids || []).length > 0 && (
-            <span style={{ fontSize: 11, fontFamily: "'IBM Plex Mono', monospace", color: T.purple, background: T.purpleDim, padding: '2px 8px', borderRadius: 6 }}>
+            <span style={{ fontSize: 11, fontFamily: "var(--font-mono)", color: T.purple, background: T.purpleDim, padding: '2px 8px', borderRadius: 6 }}>
               {article.cve_ids[0]}{article.cve_ids.length > 1 ? ` +${article.cve_ids.length - 1}` : ''}
             </span>
           )}
@@ -126,16 +126,16 @@ const ArticleDetail = ({ article, onBack }) => {
         )}
         <div style={{ padding: '36px 36px' }}>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 20 }}>
-          <span style={{ padding: '4px 12px', borderRadius: 100, fontSize: 12, fontWeight: 700, background: T.elev, color: T.muted, fontFamily: "'IBM Plex Mono', monospace" }}>
+          <span style={{ padding: '4px 12px', borderRadius: 100, fontSize: 12, fontWeight: 700, background: T.elev, color: T.muted, fontFamily: "var(--font-mono)" }}>
             {article.category}
           </span>
           {article.severity && (
-            <span style={{ padding: '4px 12px', borderRadius: 100, fontSize: 12, fontWeight: 700, background: sev.bg, color: sev.color, fontFamily: "'IBM Plex Mono', monospace" }}>
+            <span style={{ padding: '4px 12px', borderRadius: 100, fontSize: 12, fontWeight: 700, background: sev.bg, color: sev.color, fontFamily: "var(--font-mono)" }}>
               {article.severity.toUpperCase()}
             </span>
           )}
           {(article.cve_ids || []).map((c) => (
-            <span key={c} style={{ padding: '4px 12px', borderRadius: 100, fontSize: 12, fontWeight: 700, background: T.purpleDim, color: T.purple, fontFamily: "'IBM Plex Mono', monospace" }}>
+            <span key={c} style={{ padding: '4px 12px', borderRadius: 100, fontSize: 12, fontWeight: 700, background: T.purpleDim, color: T.purple, fontFamily: "var(--font-mono)" }}>
               {c}
             </span>
           ))}
@@ -151,7 +151,7 @@ const ArticleDetail = ({ article, onBack }) => {
           </div>
           <div>
             <p style={{ fontSize: 13, fontWeight: 600, color: T.text }}>{article.author || 'LaunchGuard Security Team'}</p>
-            <p style={{ fontSize: 12, color: T.dim, fontFamily: "'IBM Plex Mono', monospace" }}>{fmt(article.published_at)}</p>
+            <p style={{ fontSize: 12, color: T.dim, fontFamily: "var(--font-mono)" }}>{fmt(article.published_at)}</p>
           </div>
           {article.source_url && (
             <a href={article.source_url} target="_blank" rel="noopener noreferrer"
@@ -192,12 +192,15 @@ const NewsPage = ({ navigateTo, isAuthenticated }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [category, setCategory] = useState('All');
+  const [categories, setCategories] = useState(DEFAULT_CATEGORIES);
   const [severity, setSeverity] = useState('All');
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [filterOpen, setFilterOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+
+  useEffect(() => { document.title = 'Security News — LaunchGuard'; }, []);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 20);
@@ -218,6 +221,13 @@ const NewsPage = ({ navigateTo, isAuthenticated }) => {
       setTotal(payload.total);
       setPage(payload.page);
       setPages(payload.pages);
+      if (Array.isArray(payload.categories)) {
+        const publishedCategories = payload.categories.filter((c) => c && c !== 'All');
+        setCategories(['All', ...publishedCategories]);
+        if (category !== 'All' && !publishedCategories.includes(category)) {
+          setCategory('All');
+        }
+      }
     } catch (e) {
       setError(e.message || 'Failed to load news');
     } finally {
@@ -250,7 +260,7 @@ const NewsPage = ({ navigateTo, isAuthenticated }) => {
     : articles;
 
   return (
-    <div style={{ background: T.bg, minHeight: '100vh', color: T.text, fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif" }}>
+    <div style={{ background: T.bg, minHeight: '100vh', color: T.text, fontFamily: "var(--font-sans)" }}>
 
       {/* Navbar */}
       <PublicNav
@@ -275,8 +285,8 @@ const NewsPage = ({ navigateTo, isAuthenticated }) => {
           <>
             {/* Page header */}
             <div style={{ marginBottom: 40 }}>
-              <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.12em', color: T.primary, marginBottom: 12, fontFamily: "'IBM Plex Mono', monospace" }}>SECURITY INTELLIGENCE</p>
-              <h1 style={{ fontFamily: "'Syne', system-ui, sans-serif", fontSize: 'clamp(26px, 3.5vw, 38px)', fontWeight: 800, letterSpacing: '-0.04em', margin: '0 0 10px' }}>
+              <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.12em', color: T.primary, marginBottom: 12, fontFamily: "var(--font-mono)" }}>SECURITY INTELLIGENCE</p>
+              <h1 style={{ fontFamily: "var(--font-display)", fontSize: 'clamp(26px, 3.5vw, 38px)', fontWeight: 800, letterSpacing: '-0.04em', margin: '0 0 10px' }}>
                 Security News & Advisories
               </h1>
               <p style={{ fontSize: 15, color: T.muted }}>
@@ -297,9 +307,9 @@ const NewsPage = ({ navigateTo, isAuthenticated }) => {
               </div>
 
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                {CATEGORIES.map((c) => (
+                {categories.map((c) => (
                   <button key={c} onClick={() => { setCategory(c); setPage(1); }}
-                    style={{ padding: '6px 12px', borderRadius: 4, fontSize: 11, fontWeight: 600, background: category === c ? T.primary + '15' : T.card, border: `1px solid ${category === c ? T.primary + '50' : T.border}`, color: category === c ? T.primary : T.muted, cursor: 'pointer', fontFamily: "'IBM Plex Mono', monospace", letterSpacing: '0.04em', transition: 'all 150ms' }}>
+                    style={{ padding: '6px 12px', borderRadius: 4, fontSize: 11, fontWeight: 600, background: category === c ? T.primary + '15' : T.card, border: `1px solid ${category === c ? T.primary + '50' : T.border}`, color: category === c ? T.primary : T.muted, cursor: 'pointer', fontFamily: "var(--font-mono)", letterSpacing: '0.04em', transition: 'all 150ms' }}>
                     {c}
                   </button>
                 ))}
@@ -325,7 +335,7 @@ const NewsPage = ({ navigateTo, isAuthenticated }) => {
 
             {/* Stats bar */}
             {!loading && (
-              <p style={{ fontSize: 12, color: T.dim, marginBottom: 24, fontFamily: "'IBM Plex Mono', monospace" }}>
+              <p style={{ fontSize: 12, color: T.dim, marginBottom: 24, fontFamily: "var(--font-mono)" }}>
                 {filtered.length} article{filtered.length !== 1 ? 's' : ''} {search ? `matching "${search}"` : `— page ${page} of ${pages}`}
               </p>
             )}
@@ -369,7 +379,7 @@ const NewsPage = ({ navigateTo, isAuthenticated }) => {
                     )}
                     {Array.from({ length: Math.min(pages, 7) }, (_, i) => i + 1).map((p) => (
                       <button key={p} onClick={() => fetchArticles(p)}
-                        style={{ padding: '7px 12px', borderRadius: 5, fontSize: 13, background: p === page ? T.primary : T.card, border: `1px solid ${p === page ? T.primary : T.border}`, color: p === page ? '#060608' : T.muted, cursor: 'pointer', fontFamily: "'IBM Plex Mono', monospace", fontWeight: p === page ? 700 : 400, minWidth: 36 }}>
+                        style={{ padding: '7px 12px', borderRadius: 5, fontSize: 13, background: p === page ? T.primary : T.card, border: `1px solid ${p === page ? T.primary : T.border}`, color: p === page ? '#060608' : T.muted, cursor: 'pointer', fontFamily: "var(--font-mono)", fontWeight: p === page ? 700 : 400, minWidth: 36 }}>
                         {p}
                       </button>
                     ))}

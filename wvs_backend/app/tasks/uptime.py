@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-from app import celery
+from celery import shared_task
+
 from app.models import UptimeMonitor
 from app.services.uptime import monitor_is_due, perform_uptime_check
 from app.utils.time_utils import utc_now
 
 
-@celery.task(name="app.tasks.run_due_uptime_checks")
+@shared_task(name="app.tasks.run_due_uptime_checks")
 def run_due_uptime_checks() -> dict:
     from app import db
 
@@ -22,4 +23,3 @@ def run_due_uptime_checks() -> dict:
         db.session.expire_all()
 
     return {"checked": checked, "total": len(monitors)}
-

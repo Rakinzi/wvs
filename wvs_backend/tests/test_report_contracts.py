@@ -41,6 +41,8 @@ def test_build_scan_summary_preserves_legacy_issue_count_logic():
     assert summary["redirect_count"] == 1
     assert summary["takeover_count"] == 1
     assert summary["total_issues"] == 13
+    assert summary["score_breakdown"]["overall"]["score"] == summary["security_score"]
+    assert "UX Score" == summary["score_breakdown"]["ux"]["label"]
 
 
 def test_build_scan_sections_preserves_expected_section_shape():
@@ -66,6 +68,53 @@ def test_build_scan_sections_preserves_expected_section_shape():
     assert sections["headers"]["severity_counts"]["Medium"] == 1
     assert sections["headers"]["top_findings"][0]["name"] == "Missing HSTS"
     assert sections["xss"]["recommendations"] == ["Encode output."]
+
+
+def test_product_sections_include_grouped_findings_and_score_breakdown():
+    findings = {
+        "accessibility": {
+            "status": "issues_found",
+            "issues": [
+                {
+                    "scanner": "accessibility",
+                    "title": "Form elements must have labels",
+                    "severity": "high",
+                    "page_url": "https://example.com",
+                    "viewport": "mobile",
+                    "selector": "#search",
+                    "evidence": {"rule_id": "label", "description": "Input has no label."},
+                },
+                {
+                    "scanner": "accessibility",
+                    "title": "Form elements must have labels",
+                    "severity": "high",
+                    "page_url": "https://example.com/shop",
+                    "viewport": "desktop",
+                    "selector": "#header-search",
+                    "evidence": {"rule_id": "label", "description": "Input has no label."},
+                },
+            ],
+        },
+        "app_controls": {
+            "status": "issues_found",
+            "issues": [{
+                "scanner": "app_controls",
+                "title": "Protected path is reachable without authentication",
+                "severity": "high",
+                "page_url": "https://example.com/admin",
+                "viewport": "server",
+                "evidence": {"rule_id": "protected-path-public", "description": "Admin returned 200."},
+            }],
+        },
+    }
+
+    summary = build_scan_summary(findings)
+    sections = build_scan_sections(findings)
+
+    assert summary["score_breakdown"]["security_readiness"]["label"] == "Security Readiness Score"
+    assert sections["accessibility"]["groups"][0]["count"] == 2
+    assert sections["accessibility"]["groups"][0]["owner"] == "Frontend/UI"
+    assert sections["app_controls"]["groups"][0]["fix_effort"] == "Needs backend review"
 
 
 def test_report_json_endpoint_preserves_contract_and_backfills_summary(auth_client, user, app):

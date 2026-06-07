@@ -18,7 +18,7 @@ const LAST_UPDATED = 'June 1, 2026';
 const Section = ({ id, title, children }) => (
   <section id={id} style={{ marginBottom: 48 }}>
     <h2 style={{
-      fontFamily: "'Syne', system-ui, sans-serif",
+      fontFamily: "var(--font-display)",
       fontSize: 18, fontWeight: 700, color: T.text,
       letterSpacing: '-0.02em', margin: '0 0 16px',
       paddingLeft: 12, borderLeft: `2px solid ${T.primary}`,
@@ -70,7 +70,7 @@ const TermsOfService = ({ navigateTo }) => {
   useEffect(() => { document.title = 'Terms of Service — LaunchGuard'; }, []);
 
   return (
-    <div style={{ background: T.bg, color: T.text, minHeight: '100vh', fontFamily: "'Inter', system-ui, sans-serif" }}>
+    <div style={{ background: T.bg, color: T.text, minHeight: '100vh', fontFamily: "var(--font-sans)" }}>
 
       {/* Header */}
       <div style={{ borderBottom: `1px solid ${T.border}`, padding: '16px 24px', display: 'flex', alignItems: 'center', gap: 16, background: T.surface }}>
@@ -79,8 +79,8 @@ const TermsOfService = ({ navigateTo }) => {
           <ArrowLeft size={12} /> Back
         </button>
         <div style={{ borderLeft: `2px solid ${T.primary}`, paddingLeft: 12 }}>
-          <h1 style={{ fontFamily: "'Syne', system-ui, sans-serif", fontSize: 15, fontWeight: 700, margin: 0, letterSpacing: '-0.02em', color: T.text }}>Terms of Service</h1>
-          <p style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, color: T.dim, margin: '2px 0 0' }}>Last updated: {LAST_UPDATED}</p>
+          <h1 style={{ fontFamily: "var(--font-display)", fontSize: 15, fontWeight: 700, margin: 0, letterSpacing: '-0.02em', color: T.text }}>Terms of Service</h1>
+          <p style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: T.dim, margin: '2px 0 0' }}>Last updated: {LAST_UPDATED}</p>
         </div>
       </div>
 
@@ -88,7 +88,7 @@ const TermsOfService = ({ navigateTo }) => {
 
         {/* Sticky TOC */}
         <nav style={{ position: 'sticky', top: 24 }}>
-          <p style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, fontWeight: 700, color: T.dim, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 12 }}>Contents</p>
+          <p style={{ fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, color: T.dim, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 12 }}>Contents</p>
           {TOC.map(([id, label]) => (
             <a key={id} href={`#${id}`}
               style={{ display: 'block', fontSize: 12, color: T.muted, textDecoration: 'none', padding: '4px 0', borderBottom: `1px solid ${T.border}`, lineHeight: 1.5, transition: 'color 100ms' }}
@@ -213,7 +213,7 @@ const TermsOfService = ({ navigateTo }) => {
 
           <Section id="contact" title="14. Contact">
             <P>If you have questions about these Terms, please contact us at:</P>
-            <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderLeft: `2px solid ${T.primary}`, padding: '12px 16px', fontFamily: "'IBM Plex Mono', monospace", fontSize: 12, color: T.muted, lineHeight: 1.8 }}>
+            <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderLeft: `2px solid ${T.primary}`, padding: '12px 16px', fontFamily: "var(--font-mono)", fontSize: 12, color: T.muted, lineHeight: 1.8 }}>
               LaunchGuard<br />
               legal@launchguard.app
             </div>

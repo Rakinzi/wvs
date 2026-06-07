@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   AlertTriangle, Lock, Database,
   RefreshCw, CheckCircle, Search,
@@ -120,15 +120,15 @@ const VulnBadge = ({ vulnerable, label }) => (
 const FindingItem = ({ color, bg, icon, title, meta }) => (
   <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '8px 12px', borderLeft: `2px solid ${color}`, background: 'var(--color-surface)' }}>
     <div style={{ minWidth: 0, flex: 1 }}>
-      <p style={{ fontSize: 11, fontWeight: 600, color, fontFamily: "'IBM Plex Mono', monospace" }}>{title}</p>
-      {meta && <p style={{ fontSize: 10, marginTop: 2, color: T.muted, fontFamily: "'IBM Plex Mono', monospace" }}>{meta}</p>}
+      <p style={{ fontSize: 11, fontWeight: 600, color, fontFamily: "var(--font-mono)" }}>{title}</p>
+      {meta && <p style={{ fontSize: 10, marginTop: 2, color: T.muted, fontFamily: "var(--font-mono)" }}>{meta}</p>}
     </div>
   </div>
 );
 
 const Recs = ({ items }) => (
   <div style={{ borderLeft: '2px solid var(--color-info)', paddingLeft: 12, paddingTop: 4, paddingBottom: 4 }}>
-    <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--color-info)', fontFamily: "'IBM Plex Mono', monospace", marginBottom: 6 }}>Recommendations</p>
+    <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--color-info)', fontFamily: "var(--font-mono)", marginBottom: 6 }}>Recommendations</p>
     <ul style={{ display: 'flex', flexDirection: 'column', gap: 4, margin: 0, padding: 0, listStyle: 'none' }}>
       {items.map((r, i) => (
         <li key={i} style={{ fontSize: 11, color: 'var(--color-text-muted)', display: 'flex', gap: 6, alignItems: 'flex-start' }}>
@@ -149,17 +149,13 @@ const ProgressBar = ({ value, color }) => (
   </div>
 );
 
-const StatusBadge = ({ status }) => {
-  const styles = {
-    verified: { background: 'var(--color-secure-dim)', color: 'var(--color-secure)', border: '1px solid rgba(34,197,94,0.2)' },
-    pending:  { background: 'var(--color-warn-dim)',   color: 'var(--color-warn)',   border: '1px solid rgba(245,158,11,0.2)' },
-    failed:   { background: 'var(--color-danger-dim)', color: 'var(--color-danger)', border: '1px solid rgba(239,68,68,0.2)' },
-    expired:  { background: 'var(--color-danger-dim)', color: 'var(--color-danger)', border: '1px solid rgba(239,68,68,0.2)' },
-  };
-  const style = styles[status] || { background: 'var(--color-info-dim)', color: 'var(--color-info)', border: '1px solid rgba(56,189,248,0.2)' };
-  return (
-    <span className="badge" style={style}>{status}</span>
-  );
+const normalizeHost = (value = '') => {
+  try {
+    const url = new URL(value.startsWith('http') ? value : `https://${value}`);
+    return url.hostname.toLowerCase().replace(/^www\./, '');
+  } catch {
+    return '';
+  }
 };
 
 /* Scan URL input + button */
@@ -250,7 +246,7 @@ const FullScanStatus = ({ job, navigateTo }) => {
               This job is still queued.
             </p>
             <p className="text-xs mt-1" style={{ color: 'var(--color-text-muted)' }}>
-              The backend worker is probably not consuming the <span className="font-mono" style={{ color: 'var(--color-text)' }}>{queueName}</span> queue yet.
+              The <span className="font-mono" style={{ color: 'var(--color-text)' }}>{queueName}</span> queue may be busy, rate-limited, or reconnecting. Check worker logs if it does not start shortly.
             </p>
           </div>
         )}
@@ -334,6 +330,21 @@ const Scanners = ({ navigateTo }) => {
   const fmt = (d) => formatApiDateTime(d, { dateStyle: 'short', timeStyle: 'short' });
 
   const active = SCANNERS.find(s => s.id === activeId);
+  const activeScanUrl = {
+    full: fullScanUrl,
+    sql: sqlScanUrl,
+    wordpress: wordpressScanUrl,
+    exposure: exposureScanUrl,
+  }[activeId] || fullScanUrl;
+  const verifiedTargets = useMemo(
+    () => (targets || []).filter((target) => target.verification_status === 'verified'),
+    [targets]
+  );
+  const scanUrlHost = normalizeHost(activeScanUrl);
+  const selectedVerifiedTarget = verifiedTargets.find((target) => String(target.id) === String(fullScanVerifiedTargetId)) || null;
+  const selectedTargetHost = normalizeHost(selectedVerifiedTarget?.normalized_domain || '');
+  const selectedTargetMatchesUrl = Boolean(selectedVerifiedTarget && (!scanUrlHost || selectedTargetHost === scanUrlHost));
+  const matchingVerifiedTarget = verifiedTargets.find((target) => normalizeHost(target.normalized_domain || '') === scanUrlHost) || null;
 
   const handleCreateTarget = async () => {
     if (!newTargetUrl) return;
@@ -369,6 +380,79 @@ const Scanners = ({ navigateTo }) => {
       setTargetActionError(error.message || 'Failed to regenerate token');
     }
   };
+
+  const handleVerifiedTargetChange = (targetId) => {
+    setFullScanVerifiedTargetId(targetId);
+    if (!targetId) {
+      setFullScanEnableActiveChecks(false);
+    }
+  };
+
+  // Auto-select a verified target when the scan URL matches one the user already owns
+  useEffect(() => {
+    if (!scanUrlHost || !matchingVerifiedTarget || selectedTargetMatchesUrl) {
+      return;
+    }
+    setFullScanVerifiedTargetId(matchingVerifiedTarget.id);
+  }, [matchingVerifiedTarget, scanUrlHost, selectedTargetMatchesUrl, setFullScanVerifiedTargetId]);
+
+  useEffect(() => {
+    if (!targetsLoading && fullScanEnableActiveChecks && !selectedTargetMatchesUrl) {
+      setFullScanEnableActiveChecks(false);
+    }
+  }, [fullScanEnableActiveChecks, selectedTargetMatchesUrl, setFullScanEnableActiveChecks, targetsLoading]);
+
+  const renderActiveChecksControl = (label) => (
+    <div className="mt-3 rounded-xl p-4" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border-subtle)' }}>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <label className="flex flex-col gap-1.5">
+          <span className="text-xs font-medium" style={{ color: 'var(--color-text-muted)' }}>Verified Target</span>
+          <select
+            value={fullScanVerifiedTargetId}
+            onChange={(e) => handleVerifiedTargetChange(e.target.value)}
+            className="input text-sm cursor-pointer"
+            disabled={targetsLoading}
+          >
+            <option value="">{targetsLoading ? 'Loading verified targets...' : 'No verified target selected'}</option>
+            {verifiedTargets.map((target) => (
+              <option key={target.id} value={target.id}>
+                {target.normalized_domain}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label
+          className="flex items-start gap-2 text-xs cursor-pointer rounded-lg px-3 py-2"
+          style={{
+            color: selectedTargetMatchesUrl ? 'var(--color-text-muted)' : 'var(--color-text-dim)',
+            cursor: selectedTargetMatchesUrl ? 'pointer' : 'not-allowed',
+            border: '1px solid var(--color-border-subtle)',
+            background: 'var(--color-card)',
+          }}
+        >
+          <input
+            type="checkbox"
+            checked={Boolean(fullScanEnableActiveChecks && selectedTargetMatchesUrl)}
+            disabled={!selectedTargetMatchesUrl}
+            onChange={(e) => setFullScanEnableActiveChecks(e.target.checked)}
+            style={{ marginTop: 2 }}
+          />
+          <span>
+            {label}
+            {selectedTargetMatchesUrl ? (
+              <span className="block mt-1 font-mono" style={{ color: 'var(--color-secure)' }}>
+                Authorized for {selectedVerifiedTarget.normalized_domain}
+              </span>
+            ) : (
+              <span className="block mt-1" style={{ color: 'var(--color-text-dim)' }}>
+                Select the verified target that matches this URL before enabling active checks.
+              </span>
+            )}
+          </span>
+        </label>
+      </div>
+    </div>
+  );
 
   return (
     <div className="min-h-screen" style={{ background: 'var(--color-bg)' }}>
@@ -406,13 +490,13 @@ const Scanners = ({ navigateTo }) => {
                       <span style={{
                         fontSize: 11, fontWeight: isActive ? 600 : 500,
                         color: isActive ? 'var(--color-text)' : 'var(--color-text-muted)',
-                        fontFamily: "'IBM Plex Mono', monospace",
+                        fontFamily: "var(--font-mono)",
                         overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                       }}>{s.title}</span>
                       {s.badge && (
                         <span style={{
                           fontSize: 9, padding: '1px 5px', fontWeight: 700, letterSpacing: '0.06em',
-                          textTransform: 'uppercase', fontFamily: "'IBM Plex Mono', monospace", flexShrink: 0,
+                          textTransform: 'uppercase', fontFamily: "var(--font-mono)", flexShrink: 0,
                           background: isActive ? `${s.color}18` : 'var(--color-primary-dim)',
                           color: isActive ? s.color : 'var(--color-primary)',
                         }}>
@@ -420,7 +504,7 @@ const Scanners = ({ navigateTo }) => {
                         </span>
                       )}
                     </div>
-                    <p style={{ fontSize: 10, marginTop: 2, color: 'var(--color-text-dim)', fontFamily: "'IBM Plex Mono', monospace" }}>{s.subtitle}</p>
+                    <p style={{ fontSize: 10, marginTop: 2, color: 'var(--color-text-dim)', fontFamily: "var(--font-mono)" }}>{s.subtitle}</p>
                   </div>
                   <ChevronRight size={10} style={{ color: isActive ? s.color : 'var(--color-text-dim)', flexShrink: 0, marginLeft: 8 }} />
                 </button>
@@ -434,11 +518,11 @@ const Scanners = ({ navigateTo }) => {
             {/* Scanner description header */}
             <div style={{ borderLeft: `3px solid ${active.color}`, paddingLeft: 16, paddingTop: 4, paddingBottom: 4 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--color-text)', fontFamily: "'Syne', system-ui, sans-serif", letterSpacing: '-0.02em', margin: 0 }}>{active.title}</h2>
+                <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--color-text)', fontFamily: "var(--font-display)", letterSpacing: '-0.02em', margin: 0 }}>{active.title}</h2>
                 {active.badge && (
                   <span style={{
                     fontSize: 9, padding: '2px 6px', fontWeight: 700, letterSpacing: '0.08em',
-                    textTransform: 'uppercase', fontFamily: "'IBM Plex Mono', monospace",
+                    textTransform: 'uppercase', fontFamily: "var(--font-mono)",
                     background: `${active.color}18`, color: active.color,
                   }}>
                     {active.badge}
@@ -463,13 +547,8 @@ const Scanners = ({ navigateTo }) => {
                         <option value="full_launch_audit">Full Launch Audit</option>
                       </select>
                     </label>
-                    <label className="flex flex-col gap-1.5">
-                      <span className="text-xs font-medium" style={{ color: 'var(--color-text-muted)' }}>Verified Target ID</span>
-                      <input value={fullScanVerifiedTargetId} onChange={(e) => setFullScanVerifiedTargetId(e.target.value)}
-                        placeholder="Required when verified targets are enforced"
-                        className="input text-sm font-mono" />
-                    </label>
                   </div>
+                  {renderActiveChecksControl('Enable active ZAP, Nikto, SQLMap, SSRF, and ownership-gated probes')}
                   {fullScanProfile !== 'security_only' && (
                     <div className="mt-3 flex flex-col gap-3">
                       <label className="flex flex-col gap-1.5">
@@ -483,11 +562,8 @@ const Scanners = ({ navigateTo }) => {
                         Enable AI visual review when configured
                       </label>
                       <div className="rounded-xl p-4" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border-subtle)' }}>
-                        <label className="flex items-center gap-2 text-xs cursor-pointer" style={{ color: 'var(--color-text-muted)' }}>
-                          <input type="checkbox" checked={fullScanEnableActiveChecks} onChange={(e) => setFullScanEnableActiveChecks(e.target.checked)} />
-                          Enable pre-production auth and abuse-control checks
-                        </label>
-                        {fullScanEnableActiveChecks && (
+                        <p className="text-xs font-semibold" style={{ color: 'var(--color-text)' }}>Pre-production auth and abuse-control inputs</p>
+                        {fullScanEnableActiveChecks && selectedTargetMatchesUrl ? (
                           <div className="grid grid-cols-1 md:grid-cols-[1fr_140px] gap-3 mt-3">
                             <label className="flex flex-col gap-1.5">
                               <span className="text-xs font-medium" style={{ color: 'var(--color-text-muted)' }}>Auth/API Paths</span>
@@ -523,6 +599,10 @@ const Scanners = ({ navigateTo }) => {
                                 className="input text-sm font-mono" style={{ resize: 'vertical' }} />
                             </label>
                           </div>
+                        ) : (
+                          <p className="text-xs mt-2" style={{ color: 'var(--color-text-dim)' }}>
+                            Enable active checks above to include auth and abuse-control probes.
+                          </p>
                         )}
                       </div>
                       <div className="rounded-xl p-4" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border-subtle)' }}>
@@ -566,18 +646,6 @@ const Scanners = ({ navigateTo }) => {
                             )}
                           </div>
                         )}
-                        <div className="mt-3">
-                          <label className="text-xs font-medium" style={{ color: 'var(--color-text-muted)' }}>Select Existing Verified Target</label>
-                          <select value={fullScanVerifiedTargetId} onChange={(e) => setFullScanVerifiedTargetId(e.target.value)}
-                            className="input text-sm cursor-pointer mt-1.5">
-                            <option value="">None selected</option>
-                            {targets.map((target) => (
-                              <option key={target.id} value={target.id}>
-                                {target.normalized_domain} · {target.verification_status}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
                         {targetsLoading ? (
                           <p className="text-xs mt-3" style={{ color: 'var(--color-text-dim)' }}>Loading targets…</p>
                         ) : targets.length > 0 && (
@@ -587,10 +655,11 @@ const Scanners = ({ navigateTo }) => {
                                 style={{ background: 'var(--color-card)', border: '1px solid var(--color-border)' }}>
                                 <div className="min-w-0">
                                   <p className="text-xs font-mono truncate" style={{ color: 'var(--color-text)' }}>{target.normalized_domain}</p>
-                                  <p className="text-xs truncate" style={{ color: 'var(--color-text-dim)' }}>{target.verification_method}</p>
                                 </div>
                                 <div className="flex items-center gap-2">
-                                  <StatusBadge status={target.verification_status} />
+                                  {target.verification_status === 'verified' && (
+                                    <span className="text-xs font-semibold px-2 py-0.5 rounded" style={{ background: 'var(--color-secure-dim)', color: 'var(--color-secure)' }}>Verified</span>
+                                  )}
                                   <button onClick={() => deleteTarget(target.id)} className="cursor-pointer p-1 rounded"
                                     style={{ color: 'var(--color-danger)' }}>
                                     <Trash2 size={12} />
@@ -632,6 +701,7 @@ const Scanners = ({ navigateTo }) => {
                 <div className="px-5 py-4" style={{ borderBottom: '1px solid var(--color-border)' }}>
                   <p className="section-label mb-3">Target URL</p>
                   <ScanInput url={sqlScanUrl} setUrl={setSqlScanUrl} onScan={handleSqlScan} isScanning={isSqlScanning} />
+                  {renderActiveChecksControl('Enable SQLMap active SQL injection probes')}
                   {sqlError && (
                     <p className="mt-2 text-xs flex items-center gap-1.5" style={{ color: 'var(--color-danger)' }}>
                       <AlertTriangle size={11} /> {sqlError}
@@ -751,6 +821,7 @@ const Scanners = ({ navigateTo }) => {
                 <div className="px-5 py-4" style={{ borderBottom: '1px solid var(--color-border)' }}>
                   <p className="section-label mb-3">Target URL</p>
                   <ScanInput url={wordpressScanUrl} setUrl={setWordpressScanUrl} onScan={handleWordpressScan} isScanning={isWordpressScanning} />
+                  {renderActiveChecksControl('Enable WPScan active WordPress probes')}
                   {wordpressError && (
                     <p className="mt-2 text-xs flex items-center gap-1.5" style={{ color: 'var(--color-danger)' }}>
                       <AlertTriangle size={11} /> {wordpressError}
@@ -1036,6 +1107,7 @@ const Scanners = ({ navigateTo }) => {
                 <div className="px-5 py-4" style={{ borderBottom: '1px solid var(--color-border)' }}>
                   <p className="section-label mb-3">Target URL</p>
                   <ScanInput url={exposureScanUrl} setUrl={setExposureScanUrl} onScan={handleExposureScan} isScanning={isExposureScanning} />
+                  {renderActiveChecksControl('Enable ffuf active file and directory discovery')}
                   {exposureError && (
                     <p className="mt-2 text-xs flex items-center gap-1.5" style={{ color: 'var(--color-warn)' }}>
                       <AlertTriangle size={11} /> {exposureError}

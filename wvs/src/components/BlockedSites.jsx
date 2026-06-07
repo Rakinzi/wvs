@@ -85,7 +85,7 @@ const BlockedSites = ({ navigateTo }) => {
           </button>
           <div style={{ borderLeft: '2px solid var(--color-danger)', paddingLeft: 10 }}>
             <h1 style={{ fontSize: 14, fontWeight: 700, color: 'var(--color-text)', letterSpacing: '-0.02em', margin: 0 }}>Blocked Sites</h1>
-            <p style={{ fontSize: 10, color: 'var(--color-text-dim)', fontFamily: "'IBM Plex Mono', monospace", marginTop: 2 }}>{blockedSites.length} domains on blocklist</p>
+            <p style={{ fontSize: 10, color: 'var(--color-text-dim)', fontFamily: "var(--font-mono)", marginTop: 2 }}>{blockedSites.length} domains on blocklist</p>
           </div>
         </div>
         <div className="flex items-center gap-2">

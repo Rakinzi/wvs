@@ -225,7 +225,11 @@ export const useScansData = ({ onScanComplete } = {}) => {
       setSqlError(null);
       const { data } = await apiJson('/scan/sqli', {
         method: 'POST', auth: true, json: true,
-        body: { url: normalizeUrl(sqlScanUrl) }
+        body: {
+          url: normalizeUrl(sqlScanUrl),
+          verified_target_id: fullScanVerifiedTargetId || undefined,
+          enable_active_checks: fullScanEnableActiveChecks,
+        }
       });
       if (data.status === 'success') {
         setSqlScanResult({
@@ -245,7 +249,7 @@ export const useScansData = ({ onScanComplete } = {}) => {
     } finally {
       setIsSqlScanning(false);
     }
-  }, [sqlScanUrl, onScanComplete]);
+  }, [fullScanEnableActiveChecks, fullScanVerifiedTargetId, sqlScanUrl, onScanComplete]);
 
   const handleSslScan = useCallback(async () => {
     if (!sslScanUrl) { setSslError('Please enter a URL to scan'); return; }
@@ -282,7 +286,11 @@ export const useScansData = ({ onScanComplete } = {}) => {
       setWordpressError(null);
       const { data } = await apiJson('/scan/wordpress', {
         method: 'POST', auth: true, json: true,
-        body: { url: normalizeUrl(wordpressScanUrl) }
+        body: {
+          url: normalizeUrl(wordpressScanUrl),
+          verified_target_id: fullScanVerifiedTargetId || undefined,
+          enable_active_checks: fullScanEnableActiveChecks,
+        }
       });
       if (data.status === 'success') {
         setWordpressScanResult({
@@ -302,7 +310,7 @@ export const useScansData = ({ onScanComplete } = {}) => {
     } finally {
       setIsWordpressScanning(false);
     }
-  }, [wordpressScanUrl, onScanComplete]);
+  }, [fullScanEnableActiveChecks, fullScanVerifiedTargetId, wordpressScanUrl, onScanComplete]);
 
   const handleXssScan = useCallback(async () => {
     if (!xssScanUrl) { setXssError('Please enter a URL to scan'); return; }
@@ -369,7 +377,11 @@ export const useScansData = ({ onScanComplete } = {}) => {
       setExposureError(null);
       const { data } = await apiJson('/scan/exposure', {
         method: 'POST', auth: true, json: true,
-        body: { url: normalizeUrl(exposureScanUrl) }
+        body: {
+          url: normalizeUrl(exposureScanUrl),
+          verified_target_id: fullScanVerifiedTargetId || undefined,
+          enable_active_checks: fullScanEnableActiveChecks,
+        }
       });
       if (data.status === 'success') {
         setExposureScanResult({
@@ -389,7 +401,7 @@ export const useScansData = ({ onScanComplete } = {}) => {
     } finally {
       setIsExposureScanning(false);
     }
-  }, [exposureScanUrl, onScanComplete]);
+  }, [exposureScanUrl, fullScanEnableActiveChecks, fullScanVerifiedTargetId, onScanComplete]);
 
   const handleMalwareScan = useCallback(async () => {
     if (!malwareScanUrl) { setMalwareError('Please enter a URL to scan'); return; }

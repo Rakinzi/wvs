@@ -115,7 +115,7 @@ const Settings = ({ navigateTo, userData }) => {
           </button>
           <div style={{ borderLeft: '2px solid var(--color-primary)', paddingLeft: 10 }}>
             <h1 style={{ fontSize: 14, fontWeight: 700, color: 'var(--color-text)', letterSpacing: '-0.02em', margin: 0 }}>Settings</h1>
-            <p style={{ fontSize: 10, color: 'var(--color-text-dim)', fontFamily: "'IBM Plex Mono', monospace", marginTop: 2 }}>{activeTab?.desc}</p>
+            <p style={{ fontSize: 10, color: 'var(--color-text-dim)', fontFamily: "var(--font-mono)", marginTop: 2 }}>{activeTab?.desc}</p>
           </div>
         </div>
       </div>
@@ -155,7 +155,7 @@ const Settings = ({ navigateTo, userData }) => {
                 onMouseLeave={e => { if (tab !== id) e.currentTarget.style.background = 'transparent'; }}
               >
                 <div>
-                  <p style={{ fontSize: 11, fontWeight: tab === id ? 600 : 500, fontFamily: "'IBM Plex Mono', monospace", color: tab === id ? 'var(--color-text)' : 'var(--color-text-muted)' }}>{label}</p>
+                  <p style={{ fontSize: 11, fontWeight: tab === id ? 600 : 500, fontFamily: "var(--font-mono)", color: tab === id ? 'var(--color-text)' : 'var(--color-text-muted)' }}>{label}</p>
                   <p style={{ fontSize: 10, marginTop: 2, color: 'var(--color-text-dim)' }}>{desc}</p>
                 </div>
               </button>

@@ -46,7 +46,7 @@ const tooltipStyle = {
   borderRadius: '6px',
   color: 'var(--color-text)',
   fontSize: '11px',
-  fontFamily: "'IBM Plex Mono', monospace",
+  fontFamily: "var(--font-mono)",
   boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
   padding: '8px 12px',
 };
@@ -99,7 +99,7 @@ const StatCard = ({ icon: Icon, label, value, sub, danger, warn, secure }) => {
         <span
           className="stat-value"
           style={{
-            fontFamily: "'IBM Plex Mono', monospace",
+            fontFamily: "var(--font-mono)",
             fontSize: 24,
             fontWeight: 700,
             color: accent,
@@ -111,7 +111,7 @@ const StatCard = ({ icon: Icon, label, value, sub, danger, warn, secure }) => {
         </span>
       </div>
       <div>
-        <p style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: '0.08em', textTransform: 'uppercase', fontFamily: "'IBM Plex Mono', monospace" }}>{label}</p>
+        <p style={{ fontSize: 10, fontWeight: 700, color: C.muted, letterSpacing: '0.08em', textTransform: 'uppercase', fontFamily: "var(--font-mono)" }}>{label}</p>
         {sub && <p style={{ fontSize: 10, color: C.dim, marginTop: 3 }}>{sub}</p>}
       </div>
     </div>
@@ -132,12 +132,12 @@ const ActivityRow = ({ icon: Icon, iconBg, iconColor, primary, badge, badgeColor
     <div className="flex-1 min-w-0">
       <p
         className="text-xs truncate"
-        style={{ color: 'var(--color-text)', fontFamily: "'IBM Plex Mono', monospace", fontWeight: 400 }}
+        style={{ color: 'var(--color-text)', fontFamily: "var(--font-mono)", fontWeight: 400 }}
       >
         {primary}
       </p>
       {badge && (
-        <span className="text-xs font-semibold mt-0.5 block" style={{ color: badgeColor, fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+        <span className="text-xs font-semibold mt-0.5 block" style={{ color: badgeColor, fontFamily: "var(--font-mono)", fontSize: 10, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
           {badge}
         </span>
       )}
@@ -145,7 +145,7 @@ const ActivityRow = ({ icon: Icon, iconBg, iconColor, primary, badge, badgeColor
     <div className="flex items-center gap-2 flex-shrink-0">
       {meta && (
         <span
-          style={{ color: 'var(--color-text-dim)', fontFamily: "'IBM Plex Mono', monospace", fontSize: 10 }}
+          style={{ color: 'var(--color-text-dim)', fontFamily: "var(--font-mono)", fontSize: 10 }}
         >
           {meta}
         </span>
@@ -154,7 +154,7 @@ const ActivityRow = ({ icon: Icon, iconBg, iconColor, primary, badge, badgeColor
         <button
           onClick={onAction}
           className="text-xs font-medium cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity duration-150 px-2 py-0.5"
-          style={{ color: 'var(--color-primary)', fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, border: '1px solid rgba(0,212,170,0.25)', background: 'rgba(0,212,170,0.06)' }}
+          style={{ color: 'var(--color-primary)', fontFamily: "var(--font-mono)", fontSize: 10, border: '1px solid rgba(0,212,170,0.25)', background: 'rgba(0,212,170,0.06)' }}
         >
           view →
         </button>
@@ -174,7 +174,7 @@ const SectionHead = ({ icon: Icon, accent, title, action }) => (
       <button
         onClick={action.onClick}
         className="flex items-center gap-1 cursor-pointer"
-        style={{ color: 'var(--color-primary)', fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, fontWeight: 600, letterSpacing: '0.04em', background: 'none', border: 'none' }}
+        style={{ color: 'var(--color-primary)', fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 600, letterSpacing: '0.04em', background: 'none', border: 'none' }}
       >
         {action.label} <ArrowRight size={9} />
       </button>
@@ -186,12 +186,12 @@ const SectionHead = ({ icon: Icon, accent, title, action }) => (
 const Empty = ({ icon: Icon, label, cta, onCta }) => (
   <div className="flex flex-col items-center gap-2 py-8">
     <Icon size={14} style={{ color: 'var(--color-text-dim)' }} />
-    <p style={{ fontSize: 11, color: 'var(--color-text-dim)', fontFamily: "'IBM Plex Mono', monospace" }}>{label}</p>
+    <p style={{ fontSize: 11, color: 'var(--color-text-dim)', fontFamily: "var(--font-mono)" }}>{label}</p>
     {cta && (
       <button
         onClick={onCta}
         className="cursor-pointer"
-        style={{ color: 'var(--color-primary)', fontSize: 11, fontFamily: "'IBM Plex Mono', monospace", background: 'none', border: 'none', fontWeight: 600 }}
+        style={{ color: 'var(--color-primary)', fontSize: 11, fontFamily: "var(--font-mono)", background: 'none', border: 'none', fontWeight: 600 }}
       >
         {cta}
       </button>
@@ -302,9 +302,9 @@ const Dashboard = ({ navigateTo }) => {
               <SectionHead icon={Clock} accent={C.primary} title="Recent Scans"
                 action={{ label: 'View all', onClick: () => navigateTo('history') }} />
               {dashboardStats?.recentScans?.length ? (
-                dashboardStats.recentScans.slice(0, 6).map((scan) => (
+                dashboardStats.recentScans.slice(0, 6).map((scan, index) => (
                   <ActivityRow
-                    key={scan.id}
+                    key={`${scan.id || 'scan'}-${index}`}
                     icon={scan.hasVulnerabilities ? AlertTriangle : CheckCircle}
                     iconBg={scan.hasVulnerabilities ? '#ef444420' : '#22c55e20'}
                     iconColor={scan.hasVulnerabilities ? C.danger : C.secure}
@@ -325,9 +325,9 @@ const Dashboard = ({ navigateTo }) => {
               <SectionHead icon={Globe} accent={C.secure} title="Uptime Overview"
                 action={{ label: 'Manage', onClick: () => navigateTo('uptime') }} />
               {dashboardStats?.recentMonitors?.length ? (
-                dashboardStats.recentMonitors.map((m) => (
+                dashboardStats.recentMonitors.map((m, index) => (
                   <ActivityRow
-                    key={m.id}
+                    key={`${m.id || 'monitor'}-${index}`}
                     icon={m.status === 'up' ? CheckCircle : m.status === 'down' ? AlertTriangle : Clock}
                     iconBg={m.status === 'up' ? '#22c55e20' : m.status === 'down' ? '#ff4f4f20' : '#00d4aa14'}
                     iconColor={m.status === 'up' ? C.secure : m.status === 'down' ? C.danger : C.primary}
@@ -348,9 +348,9 @@ const Dashboard = ({ navigateTo }) => {
               {recentScanJobs.length === 0 ? (
                 <Empty icon={Zap} label="No active jobs" />
               ) : (
-                recentScanJobs.map((job) => (
+                recentScanJobs.map((job, index) => (
                   <ActivityRow
-                    key={job.id}
+                    key={`${job.id || 'job'}-${index}`}
                     icon={job.status === 'completed' ? CheckCircle : job.status === 'failed' ? AlertTriangle : RefreshCw}
                     iconBg={job.status === 'completed' ? '#22c55e20' : job.status === 'failed' ? '#ef444420' : '#f59e0b20'}
                     iconColor={job.status === 'completed' ? C.secure : job.status === 'failed' ? C.danger : C.warn}
@@ -383,11 +383,11 @@ const Dashboard = ({ navigateTo }) => {
                       <div className="flex-1 min-w-0">
                         <p
                           className="text-xs truncate"
-                          style={{ color: 'var(--color-text)', fontFamily: "'IBM Plex Mono', monospace" }}
+                          style={{ color: 'var(--color-text)', fontFamily: "var(--font-mono)" }}
                         >
                           {a.url}
                         </p>
-                        <p style={{ fontSize: 10, marginTop: 2, color: 'var(--color-text-dim)', fontFamily: "'IBM Plex Mono', monospace" }}>{a.ip_address}</p>
+                        <p style={{ fontSize: 10, marginTop: 2, color: 'var(--color-text-dim)', fontFamily: "var(--font-mono)" }}>{a.ip_address}</p>
                       </div>
                     </div>
                   ))
@@ -425,7 +425,7 @@ const Dashboard = ({ navigateTo }) => {
                     onMouseLeave={e => { e.currentTarget.style.background = 'none'; }}
                   >
                     <div className="min-w-0 flex-1">
-                      <p style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text)', fontFamily: "'IBM Plex Mono', monospace" }}>{title}</p>
+                      <p style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text)', fontFamily: "var(--font-mono)" }}>{title}</p>
                       <p style={{ fontSize: 10, color: 'var(--color-text-dim)', marginTop: 2 }}>{desc}</p>
                     </div>
                     {nav && <ArrowRight size={10} style={{ color: 'var(--color-text-dim)', flexShrink: 0 }} />}
@@ -447,7 +447,7 @@ const Dashboard = ({ navigateTo }) => {
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={dashboardStats.scansByDay} barGap={4} barCategoryGap="35%">
                     <CartesianGrid strokeDasharray="2 4" stroke={C.border} vertical={false} />
-                    <XAxis dataKey="date" tick={{ fill: C.dim, fontSize: 11, fontFamily: 'IBM Plex Mono' }}
+                    <XAxis dataKey="date" tick={{ fill: C.dim, fontSize: 11, fontFamily: 'var(--font-mono)' }}
                       tickFormatter={(v) => new Date(v).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
                       axisLine={false} tickLine={false} />
                     <YAxis tick={{ fill: C.dim, fontSize: 11 }} axisLine={false} tickLine={false} width={28} />
@@ -490,7 +490,7 @@ const Dashboard = ({ navigateTo }) => {
                       </div>
                       <span
                         className="text-xs font-semibold tabular-nums"
-                        style={{ color: C.text, fontFamily: 'IBM Plex Mono, monospace' }}
+                        style={{ color: C.text, fontFamily: 'var(--font-mono)' }}
                       >
                         {t.value}
                       </span>
@@ -513,7 +513,7 @@ const Dashboard = ({ navigateTo }) => {
                       </linearGradient>
                     </defs>
                     <CartesianGrid strokeDasharray="2 4" stroke={C.border} vertical={false} />
-                    <XAxis dataKey="date" tick={{ fill: C.dim, fontSize: 11, fontFamily: 'IBM Plex Mono' }}
+                    <XAxis dataKey="date" tick={{ fill: C.dim, fontSize: 11, fontFamily: 'var(--font-mono)' }}
                       tickFormatter={(v) => new Date(v).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
                       axisLine={false} tickLine={false} />
                     <YAxis tick={{ fill: C.dim, fontSize: 11 }} axisLine={false} tickLine={false} width={28} />

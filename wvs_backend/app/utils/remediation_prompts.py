@@ -8,12 +8,18 @@ def build_builder_prompt(finding: Mapping[str, object]) -> str:
     title = str(finding.get("title") or "the identified issue")
     selector = str(finding.get("selector") or "").strip()
     selector_text = f" for `{selector}`" if selector else ""
+    evidence = finding.get("evidence") if isinstance(finding.get("evidence"), Mapping) else {}
+    element_summary = str(evidence.get("element_summary") or "").strip()
+    evidence_description = str(evidence.get("description") or "").strip()
+    element_text = f" on {element_summary}" if element_summary else ""
+    evidence_text = f" Evidence: {evidence_description}" if evidence_description else ""
     remediation = str(finding.get("technical_remediation") or "").strip()
     scanner = str(finding.get("scanner") or "")
 
     if scanner == "accessibility":
         return (
-            f"Update {page} to fix the accessibility issue '{title}'{selector_text}. "
+            f"Update {page} to fix the accessibility issue '{title}'{selector_text}{element_text}. "
+            f"{evidence_text} "
             f"{remediation or 'Use an accessible implementation that preserves the current layout and branding.'} "
             "Keep the current branding and ensure keyboard and screen-reader support."
         )

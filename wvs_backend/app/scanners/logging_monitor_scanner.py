@@ -79,7 +79,9 @@ class LoggingMonitorScanner:
                     issues.append({
                         "title": f"Log file publicly accessible: {path}",
                         "severity": "high",
-                        "evidence": f"GET {path} returned HTTP 200 ({len(r.content)} bytes). First 80 chars: {r.text[:80]!r}",
+                        "evidence": f"GET {path} returned HTTP 200 ({len(r.content)} bytes).",
+                        "content_preview": r.text[:2000].strip(),
+                        "content_length": len(r.content),
                         "url": origin + path,
                         "user_impact": "Exposed logs can leak credentials, internal IP addresses, stack traces, and user data.",
                         "technical_remediation": "Block public access to log files via server configuration or move them outside the web root.",

@@ -3,15 +3,20 @@ from __future__ import annotations
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import jwt_required
 from pydantic import ValidationError
+from urllib.parse import urlparse
 
 from app import db
 from app.auth import get_current_user
-from app.models import UptimeMonitor
+from app.models import UptimeMonitor, VerifiedTarget
 from app.schemas import UptimeMonitorCreatePayload, UptimeMonitorUpdatePayload
 from app.services.uptime import perform_uptime_check, serialize_monitor, validate_monitor_target
 
 
 bp = Blueprint("uptime", __name__)
+
+
+def _hostname_from_url(url: str) -> str:
+    return (urlparse(url).hostname or "").lower()
 
 
 def _get_owned_monitor(monitor_id: str) -> UptimeMonitor:
@@ -48,8 +53,28 @@ def create_uptime_monitor():
 
     try:
         payload = UptimeMonitorCreatePayload.model_validate(request.get_json(silent=True) or {})
-        target_url = validate_monitor_target(payload.target_url)
     except (ValueError, ValidationError) as exc:
+        return jsonify({"status": "error", "message": str(exc)}), 400
+
+    requested_target_url = payload.target_url
+    verified_target = VerifiedTarget.query.filter_by(
+        public_id=payload.verified_target_id,
+        user_id=current_user.id,
+        verification_status="verified",
+    ).first()
+    if not verified_target:
+        return jsonify({
+            "status": "error",
+            "message": "Choose a verified target before adding an uptime monitor.",
+        }), 403
+    if verified_target.normalized_domain.lower() != _hostname_from_url(requested_target_url):
+        return jsonify({
+            "status": "error",
+            "message": "The monitor URL must match the selected verified target.",
+        }), 400
+    try:
+        target_url = validate_monitor_target(requested_target_url)
+    except ValueError as exc:
         return jsonify({"status": "error", "message": str(exc)}), 400
 
     monitor = UptimeMonitor(

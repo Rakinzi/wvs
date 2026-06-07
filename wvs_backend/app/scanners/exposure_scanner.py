@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from difflib import SequenceMatcher
 import re
 from typing import Any
 from urllib.parse import urljoin, urlparse
@@ -273,7 +274,7 @@ CONTENT_SIGNALS: dict[str, re.Pattern] = {
     "/appsettings.json":        re.compile(r'"ConnectionStrings"|"Logging"|"AllowedHosts"', re.I),
     "/appsettings.Production.json": re.compile(r'"ConnectionStrings"|"Logging"', re.I),
     "/actuator/env":            re.compile(r'activeProfiles|propertySources', re.I),
-    "/terraform.tfvars":        re.compile(r'\w+\s*=\s*"', re.I),
+    "/terraform.tfvars":        re.compile(r'^\s*(?:variable\s+"[^"]+"|(?:aws_|gcp_|azure_|db_|access_|secret_|private_|region|bucket|environment|project|terraform)[\w-]*\s*=\s*(?:"[^"]*"|\d+|true|false|\[|\{))', re.I | re.M),
     "/.aws/credentials":        re.compile(r'aws_access_key_id|aws_secret_access_key', re.I),
     "/docker-compose.yml":      re.compile(r'version:|services:', re.I),
     "/docker-compose.yaml":     re.compile(r'version:|services:', re.I),
@@ -501,15 +502,34 @@ class ExposureScanner:
         ".env", ".yml", ".yaml", ".json", ".xml", ".sql", ".log",
         ".zip", ".tar", ".gz", ".bak", ".key", ".pem", ".crt",
         ".enc", ".txt", ".ini", ".cfg", ".conf", ".toml", ".lock",
-        ".pid", ".dat", ".db", ".sqlite", ".csv",
+        ".pid", ".dat", ".db", ".sqlite", ".csv", ".tfvars", ".tfstate",
     }
 
-    def _is_real_hit(self, path: str, entry: dict, resp: httpx.Response) -> bool:
+    def _body_fingerprint(self, text: str) -> str:
+        if not text:
+            return ""
+        text = re.sub(r'<script[^>]+src="[^"]+"', '<script src', text, flags=re.I)
+        text = re.sub(r'<link[^>]+href="[^"]+"', '<link href', text, flags=re.I)
+        text = re.sub(r'\s+', ' ', text).strip().lower()
+        return text[:8000]
+
+    def _matches_homepage_shell(self, candidate_text: str, homepage_text: str | None) -> bool:
+        homepage_fp = self._body_fingerprint(homepage_text or "")
+        candidate_fp = self._body_fingerprint(candidate_text or "")
+        if len(homepage_fp) < 200 or len(candidate_fp) < 200:
+            return False
+        if homepage_fp == candidate_fp:
+            return True
+        return SequenceMatcher(None, homepage_fp, candidate_fp).ratio() >= 0.92
+
+    def _is_real_hit(self, path: str, entry: dict, resp: httpx.Response, homepage_text: str | None = None) -> bool:
         if resp.status_code != 200:
             return False
 
         content_type = resp.headers.get("content-type", "").lower()
         is_html_response = "text/html" in content_type
+        if self._matches_homepage_shell(resp.text, homepage_text):
+            return False
 
         # If the path extension implies a non-HTML file, reject HTML responses —
         # they are soft-404 pages served by Cloudflare/CDNs/SPAs.
@@ -531,6 +551,37 @@ class ExposureScanner:
         low = text.lower()
         soft_signals = ["not found", "page not found", "404", "doesn't exist", "no such file"]
         return sum(1 for s in soft_signals if s in low) < 2
+
+    def _verification_metadata(self, path: str, entry: dict, resp: httpx.Response) -> dict[str, Any]:
+        content_type = resp.headers.get("content-type", "").lower() or "unknown"
+        text = resp.text[:6000]
+        pattern = CONTENT_SIGNALS.get(path)
+        matched_signal = bool(pattern.search(text)) if pattern else False
+        ext = "." + path.rsplit(".", 1)[-1].lower() if "." in path.split("/")[-1] else ""
+        is_html_response = "text/html" in content_type
+
+        if matched_signal:
+            confidence = "high"
+            reason = f"HTTP 200 response matched the expected content signature for {path}."
+        elif entry.get("stack") in self._SIGNAL_REQUIRED_STACKS:
+            confidence = "low"
+            reason = "HTTP 200 response was accepted only after stack-specific validation; manual review is recommended."
+        elif is_html_response and not ext:
+            confidence = "medium"
+            reason = "HTTP 200 response contains non-trivial HTML for a known administrative or diagnostic path."
+        else:
+            confidence = "medium"
+            reason = "HTTP 200 response contains non-trivial content and does not look like a soft 404."
+
+        return {
+            "http_status": resp.status_code,
+            "content_type": content_type,
+            "content_length": len(resp.content),
+            "matched_content_signal": matched_signal,
+            "detection_reason": reason,
+            "confidence": confidence,
+            "manual_verification_required": entry.get("severity") in {"Critical", "High"} or confidence != "high",
+        }
 
     def _extract_emails(self, text: str, limit: int = 20) -> list[str]:
         if not text:
@@ -554,6 +605,13 @@ class ExposureScanner:
         stacks_hit: set[str] = set()
         discovered_emails: list[str] = []
         seen_emails: set[str] = set()
+        homepage_text = None
+        try:
+            homepage = self.client.get(base + "/")
+            if homepage.status_code == 200:
+                homepage_text = homepage.text
+        except Exception:
+            homepage_text = None
 
         def fetch(entry: dict[str, Any]) -> tuple[dict[str, Any], str, str, httpx.Response | None]:
             path = entry["path"]
@@ -567,7 +625,7 @@ class ExposureScanner:
             futures = [executor.submit(fetch, entry) for entry in SENSITIVE_PATHS]
             for future in as_completed(futures):
                 entry, path, target, resp = future.result()
-                if resp is None or not self._is_real_hit(path, entry, resp):
+                if resp is None or not self._is_real_hit(path, entry, resp, homepage_text):
                     continue
 
                 issue_emails = self._extract_emails(resp.text)
@@ -576,6 +634,7 @@ class ExposureScanner:
                         seen_emails.add(email)
                         discovered_emails.append(email)
 
+                verification = self._verification_metadata(path, entry, resp)
                 findings.append({
                     "name": entry["name"],
                     "severity": entry["severity"],
@@ -583,8 +642,14 @@ class ExposureScanner:
                     "url": target,
                     "stack": entry.get("stack", "universal"),
                     "status_code": resp.status_code,
+                    "content_type": verification["content_type"],
                     "content_preview": resp.text[:2000].strip(),
                     "content_length": len(resp.content),
+                    "confidence": verification["confidence"],
+                    "detection_reason": verification["detection_reason"],
+                    "matched_content_signal": verification["matched_content_signal"],
+                    "manual_verification_required": verification["manual_verification_required"],
+                    "verification": verification,
                     "emails": issue_emails,
                 })
                 stacks_hit.add(entry.get("stack", "universal"))

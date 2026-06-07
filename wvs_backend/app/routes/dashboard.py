@@ -4,6 +4,7 @@ from urllib.parse import urlparse
 
 from flask import Blueprint, jsonify
 from flask_jwt_extended import jwt_required
+from sqlalchemy import func
 
 from app.auth import get_current_user
 from app.models import BlockedRequest, MaliciousSite, ScanResult, UptimeMonitor
@@ -14,6 +15,9 @@ from app.utils.time_utils import utc_now
 
 bp = Blueprint('dashboard', __name__)
 
+MAX_STATS_SCAN_RESULTS = 500
+MAX_SECURITY_FEED_ROWS = 500
+
 
 @bp.route('/api/dashboard/stats', methods=['GET'])
 @jwt_required()
@@ -23,9 +27,7 @@ def get_dashboard_stats():
         if not current_user:
             return jsonify({'status': 'error', 'message': 'User not found'}), 404
 
-        scans = ScanResult.query.filter_by(user_id=current_user.id).order_by(
-            ScanResult.timestamp.desc()
-        ).all()
+        total_scans = ScanResult.query.filter_by(user_id=current_user.id).count()
         monitors = UptimeMonitor.query.filter_by(user_id=current_user.id).order_by(
             UptimeMonitor.created_at.desc()
         ).all()
@@ -33,11 +35,59 @@ def get_dashboard_stats():
         blocked_requests = []
         malicious_sites = []
         if can_view_security_feed:
-            blocked_requests = BlockedRequest.query.order_by(BlockedRequest.timestamp.desc()).all()
-            malicious_sites = MaliciousSite.query.order_by(MaliciousSite.date_added.desc()).all()
+            blocked_requests = (
+                BlockedRequest.query.order_by(BlockedRequest.timestamp.desc())
+                .limit(MAX_SECURITY_FEED_ROWS)
+                .all()
+            )
+            malicious_sites = (
+                MaliciousSite.query.order_by(MaliciousSite.date_added.desc())
+                .limit(MAX_SECURITY_FEED_ROWS)
+                .all()
+            )
 
         today_start = utc_now().replace(hour=0, minute=0, second=0, microsecond=0)
         seven_days_ago = utc_now() - timedelta(days=7)
+
+        scan_meta_rows = (
+            ScanResult.query.with_entities(
+                ScanResult.id,
+                ScanResult.public_id,
+                ScanResult.url,
+                ScanResult.timestamp,
+            )
+            .filter(ScanResult.user_id == current_user.id)
+            .order_by(ScanResult.timestamp.desc())
+            .limit(MAX_STATS_SCAN_RESULTS)
+            .all()
+        )
+        scan_ids = [row.id for row in scan_meta_rows]
+        findings_by_id = {}
+        if scan_ids:
+            findings_by_id = {
+                row.id: row.findings
+                for row in ScanResult.query.with_entities(ScanResult.id, ScanResult.findings)
+                .filter(ScanResult.id.in_(scan_ids))
+                .all()
+            }
+
+        today_scans = ScanResult.query.filter(
+            ScanResult.user_id == current_user.id,
+            ScanResult.timestamp >= today_start,
+        ).count()
+        scan_count_rows = (
+            ScanResult.query.with_entities(
+                func.date(ScanResult.timestamp).label("day"),
+                func.count(ScanResult.id).label("count"),
+            )
+            .filter(
+                ScanResult.user_id == current_user.id,
+                ScanResult.timestamp >= seven_days_ago,
+            )
+            .group_by(func.date(ScanResult.timestamp))
+            .all()
+        )
+        scans_by_day_map = {str(row.day): int(row.count) for row in scan_count_rows}
 
         vulnerable_scans_sql = 0
         vulnerable_scans_ssl = 0
@@ -50,21 +100,16 @@ def get_dashboard_stats():
         vulnerable_scans_dependencies = 0
         vulnerable_scans_malware_artifacts = 0
         vulnerable_scans = 0
-        today_scans = 0
         today_vulnerabilities = 0
         total_dependency_advisories = 0
         recent_scans = []
-        scans_by_day_map = {}
         vulnerabilities_by_day_map = {}
 
-        for scan in scans:
-            findings = scan.findings or {}
+        for scan in scan_meta_rows:
+            findings = findings_by_id.get(scan.id) or {}
             summary = findings.get('summary') or build_scan_summary(findings)
             scan_day = scan.timestamp.strftime('%Y-%m-%d')
-            scans_by_day_map[scan_day] = scans_by_day_map.get(scan_day, 0) + 1
 
-            if scan.timestamp >= today_start:
-                today_scans += 1
             if scan.timestamp >= seven_days_ago and summary['vulnerable']:
                 vulnerabilities_by_day_map[scan_day] = vulnerabilities_by_day_map.get(scan_day, 0) + 1
 
@@ -187,7 +232,7 @@ def get_dashboard_stats():
         ]
 
         stats = {
-            'totalScans': len(scans),
+            'totalScans': total_scans,
             'vulnerableScans': vulnerable_scans,
             'blockedSites': len(malicious_sites),
             'uptimeMonitors': len(monitors),

@@ -140,7 +140,7 @@ const BlockedAccess = ({ navigateTo }) => {
           </button>
           <div style={{ borderLeft: '2px solid var(--color-danger)', paddingLeft: 10 }}>
             <h1 style={{ fontSize: 14, fontWeight: 700, color: 'var(--color-text)', letterSpacing: '-0.02em', margin: 0 }}>Blocked Access Attempts</h1>
-            <p style={{ fontSize: 10, color: 'var(--color-text-dim)', fontFamily: "'IBM Plex Mono', monospace", marginTop: 2 }}>{totalCount} total intercepts</p>
+            <p style={{ fontSize: 10, color: 'var(--color-text-dim)', fontFamily: "var(--font-mono)", marginTop: 2 }}>{totalCount} total intercepts</p>
           </div>
         </div>
         <button onClick={fetchBlockedRequests} className="btn-secondary flex items-center gap-2 text-xs">

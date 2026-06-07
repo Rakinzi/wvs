@@ -22,16 +22,15 @@ const StatPill = ({ icon: Icon, label, value, danger, warn }) => {
   return (
     <div style={{
       background: 'var(--color-card)',
-      borderTop: `2px solid ${accent}`,
       border: '1px solid var(--color-border)',
       borderTop: `2px solid ${accent}`,
       padding: '14px 16px',
     }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
         <Icon size={11} style={{ color: accent, opacity: 0.6, marginTop: 2 }} />
-        <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 22, fontWeight: 700, color: accent, letterSpacing: '-0.04em', lineHeight: 1 }}>{value}</span>
+        <span style={{ fontFamily: "var(--font-mono)", fontSize: 22, fontWeight: 700, color: accent, letterSpacing: '-0.04em', lineHeight: 1 }}>{value}</span>
       </div>
-      <p style={{ fontSize: 10, fontWeight: 700, color: 'var(--color-text-muted)', letterSpacing: '0.08em', textTransform: 'uppercase', fontFamily: "'IBM Plex Mono', monospace", marginTop: 8 }}>{label}</p>
+      <p style={{ fontSize: 10, fontWeight: 700, color: 'var(--color-text-muted)', letterSpacing: '0.08em', textTransform: 'uppercase', fontFamily: "var(--font-mono)", marginTop: 8 }}>{label}</p>
     </div>
   );
 };
@@ -240,7 +239,7 @@ const ScanHistory = ({ navigateTo }) => {
           </button>
           <div style={{ borderLeft: '2px solid var(--color-primary)', paddingLeft: 10 }}>
             <h1 style={{ fontSize: 14, fontWeight: 700, color: 'var(--color-text)', letterSpacing: '-0.02em', margin: 0 }}>Scan History</h1>
-            <p style={{ fontSize: 10, color: 'var(--color-text-dim)', fontFamily: "'IBM Plex Mono', monospace", marginTop: 2 }}>{scans.length} total records</p>
+            <p style={{ fontSize: 10, color: 'var(--color-text-dim)', fontFamily: "var(--font-mono)", marginTop: 2 }}>{scans.length} total records</p>
           </div>
         </div>
         <button onClick={fetchScans} className="btn-secondary flex items-center gap-2 text-xs">
@@ -332,8 +331,8 @@ const ScanHistory = ({ navigateTo }) => {
           ) : error ? (
             <div className="flex flex-col items-center gap-3 py-16">
               <AlertTriangle size={16} style={{ color: 'var(--color-danger)' }} />
-              <p style={{ fontSize: 12, color: 'var(--color-text-muted)', fontFamily: "'IBM Plex Mono', monospace" }}>Error loading history</p>
-              <p style={{ fontSize: 11, color: 'var(--color-text-dim)', fontFamily: "'IBM Plex Mono', monospace" }}>{error}</p>
+              <p style={{ fontSize: 12, color: 'var(--color-text-muted)', fontFamily: "var(--font-mono)" }}>Error loading history</p>
+              <p style={{ fontSize: 11, color: 'var(--color-text-dim)', fontFamily: "var(--font-mono)" }}>{error}</p>
               <button onClick={fetchScans} className="btn-primary">
                 <RefreshCw size={13} /> Retry
               </button>

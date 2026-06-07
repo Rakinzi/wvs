@@ -36,9 +36,20 @@ class DBManager:
     
     @staticmethod
     def get_user_scans(user_id, limit=20):
-        return ScanResult.query.filter_by(user_id=user_id).order_by(
-            ScanResult.timestamp.desc()
-        ).limit(limit).all()
+        scan_ids = [
+            row.id
+            for row in ScanResult.query.with_entities(ScanResult.id)
+            .filter(ScanResult.user_id == user_id)
+            .order_by(ScanResult.timestamp.desc())
+            .limit(limit)
+            .all()
+        ]
+        if not scan_ids:
+            return []
+
+        order = {scan_id: index for index, scan_id in enumerate(scan_ids)}
+        scans = ScanResult.query.filter(ScanResult.id.in_(scan_ids)).all()
+        return sorted(scans, key=lambda scan: order.get(scan.id, len(order)))
     
     @staticmethod
     def get_user_by_username(username):

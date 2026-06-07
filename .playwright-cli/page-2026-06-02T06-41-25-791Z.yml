@@ -1,0 +1,216 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e97]:
+    - complementary [ref=e98]:
+      - generic [ref=e99]:
+        - button "Go to dashboard" [ref=e101] [cursor=pointer]:
+          - generic [ref=e102]: LaunchGuard
+        - navigation [ref=e103]:
+          - paragraph [ref=e104]: Navigation
+          - button "Dashboard" [ref=e105] [cursor=pointer]:
+            - img [ref=e106]
+            - generic [ref=e107]: Dashboard
+          - button "Scanners" [ref=e108] [cursor=pointer]:
+            - img [ref=e109]
+            - generic [ref=e111]: Scanners
+          - button "Uptime" [ref=e112] [cursor=pointer]:
+            - img [ref=e113]
+            - generic [ref=e115]: Uptime
+          - button "Verified Targets" [ref=e116] [cursor=pointer]:
+            - img [ref=e117]
+            - generic [ref=e120]: Verified Targets
+          - button "Scan History" [ref=e121] [cursor=pointer]:
+            - img [ref=e122]
+            - generic [ref=e125]: Scan History
+          - button "Blocked Sites" [ref=e126] [cursor=pointer]:
+            - img [ref=e127]
+            - generic [ref=e129]: Blocked Sites
+          - button "Security News" [ref=e130] [cursor=pointer]:
+            - img [ref=e131]
+            - generic [ref=e134]: Security News
+        - generic [ref=e135]:
+          - button "Notifications" [ref=e137] [cursor=pointer]:
+            - img [ref=e138]
+            - generic [ref=e141]: Notifications
+            - generic [ref=e142]: "2"
+          - button "Switch to dark mode" [ref=e143] [cursor=pointer]:
+            - img [ref=e144]
+            - generic [ref=e146]: Dark mode
+          - button "Settings" [ref=e147] [cursor=pointer]:
+            - img [ref=e148]
+            - generic [ref=e151]: Settings
+          - button "User menu" [ref=e153] [cursor=pointer]:
+            - generic [ref=e154]: C
+            - generic [ref=e155]: codex_route_test_0602b
+            - img [ref=e156]
+    - main [ref=e158]:
+      - generic [ref=e159]:
+        - generic [ref=e160]:
+          - generic [ref=e161]:
+            - generic [ref=e162]:
+              - heading "Dashboard" [level=1] [ref=e163]
+              - generic [ref=e164]: Live
+            - paragraph [ref=e166]: Security intelligence overview
+          - generic [ref=e167]:
+            - button "Refresh" [ref=e168] [cursor=pointer]:
+              - img [ref=e169]
+            - button "New Scan" [ref=e174] [cursor=pointer]:
+              - img [ref=e175]
+              - text: New Scan
+        - generic [ref=e177]:
+          - generic [ref=e178]:
+            - generic [ref=e179]:
+              - generic [ref=e180]:
+                - img [ref=e181]
+                - generic [ref=e184]: "0"
+              - generic [ref=e185]:
+                - paragraph [ref=e186]: Total Scans
+                - paragraph [ref=e187]: 0 today
+            - generic [ref=e188]:
+              - generic [ref=e189]:
+                - img [ref=e190]
+                - generic [ref=e192]: "0"
+              - generic [ref=e193]:
+                - paragraph [ref=e194]: Vulnerable
+                - paragraph [ref=e195]: 0 new today
+            - generic [ref=e196]:
+              - generic [ref=e197]:
+                - img [ref=e198]
+                - generic [ref=e202]: "0"
+              - generic [ref=e203]:
+                - paragraph [ref=e204]: Dependency CVEs
+                - paragraph [ref=e205]: Across saved scans
+            - generic [ref=e206]:
+              - generic [ref=e207]:
+                - img [ref=e208]
+                - generic [ref=e210]: "0"
+              - generic [ref=e211]:
+                - paragraph [ref=e212]: Blocked Sites
+                - paragraph [ref=e213]: 0 blocked today
+            - generic [ref=e215]:
+              - generic [ref=e216]:
+                - img [ref=e217]
+                - generic [ref=e219]: "0"
+              - generic [ref=e220]:
+                - paragraph [ref=e221]: Uptime Monitors
+                - paragraph [ref=e222]: No checks yet
+          - generic [ref=e223]:
+            - generic [ref=e224]:
+              - generic [ref=e225]:
+                - generic [ref=e226]:
+                  - generic [ref=e227]: Recent Scans
+                  - button "View all" [ref=e228] [cursor=pointer]:
+                    - text: View all
+                    - img [ref=e229]
+                - generic [ref=e231]:
+                  - img [ref=e232]
+                  - paragraph [ref=e235]: No scans yet
+                  - button "Run your first scan →" [ref=e236] [cursor=pointer]
+              - generic [ref=e237]:
+                - generic [ref=e238]:
+                  - generic [ref=e239]: Uptime Overview
+                  - button "Manage" [ref=e240] [cursor=pointer]:
+                    - text: Manage
+                    - img [ref=e241]
+                - generic [ref=e243]:
+                  - img [ref=e244]
+                  - paragraph [ref=e246]: No uptime monitors configured
+                  - button "Add monitor →" [ref=e247] [cursor=pointer]
+              - generic [ref=e248]:
+                - generic [ref=e250]: Recent Scan Jobs
+                - generic [ref=e251]:
+                  - img [ref=e252]
+                  - paragraph [ref=e254]: No active jobs
+            - generic [ref=e255]:
+              - generic [ref=e256]:
+                - generic [ref=e257]:
+                  - generic [ref=e258]: Blocked Attempts
+                  - button "View all" [ref=e259] [cursor=pointer]:
+                    - text: View all
+                    - img [ref=e260]
+                - generic [ref=e262]:
+                  - img [ref=e263]
+                  - paragraph [ref=e265]: No blocked attempts
+              - generic [ref=e266]:
+                - generic [ref=e268]: Capabilities
+                - generic [ref=e269]:
+                  - button "SQL Injection Forms and URL parameters." [ref=e270]:
+                    - generic [ref=e271]:
+                      - paragraph [ref=e272]: SQL Injection
+                      - paragraph [ref=e273]: Forms and URL parameters.
+                  - button "SSL / TLS Certificate and cipher checks." [ref=e274]:
+                    - generic [ref=e275]:
+                      - paragraph [ref=e276]: SSL / TLS
+                      - paragraph [ref=e277]: Certificate and cipher checks.
+                  - button "Malicious Sites Phishing and malware domains." [ref=e278]:
+                    - generic [ref=e279]:
+                      - paragraph [ref=e280]: Malicious Sites
+                      - paragraph [ref=e281]: Phishing and malware domains.
+                  - button "Access Monitoring Proxy-level blocked attempts." [ref=e282] [cursor=pointer]:
+                    - generic [ref=e283]:
+                      - paragraph [ref=e284]: Access Monitoring
+                      - paragraph [ref=e285]: Proxy-level blocked attempts.
+                    - img [ref=e286]
+          - generic [ref=e288]:
+            - generic [ref=e289]:
+              - generic [ref=e291]: Scan Activity — Last 7 Days
+              - generic [ref=e294]:
+                - img [ref=e295]:
+                  - generic [ref=e299]:
+                    - generic [ref=e301]: 27 May
+                    - generic [ref=e303]: 28 May
+                    - generic [ref=e305]: 29 May
+                    - generic [ref=e307]: 30 May
+                    - generic [ref=e309]: 31 May
+                    - generic [ref=e311]: 1 Jun
+                    - generic [ref=e313]: 2 Jun
+                  - generic [ref=e315]:
+                    - generic [ref=e317]: "0"
+                    - generic [ref=e319]: "1"
+                    - generic [ref=e321]: "2"
+                    - generic [ref=e323]: "3"
+                    - generic [ref=e325]: "4"
+                - list [ref=e327]:
+                  - listitem [ref=e328]:
+                    - img [ref=e329]
+                    - text: Scans
+                  - listitem [ref=e331]:
+                    - img [ref=e332]
+                    - text: Vulnerabilities
+            - generic [ref=e334]:
+              - generic [ref=e336]: Vuln. Breakdown
+              - generic [ref=e337]:
+                - img [ref=e341]
+                - generic [ref=e342]:
+                  - generic [ref=e343]:
+                    - generic [ref=e346]: SQL Injection
+                    - generic [ref=e347]: "0"
+                  - generic [ref=e348]:
+                    - generic [ref=e351]: SSL Issues
+                    - generic [ref=e352]: "0"
+                  - generic [ref=e353]:
+                    - generic [ref=e356]: Malicious Content
+                    - generic [ref=e357]: "0"
+                  - generic [ref=e358]:
+                    - generic [ref=e361]: Header Issues
+                    - generic [ref=e362]: "0"
+                  - generic [ref=e363]:
+                    - generic [ref=e366]: WordPress Issues
+                    - generic [ref=e367]: "0"
+            - generic [ref=e368]:
+              - generic [ref=e370]: Blocked Access Attempts — Last 7 Days
+              - img [ref=e374]:
+                - generic [ref=e378]:
+                  - generic [ref=e380]: 27 May
+                  - generic [ref=e382]: 28 May
+                  - generic [ref=e384]: 29 May
+                  - generic [ref=e386]: 30 May
+                  - generic [ref=e388]: 31 May
+                  - generic [ref=e390]: 1 Jun
+                  - generic [ref=e392]: 2 Jun
+                - generic [ref=e394]:
+                  - generic [ref=e396]: "0"
+                  - generic [ref=e398]: "1"
+                  - generic [ref=e400]: "2"
+                  - generic [ref=e402]: "3"
+                  - generic [ref=e404]: "4"
+  - generic [ref=e405]: "0"

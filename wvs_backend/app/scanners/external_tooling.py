@@ -9,7 +9,7 @@ import tempfile
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import parse_qsl, urlparse
 
 
 def tool_available(binary: str | None) -> bool:
@@ -66,6 +66,40 @@ def text_issue(name: str, severity: str, evidence: str, **extra: Any) -> dict[st
     return issue
 
 
+def command_output(proc: subprocess.CompletedProcess[str]) -> str:
+    return "\n".join(
+        part.strip()
+        for part in [proc.stderr or "", proc.stdout or ""]
+        if part.strip()
+    )
+
+
+def command_failure_result(
+    tool_name: str,
+    proc: subprocess.CompletedProcess[str],
+    args: list[str],
+    **extra: Any,
+) -> dict[str, Any] | None:
+    if proc.returncode == 0:
+        return None
+    output = command_output(proc)
+    dependency_error = "Required module not found" in output
+    result = {
+        "enabled": True,
+        "status": "unavailable" if dependency_error else "error",
+        "issues": [],
+        "recommendations": [
+            f"Install missing runtime dependencies for {tool_name} in the scanner image."
+            if dependency_error
+            else f"Check the {tool_name} installation, command arguments, and scanner host logs."
+        ],
+        "summary": output[:500] or f"{tool_name} exited with status {proc.returncode}.",
+        "command": shlex.join(args),
+    }
+    result.update(extra)
+    return result
+
+
 class NmapRunner:
     def __init__(self, binary: str | None, timeout: int):
         self.binary = binary
@@ -86,6 +120,10 @@ class NmapRunner:
             return {"status": "timeout", "issues": [], "open_services": [], "summary": "nmap timed out."}
         except Exception as exc:
             return {"status": "error", "issues": [text_issue("nmap failed", "Low", str(exc))], "open_services": []}
+
+        failure = command_failure_result("nmap", proc, args, open_services=[])
+        if failure:
+            return failure
 
         open_services: list[dict[str, Any]] = []
         issues: list[dict[str, Any]] = []
@@ -168,15 +206,27 @@ class NiktoRunner:
                 if not message:
                     continue
                 issues.append(text_issue("Nikto web server finding", "Medium", message, path=row[6] if len(row) > 6 else None))
-            if not issues and proc.stderr:
-                summary = proc.stderr.strip()[:500]
-            else:
-                summary = f"Nikto returned {len(issues)} finding(s)."
+            if not issues:
+                failure = command_failure_result("Nikto", proc, args)
+                if failure:
+                    return failure
+            stderr = (proc.stderr or "").strip()
+            if not issues and "ERROR:" in stderr:
+                return {
+                    "enabled": True,
+                    "status": "error",
+                    "issues": [],
+                    "recommendations": ["Check Nikto connectivity/TLS handling for this target. Cloudflare or TLS fingerprinting may block Nikto requests."],
+                    "summary": stderr[:500],
+                    "command": shlex.join(args),
+                }
+            summary = stderr[:500] if not issues and stderr else f"Nikto returned {len(issues)} finding(s)."
             return {
                 "status": "issues_found" if issues else "ok",
                 "issues": issues[:50],
                 "recommendations": ["Review Nikto findings and patch exposed web server files, defaults, and misconfigurations."] if issues else [],
                 "summary": summary,
+                "command": shlex.join(args),
             }
 
 
@@ -188,26 +238,39 @@ class WhatWebRunner:
     def scan(self, url: str) -> dict[str, Any]:
         if not tool_available(self.binary):
             return unavailable_result("WhatWeb", self.binary)
-        args = [self.binary or "whatweb", "--log-json=-", "--no-errors", normalized_origin(url)]
-        try:
-            proc = run_command(args, self.timeout)
-        except subprocess.TimeoutExpired:
-            return {"status": "timeout", "plugins": {}, "issues": [], "summary": "WhatWeb timed out."}
-        except Exception as exc:
-            return {"status": "error", "plugins": {}, "issues": [text_issue("WhatWeb failed", "Low", str(exc))]}
+        with tempfile.TemporaryDirectory() as tmp:
+            output_path = Path(tmp) / "whatweb.json"
+            args = [self.binary or "whatweb", f"--log-json={output_path}", "--quiet", "--no-errors", normalized_origin(url)]
+            try:
+                proc = run_command(args, self.timeout)
+            except subprocess.TimeoutExpired:
+                return {"status": "timeout", "plugins": {}, "issues": [], "summary": "WhatWeb timed out."}
+            except Exception as exc:
+                return {"status": "error", "plugins": {}, "issues": [text_issue("WhatWeb failed", "Low", str(exc))]}
 
-        plugins: dict[str, Any] = {}
-        try:
-            data = json.loads(proc.stdout or "[]")
-            if isinstance(data, list) and data:
-                plugins = data[0].get("plugins") or {}
-        except json.JSONDecodeError:
-            pass
+            failure = command_failure_result("WhatWeb", proc, args, plugins={})
+            if failure:
+                return failure
+
+            plugins: dict[str, Any] = {}
+            try:
+                data = json.loads(output_path.read_text(errors="ignore") if output_path.exists() else "[]")
+                if isinstance(data, list) and data:
+                    plugins = data[0].get("plugins") or {}
+            except json.JSONDecodeError:
+                return {
+                    "status": "error",
+                    "plugins": {},
+                    "issues": [text_issue("WhatWeb output could not be parsed", "Low", command_output(proc)[:500])],
+                    "summary": "WhatWeb returned invalid JSON output.",
+                    "command": shlex.join(args),
+                }
         return {
             "status": "ok",
             "plugins": plugins,
             "issues": [],
             "summary": f"WhatWeb identified {len(plugins)} plugin signature(s).",
+            "command": shlex.join(args),
         }
 
 
@@ -219,22 +282,36 @@ class Wafw00fRunner:
     def scan(self, url: str) -> dict[str, Any]:
         if not tool_available(self.binary):
             return unavailable_result("wafw00f", self.binary)
-        args = [self.binary or "wafw00f", "-f", "json", normalized_origin(url)]
+        args = [self.binary or "wafw00f", "-f", "json", "-o", "-", "--no-colors", normalized_origin(url)]
         try:
             proc = run_command(args, self.timeout)
         except subprocess.TimeoutExpired:
             return {"status": "timeout", "issues": [], "summary": "wafw00f timed out."}
         except Exception as exc:
             return {"status": "error", "issues": [text_issue("wafw00f failed", "Low", str(exc))]}
+
+        failure = command_failure_result("wafw00f", proc, args)
+        if failure:
+            return failure
+
         detected: list[str] = []
         try:
             data = json.loads(proc.stdout or "{}")
             entries = data if isinstance(data, list) else [data]
             for entry in entries:
                 if isinstance(entry, dict) and entry.get("detected"):
-                    detected.extend(entry.get("firewall") or [])
+                    firewall = entry.get("firewall")
+                    if isinstance(firewall, list):
+                        detected.extend(str(item) for item in firewall)
+                    elif firewall:
+                        detected.append(str(firewall))
         except json.JSONDecodeError:
-            pass
+            return {
+                "status": "error",
+                "issues": [text_issue("wafw00f output could not be parsed", "Low", command_output(proc)[:500])],
+                "summary": "wafw00f returned invalid JSON output.",
+                "command": shlex.join(args),
+            }
         issues = [] if detected else [text_issue("No WAF detected", "Info", "wafw00f did not identify a web application firewall.")]
         return {
             "status": "ok" if detected else "informational",
@@ -243,6 +320,7 @@ class Wafw00fRunner:
             "issues": issues,
             "recommendations": [] if detected else ["Consider edge protection or WAF rules for high-risk launch targets."],
             "summary": f"Detected WAF: {', '.join(detected)}" if detected else "No WAF detected.",
+            "command": shlex.join(args),
         }
 
 
@@ -264,6 +342,11 @@ class SSLScanRunner:
             return {"status": "timeout", "issues": [], "summary": "sslscan timed out."}
         except Exception as exc:
             return {"status": "error", "issues": [text_issue("sslscan failed", "Low", str(exc))]}
+
+        failure = command_failure_result("sslscan", proc, args)
+        if failure:
+            return failure
+
         output = proc.stdout or ""
         issues = []
         for marker, severity in [("SSLv2", "Critical"), ("SSLv3", "Critical"), ("TLSv1.0", "High"), ("TLSv1.1", "High"), ("RC4", "High"), ("3DES", "High")]:
@@ -274,6 +357,7 @@ class SSLScanRunner:
             "issues": issues,
             "raw_summary": "\n".join(output.splitlines()[:80]),
             "summary": f"sslscan returned {len(issues)} weak TLS indicator(s).",
+            "command": shlex.join(args),
         }
 
 
@@ -294,9 +378,18 @@ class WPScanRunner:
             return {"status": "timeout", "issues": [], "summary": "WPScan timed out."}
         except Exception as exc:
             return {"status": "error", "issues": [text_issue("WPScan failed", "Low", str(exc))]}
+
         issues = []
         try:
             data = json.loads(proc.stdout or "{}")
+            scan_aborted = str(data.get("scan_aborted") or "")
+            if proc.returncode != 0 and "does not seem to be running WordPress" in scan_aborted:
+                return {
+                    "status": "informational",
+                    "issues": [],
+                    "summary": "WPScan completed: target does not appear to be running WordPress.",
+                    "command": shlex.join(args),
+                }
             version = data.get("version") or {}
             if version.get("number") and version.get("status") == "outdated":
                 issues.append(text_issue("WPScan detected outdated WordPress core", "High", f"Version {version.get('number')} is outdated."))
@@ -307,11 +400,21 @@ class WPScanRunner:
                     for vuln in vulns:
                         issues.append(text_issue(f"WPScan vulnerability in {slug}", "High", vuln.get("title") or "Known vulnerability reported by WPScan."))
         except json.JSONDecodeError:
-            pass
+            return {
+                "status": "error",
+                "issues": [text_issue("WPScan output could not be parsed", "Low", command_output(proc)[:500])],
+                "summary": "WPScan returned invalid JSON output.",
+                "command": shlex.join(args),
+            }
+        if not issues:
+            failure = command_failure_result("WPScan", proc, args)
+            if failure:
+                return failure
         return {
             "status": "issues_found" if issues else "ok",
             "issues": issues[:50],
             "summary": f"WPScan returned {len(issues)} vulnerability indicator(s).",
+            "command": shlex.join(args),
         }
 
 
@@ -335,7 +438,126 @@ class SQLMapRunner:
         output = (proc.stdout or "") + "\n" + (proc.stderr or "")
         vulnerable = "is vulnerable" in output.lower() or "parameter" in output.lower() and "injectable" in output.lower()
         issues = [text_issue("sqlmap reported injectable parameter", "Critical", "\n".join(output.splitlines()[-20:]))] if vulnerable else []
-        return {"status": "issues_found" if issues else "ok", "issues": issues, "summary": "sqlmap active validation completed."}
+        if not issues:
+            failure = command_failure_result("sqlmap", proc, args)
+            if failure:
+                return failure
+        return {
+            "status": "issues_found" if issues else "ok",
+            "issues": issues,
+            "summary": "sqlmap active validation completed.",
+            "command": shlex.join(args),
+        }
+
+
+class NoSQLMapRunner:
+    def __init__(self, binary: str | None, timeout: int, command_template: str | None = None):
+        self.binary = binary
+        self.timeout = timeout
+        self.command_template = command_template
+
+    def _query_params(self, url: str) -> list[str]:
+        parsed = urlparse(url)
+        return [name for name, _ in parse_qsl(parsed.query, keep_blank_values=True) if name]
+
+    def _args_for(self, url: str, param: str | None) -> list[str]:
+        if self.command_template:
+            rendered = self.command_template.format(url=url, param=param or "", method="GET")
+            return shlex.split(rendered)
+        parsed = urlparse(url)
+        port = parsed.port or (443 if parsed.scheme == "https" else 80)
+        uri = parsed.path or "/"
+        if parsed.query:
+            uri = f"{uri}?{parsed.query}"
+        params = self._query_params(url)
+        param_index = str(params.index(param) + 1) if param in params else "1"
+        args = [
+            self.binary or "nosqlmap",
+            "--attack",
+            "2",
+            "--platform",
+            "MongoDB",
+            "--victim",
+            parsed.hostname or parsed.netloc,
+            "--webPort",
+            str(port),
+            "--uri",
+            uri,
+            "--httpMethod",
+            "GET",
+            "--https",
+            "ON" if parsed.scheme == "https" else "OFF",
+            "--verb",
+            "OFF",
+            "--injectSize",
+            "8",
+            "--injectFormat",
+            "1",
+            "--params",
+            param_index,
+            "--doTimeAttack",
+            "n",
+        ]
+        if param:
+            args.extend(["--injectedParameter", param_index])
+        return args
+
+    def scan(self, url: str, enabled: bool = False) -> dict[str, Any]:
+        if not enabled:
+            return disabled_result("NoSQLMap active validation")
+        if self.command_template:
+            probe_binary = shlex.split(self.command_template)[0] if self.command_template.strip() else None
+            if not tool_available(probe_binary):
+                return unavailable_result("NoSQLMap", probe_binary)
+        elif not tool_available(self.binary):
+            result = unavailable_result("NoSQLMap", self.binary)
+            result["summary"] = "NoSQLMap was not found. Install/configure NoSQLMap to enable external NoSQL injection validation."
+            return result
+
+        params = self._query_params(url)
+        if not params:
+            return {
+                "enabled": True,
+                "status": "informational",
+                "issues": [],
+                "tested_parameters": [],
+                "summary": "NoSQLMap was available, but no URL query parameters were present for this GET smoke test.",
+                "recommendations": ["Use authenticated API capture or provide request templates to test JSON/body parameters for NoSQL injection."],
+            }
+
+        issues: list[dict[str, Any]] = []
+        commands: list[str] = []
+        summaries: list[str] = []
+        for param in params[:5]:
+            args = self._args_for(url, param)
+            commands.append(shlex.join(args))
+            try:
+                proc = run_command(args, self.timeout)
+            except subprocess.TimeoutExpired:
+                return {"status": "timeout", "issues": issues, "tested_parameters": params[:5], "summary": "NoSQLMap timed out.", "commands": commands}
+            except Exception as exc:
+                return {"status": "error", "issues": [text_issue("NoSQLMap failed", "Low", str(exc))], "tested_parameters": params[:5], "commands": commands}
+
+            output = command_output(proc)
+            summaries.append(output[:300])
+            if proc.returncode != 0 and not output:
+                failure = command_failure_result("NoSQLMap", proc, args, tested_parameters=params[:5])
+                if failure:
+                    return failure
+            lower = output.lower()
+            if any(marker in lower for marker in ["vulnerable", "injection found", "nosql injection", "exploitable"]):
+                issues.append(text_issue("NoSQLMap reported possible NoSQL injection", "Critical", output[-1000:] or f"Parameter {param}", parameter=param, tool="NoSQLMap"))
+
+        return {
+            "enabled": True,
+            "status": "issues_found" if issues else "ok",
+            "issues": issues,
+            "tested_parameters": params[:5],
+            "summary": "NoSQLMap external validation completed." if not issues else f"NoSQLMap reported {len(issues)} possible issue(s).",
+            "tool_output": "\n".join(part for part in summaries if part)[:1000],
+            "commands": commands,
+            "recommendations": ["Review NoSQLMap output and enforce strict schema validation for JSON/body/query parameters."] if issues else [],
+        }
 
 
 class FFufRunner:
@@ -349,7 +571,9 @@ class FFufRunner:
             return disabled_result("ffuf content discovery")
         if not tool_available(self.binary):
             return unavailable_result("ffuf", self.binary)
-        if not self.wordlist or not Path(self.wordlist).exists():
+        bundled_wordlist = Path(__file__).resolve().parent.parent / "wordlists" / "ffuf-small.txt"
+        wordlist = self.wordlist or str(bundled_wordlist)
+        if not wordlist or not Path(wordlist).exists():
             return {
                 "enabled": True,
                 "status": "unavailable",
@@ -358,21 +582,40 @@ class FFufRunner:
                 "summary": "ffuf wordlist is not configured.",
             }
         target = normalized_origin(url) + "/FUZZ"
-        args = [self.binary or "ffuf", "-u", target, "-w", self.wordlist, "-of", "json", "-s", "-mc", "200,204,301,302,307,308,401,403"]
-        try:
-            proc = run_command(args, self.timeout)
-        except subprocess.TimeoutExpired:
-            return {"status": "timeout", "issues": [], "summary": "ffuf timed out."}
-        except Exception as exc:
-            return {"status": "error", "issues": [text_issue("ffuf failed", "Low", str(exc))]}
-        results = []
-        try:
-            data = json.loads(proc.stdout or "{}")
-            results = data.get("results") or []
-        except json.JSONDecodeError:
-            pass
+        with tempfile.TemporaryDirectory() as tmp:
+            output_path = Path(tmp) / "ffuf.json"
+            args = [self.binary or "ffuf", "-u", target, "-w", wordlist, "-of", "json", "-o", str(output_path), "-s", "-mc", "200,204,301,302,307,308,401,403"]
+            try:
+                proc = run_command(args, self.timeout)
+            except subprocess.TimeoutExpired:
+                return {"status": "timeout", "issues": [], "summary": "ffuf timed out."}
+            except Exception as exc:
+                return {"status": "error", "issues": [text_issue("ffuf failed", "Low", str(exc))]}
+
+            failure = command_failure_result("ffuf", proc, args, discovered=[])
+            if failure:
+                return failure
+
+            results = []
+            try:
+                data = json.loads(output_path.read_text(errors="ignore") if output_path.exists() else "{}")
+                results = data.get("results") or []
+            except json.JSONDecodeError:
+                return {
+                    "status": "error",
+                    "issues": [text_issue("ffuf output could not be parsed", "Low", command_output(proc)[:500])],
+                    "discovered": [],
+                    "summary": "ffuf returned invalid JSON output.",
+                    "command": shlex.join(args),
+                }
         issues = [
             text_issue("ffuf discovered reachable path", "Info", f"{item.get('url')} returned {item.get('status')}")
             for item in results[:50]
         ]
-        return {"status": "informational" if issues else "ok", "issues": issues, "discovered": results[:50], "summary": f"ffuf discovered {len(results)} path(s)."}
+        return {
+            "status": "informational" if issues else "ok",
+            "issues": issues,
+            "discovered": results[:50],
+            "summary": f"ffuf discovered {len(results)} path(s).",
+            "command": shlex.join(args),
+        }

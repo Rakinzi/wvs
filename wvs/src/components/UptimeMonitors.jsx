@@ -1,6 +1,7 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Activity, AlertTriangle, Globe, Play, Plus, RefreshCw, Trash2, TrendingUp, Clock3 } from 'lucide-react';
 import { useUptimeMonitorsData } from '../hooks/useUptimeMonitorsData';
+import { useVerifiedTargetsData } from '../hooks/useVerifiedTargetsData';
 import Spinner from './Spinner';
 
 const StatusBadge = ({ status }) => {
@@ -20,7 +21,7 @@ const StatusBadge = ({ status }) => {
 const MetaCell = ({ label, value, mono }) => (
   <div className="flex flex-col gap-0.5 px-3 py-2.5 rounded-lg" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)' }}>
     <p className="text-xs" style={{ color: 'var(--color-text-dim)' }}>{label}</p>
-    <p className="text-sm font-medium" style={{ color: 'var(--color-text)', fontFamily: mono ? 'IBM Plex Mono, monospace' : undefined }}>
+    <p className="text-sm font-medium" style={{ color: 'var(--color-text)', fontFamily: mono ? 'var(--font-mono)' : undefined }}>
       {value ?? '—'}
     </p>
   </div>
@@ -28,12 +29,25 @@ const MetaCell = ({ label, value, mono }) => (
 
 const UptimeMonitors = ({ navigateTo }) => {
   const { monitors, loading, error, createMonitor, updateMonitor, runCheck, deleteMonitor, fetchMonitors } = useUptimeMonitorsData();
+  const { targets, loading: targetsLoading, error: targetsError } = useVerifiedTargetsData();
+  useEffect(() => { document.title = 'Uptime Monitors — LaunchGuard'; }, []);
   const [name, setName] = useState('');
-  const [targetUrl, setTargetUrl] = useState('');
+  const [selectedTargetId, setSelectedTargetId] = useState('');
   const [intervalMinutes, setIntervalMinutes] = useState(5);
   const [actionError, setActionError] = useState(null);
   const [busyId, setBusyId] = useState(null);
   const [submitting, setSubmitting] = useState(false);
+  const verifiedTargets = useMemo(
+    () => targets.filter((target) => target.verification_status === 'verified'),
+    [targets],
+  );
+  const selectedTarget = verifiedTargets.find((target) => target.id === selectedTargetId);
+
+  useEffect(() => {
+    if (!selectedTargetId && verifiedTargets.length) {
+      setSelectedTargetId(verifiedTargets[0].id);
+    }
+  }, [selectedTargetId, verifiedTargets]);
 
   const summary = useMemo(() => ({
     total: monitors.length,
@@ -47,12 +61,17 @@ const UptimeMonitors = ({ navigateTo }) => {
   }), [monitors]);
 
   const handleCreate = async () => {
-    if (!name || !targetUrl) return;
+    if (!name || !selectedTarget) return;
     try {
       setSubmitting(true);
       setActionError(null);
-      await createMonitor({ name, target_url: targetUrl, check_interval_minutes: Number(intervalMinutes) || 5 });
-      setName(''); setTargetUrl(''); setIntervalMinutes(5);
+      await createMonitor({
+        name,
+        target_url: selectedTarget.target_url,
+        verified_target_id: selectedTarget.id,
+        check_interval_minutes: Number(intervalMinutes) || 5,
+      });
+      setName(''); setIntervalMinutes(5);
     } catch (err) {
       setActionError(err.message || 'Failed to create monitor');
     } finally {
@@ -94,7 +113,7 @@ const UptimeMonitors = ({ navigateTo }) => {
       <div className="page-header px-6 lg:px-10 py-4 flex items-center justify-between">
         <div style={{ borderLeft: '2px solid var(--color-primary)', paddingLeft: 10 }}>
           <h1 style={{ fontSize: 14, fontWeight: 700, color: 'var(--color-text)', letterSpacing: '-0.02em', margin: 0 }}>Uptime Monitors</h1>
-          <p style={{ fontSize: 10, color: 'var(--color-text-dim)', fontFamily: "'IBM Plex Mono', monospace", marginTop: 2 }}>Track website availability and response times</p>
+          <p style={{ fontSize: 10, color: 'var(--color-text-dim)', fontFamily: "var(--font-mono)", marginTop: 2 }}>Track website availability and response times</p>
         </div>
         <div className="flex items-center gap-2">
           <button onClick={() => navigateTo('dashboard')} className="btn-secondary text-xs">
@@ -124,9 +143,9 @@ const UptimeMonitors = ({ navigateTo }) => {
             }}>
               <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
                 <Icon size={11} style={{ color: accent, opacity: 0.6, marginTop: 2 }} />
-                <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 22, fontWeight: 700, color: accent, letterSpacing: '-0.04em', lineHeight: 1 }}>{value}</span>
+                <span style={{ fontFamily: "var(--font-mono)", fontSize: 22, fontWeight: 700, color: accent, letterSpacing: '-0.04em', lineHeight: 1 }}>{value}</span>
               </div>
-              <p style={{ fontSize: 10, fontWeight: 700, color: 'var(--color-text-muted)', letterSpacing: '0.08em', textTransform: 'uppercase', fontFamily: "'IBM Plex Mono', monospace", marginTop: 8 }}>{label}</p>
+              <p style={{ fontSize: 10, fontWeight: 700, color: 'var(--color-text-muted)', letterSpacing: '0.08em', textTransform: 'uppercase', fontFamily: "var(--font-mono)", marginTop: 8 }}>{label}</p>
             </div>
             );
           })}
@@ -137,20 +156,70 @@ const UptimeMonitors = ({ navigateTo }) => {
           <p className="section-label mb-4" style={{ borderLeft: '2px solid var(--color-primary)', paddingLeft: 8 }}>Add Monitor</p>
           <div className="grid grid-cols-1 lg:grid-cols-[1fr_1.4fr_180px_140px] gap-3">
             <input value={name} onChange={(e) => setName(e.target.value)}
+              aria-label="Monitor name"
               placeholder="Production Website"
               className="input text-sm" />
-            <input value={targetUrl} onChange={(e) => setTargetUrl(e.target.value)}
-              placeholder="https://example.com"
-              className="input text-sm font-mono" />
-            <input value={intervalMinutes} onChange={(e) => setIntervalMinutes(e.target.value)}
-              type="number" min="1" max="1440" placeholder="5 min"
-              className="input text-sm" />
-            <button onClick={handleCreate} disabled={submitting}
+            <select value={selectedTargetId} onChange={(e) => setSelectedTargetId(e.target.value)}
+              aria-label="Verified target"
+              disabled={targetsLoading || verifiedTargets.length === 0}
+              className="input text-sm font-mono">
+              {targetsLoading ? (
+                <option value="">Loading verified targets...</option>
+              ) : verifiedTargets.length === 0 ? (
+                <option value="">No verified targets available</option>
+              ) : (
+                verifiedTargets.map((target) => (
+                  <option key={target.id} value={target.id}>
+                    {target.normalized_domain}
+                  </option>
+                ))
+              )}
+            </select>
+            <div style={{ position: 'relative' }}>
+              <input value={intervalMinutes} onChange={(e) => setIntervalMinutes(e.target.value)}
+                aria-label="Check interval in minutes"
+                type="number" min="1" max="1440" placeholder="5"
+                className="input text-sm"
+                style={{ paddingRight: 52, width: '100%' }} />
+              <span aria-hidden="true" className="text-xs font-mono"
+                style={{
+                  position: 'absolute',
+                  right: 14,
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  color: 'var(--color-text-dim)',
+                  pointerEvents: 'none',
+                }}>
+                min
+              </span>
+            </div>
+            <button onClick={handleCreate} disabled={submitting || !selectedTarget}
               className="btn-primary justify-center" style={{ opacity: submitting ? 0.75 : 1 }}>
               {submitting ? <Spinner size="sm" /> : <Plus size={14} />}
               {submitting ? 'Adding…' : 'Add'}
             </button>
           </div>
+          {selectedTarget && (
+            <p className="mt-2 text-xs font-mono" style={{ color: 'var(--color-text-dim)' }}>
+              Monitoring {selectedTarget.target_url}
+            </p>
+          )}
+          {!targetsLoading && verifiedTargets.length === 0 && (
+            <div className="flex items-center justify-between gap-3 mt-3 rounded-lg px-3 py-2"
+              style={{ background: 'var(--color-warn-dim)', border: '1px solid var(--color-border)' }}>
+              <span className="text-xs" style={{ color: 'var(--color-warn)' }}>
+                Verify a target before adding uptime monitoring.
+              </span>
+              <button onClick={() => navigateTo('targets')} className="btn-secondary text-xs">
+                Verified Targets
+              </button>
+            </div>
+          )}
+          {targetsError && (
+            <div className="flex items-center gap-2 mt-3 text-xs" style={{ color: 'var(--color-danger)' }}>
+              <AlertTriangle size={12} /> {targetsError}
+            </div>
+          )}
           {actionError && (
             <div className="flex items-center gap-2 mt-3 text-xs" style={{ color: 'var(--color-danger)' }}>
               <AlertTriangle size={12} /> {actionError}

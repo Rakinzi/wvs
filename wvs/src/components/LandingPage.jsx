@@ -129,7 +129,7 @@ const LandingPage = ({ navigateTo }) => {
   const goPrivacy = () => navigateTo('privacy');
 
   return (
-    <div style={{ background: T.bg, color: T.text, fontFamily: "'Inter', system-ui, sans-serif", minHeight: '100vh' }}>
+    <div style={{ background: T.bg, color: T.text, fontFamily: "var(--font-sans)", minHeight: '100vh' }}>
 
       <PublicNav scrolled={scrolled} onLogoClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} onLogin={goApp} isAuthenticated={authed} landingLinks />
 
@@ -151,13 +151,13 @@ const LandingPage = ({ navigateTo }) => {
           {/* Eyebrow */}
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '5px 14px', borderRadius: 3, border: `1px solid rgba(0,212,170,0.25)`, background: 'rgba(0,212,170,0.06)', marginBottom: 36 }}>
             <span style={{ width: 5, height: 5, borderRadius: '50%', background: T.primary, display: 'block', boxShadow: `0 0 8px ${T.primary}` }} />
-            <span style={{ fontSize: 11, fontWeight: 600, color: T.primary, letterSpacing: '0.1em', textTransform: 'uppercase', fontFamily: "'IBM Plex Mono', monospace" }}>
+            <span style={{ fontSize: 11, fontWeight: 600, color: T.primary, letterSpacing: '0.1em', textTransform: 'uppercase', fontFamily: "var(--font-mono)" }}>
               OWASP Web Top 10 · OWASP LLM Top 10 2025
             </span>
           </div>
 
           <h1 style={{
-            fontFamily: "'Syne', system-ui, sans-serif",
+            fontFamily: "var(--font-display)",
             fontSize: 'clamp(38px, 6vw, 72px)',
             fontWeight: 800,
             lineHeight: 1.0,
@@ -200,7 +200,7 @@ const LandingPage = ({ navigateTo }) => {
             </button>
           </div>
 
-          <p style={{ marginTop: 28, fontSize: 12, color: T.dim, fontFamily: "'IBM Plex Mono', monospace", letterSpacing: '0.04em' }}>
+          <p style={{ marginTop: 28, fontSize: 12, color: T.dim, fontFamily: "var(--font-mono)", letterSpacing: '0.04em' }}>
             NO CREDIT CARD · RESULTS IN MINUTES · 48,174 CVEs TRACKED IN 2025
           </p>
         </div>
@@ -215,13 +215,13 @@ const LandingPage = ({ navigateTo }) => {
               borderRight: i < 3 ? `1px solid ${T.border}` : 'none',
             }}>
               <p style={{
-                fontFamily: "'Syne', system-ui, sans-serif",
+                fontFamily: "var(--font-display)",
                 fontSize: 'clamp(22px, 3vw, 34px)',
                 fontWeight: 800, letterSpacing: '-0.04em',
                 color: T.primary, margin: '0 0 6px',
               }}>{val}</p>
               <p style={{ fontSize: 13, color: T.muted, lineHeight: 1.5, marginBottom: 4 }}>{label}</p>
-              <p style={{ fontSize: 10, color: T.dim, fontFamily: "'IBM Plex Mono', monospace", letterSpacing: '0.04em' }}>{src}</p>
+              <p style={{ fontSize: 10, color: T.dim, fontFamily: "var(--font-mono)", letterSpacing: '0.04em' }}>{src}</p>
             </div>
           ))}
         </div>
@@ -234,7 +234,7 @@ const LandingPage = ({ navigateTo }) => {
             <span key={i} style={{
               display: 'inline-flex', alignItems: 'center', gap: 8,
               fontSize: 11, fontWeight: 600, color: T.dim,
-              letterSpacing: '0.06em', fontFamily: "'IBM Plex Mono', monospace",
+              letterSpacing: '0.06em', fontFamily: "var(--font-mono)",
             }}>
               <span style={{ width: 3, height: 3, borderRadius: '50%', background: T.primary, flexShrink: 0, display: 'inline-block' }} />
               {s.toUpperCase()}
@@ -246,8 +246,8 @@ const LandingPage = ({ navigateTo }) => {
       {/* ── FEATURES ── */}
       <section id="features" style={{ maxWidth: 1040, margin: '0 auto', padding: '96px 24px' }}>
         <div style={{ marginBottom: 56 }}>
-          <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.14em', color: T.primary, marginBottom: 14, fontFamily: "'IBM Plex Mono', monospace', textTransform: 'uppercase'" }}>CAPABILITIES</p>
-          <h2 style={{ fontFamily: "'Syne', system-ui, sans-serif", fontSize: 'clamp(26px, 3.5vw, 42px)', fontWeight: 800, letterSpacing: '-0.035em', margin: '0 0 14px', maxWidth: 500 }}>
+          <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.14em', color: T.primary, marginBottom: 14, fontFamily: "var(--font-mono)", textTransform: 'uppercase' }}>CAPABILITIES</p>
+          <h2 style={{ fontFamily: "var(--font-display)", fontSize: 'clamp(26px, 3.5vw, 42px)', fontWeight: 800, letterSpacing: '-0.035em', margin: '0 0 14px', maxWidth: 500 }}>
             Everything you need to ship safely.
           </h2>
           <p style={{ fontSize: 15, color: T.muted, maxWidth: 440 }}>
@@ -281,8 +281,8 @@ const LandingPage = ({ navigateTo }) => {
       <section style={{ background: T.surface, borderTop: `1px solid ${T.border}`, borderBottom: `1px solid ${T.border}`, padding: '72px 24px' }}>
         <div style={{ maxWidth: 1040, margin: '0 auto' }}>
           <div style={{ marginBottom: 40 }}>
-            <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.14em', color: T.primary, marginBottom: 14, fontFamily: "'IBM Plex Mono', monospace" }}>SCANNER SUITE</p>
-            <h2 style={{ fontFamily: "'Syne', system-ui, sans-serif", fontSize: 'clamp(24px, 3vw, 36px)', fontWeight: 800, letterSpacing: '-0.035em', margin: '0 0 10px' }}>
+            <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.14em', color: T.primary, marginBottom: 14, fontFamily: "var(--font-mono)" }}>SCANNER SUITE</p>
+            <h2 style={{ fontFamily: "var(--font-display)", fontSize: 'clamp(24px, 3vw, 36px)', fontWeight: 800, letterSpacing: '-0.035em', margin: '0 0 10px' }}>
               32 scanners. One report.
             </h2>
             <p style={{ fontSize: 14, color: T.muted, maxWidth: 560 }}>
@@ -296,7 +296,7 @@ const LandingPage = ({ navigateTo }) => {
                 padding: '5px 11px', borderRadius: 3,
                 fontSize: 11, fontWeight: 600,
                 background: T.elev, border: `1px solid ${T.borderBright}`,
-                color: T.muted, fontFamily: "'IBM Plex Mono', monospace",
+                color: T.muted, fontFamily: "var(--font-mono)",
                 letterSpacing: '0.03em',
               }}>{s}</span>
             ))}
@@ -307,8 +307,8 @@ const LandingPage = ({ navigateTo }) => {
       {/* ── HOW IT WORKS ── */}
       <section id="how-it-works" style={{ maxWidth: 1040, margin: '0 auto', padding: '96px 24px' }}>
         <div style={{ marginBottom: 56 }}>
-          <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.14em', color: T.primary, marginBottom: 14, fontFamily: "'IBM Plex Mono', monospace" }}>PROCESS</p>
-          <h2 style={{ fontFamily: "'Syne', system-ui, sans-serif", fontSize: 'clamp(26px, 3.5vw, 42px)', fontWeight: 800, letterSpacing: '-0.035em', margin: 0 }}>
+          <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.14em', color: T.primary, marginBottom: 14, fontFamily: "var(--font-mono)" }}>PROCESS</p>
+          <h2 style={{ fontFamily: "var(--font-display)", fontSize: 'clamp(26px, 3.5vw, 42px)', fontWeight: 800, letterSpacing: '-0.035em', margin: 0 }}>
             From zero to launch-ready<br />in minutes.
           </h2>
         </div>
@@ -320,7 +320,7 @@ const LandingPage = ({ navigateTo }) => {
               borderRight: i < HOW.length - 1 ? `1px solid ${T.border}` : 'none',
               padding: '28px 24px',
             }}>
-              <p style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, fontWeight: 700, color: T.primary, marginBottom: 18, letterSpacing: '0.08em' }}>{n}</p>
+              <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 700, color: T.primary, marginBottom: 18, letterSpacing: '0.08em' }}>{n}</p>
               <p style={{ fontWeight: 700, fontSize: 14, marginBottom: 8, color: T.text, letterSpacing: '-0.01em' }}>{title}</p>
               <p style={{ fontSize: 13, color: T.muted, lineHeight: 1.65 }}>{desc}</p>
             </div>
@@ -332,8 +332,8 @@ const LandingPage = ({ navigateTo }) => {
       <section id="pricing" style={{ background: T.surface, borderTop: `1px solid ${T.border}`, padding: '96px 24px' }}>
         <div style={{ maxWidth: 1040, margin: '0 auto' }}>
           <div style={{ marginBottom: 56 }}>
-            <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.14em', color: T.primary, marginBottom: 14, fontFamily: "'IBM Plex Mono', monospace" }}>PRICING</p>
-            <h2 style={{ fontFamily: "'Syne', system-ui, sans-serif", fontSize: 'clamp(26px, 3.5vw, 42px)', fontWeight: 800, letterSpacing: '-0.035em', margin: '0 0 12px' }}>
+            <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.14em', color: T.primary, marginBottom: 14, fontFamily: "var(--font-mono)" }}>PRICING</p>
+            <h2 style={{ fontFamily: "var(--font-display)", fontSize: 'clamp(26px, 3.5vw, 42px)', fontWeight: 800, letterSpacing: '-0.035em', margin: '0 0 12px' }}>
               Simple, honest pricing.
             </h2>
             <p style={{ fontSize: 15, color: T.muted }}>Start free. Upgrade when you need more.</p>
@@ -354,12 +354,12 @@ const LandingPage = ({ navigateTo }) => {
                     padding: '3px 12px', borderRadius: 3,
                     background: T.primary, fontSize: 10, fontWeight: 700,
                     color: '#060608', whiteSpace: 'nowrap',
-                    fontFamily: "'IBM Plex Mono', monospace", letterSpacing: '0.06em',
+                    fontFamily: "var(--font-mono)", letterSpacing: '0.06em',
                   }}>MOST POPULAR</span>
                 )}
-                <p style={{ fontSize: 10, fontWeight: 700, color: highlight ? T.primary : T.muted, marginBottom: 10, fontFamily: "'IBM Plex Mono', monospace", letterSpacing: '0.1em' }}>{name.toUpperCase()}</p>
+                <p style={{ fontSize: 10, fontWeight: 700, color: highlight ? T.primary : T.muted, marginBottom: 10, fontFamily: "var(--font-mono)", letterSpacing: '0.1em' }}>{name.toUpperCase()}</p>
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 4, marginBottom: 8 }}>
-                  <span style={{ fontFamily: "'Syne', system-ui, sans-serif", fontSize: 38, fontWeight: 800, letterSpacing: '-0.04em', color: T.text }}>{price}</span>
+                  <span style={{ fontFamily: "var(--font-display)", fontSize: 38, fontWeight: 800, letterSpacing: '-0.04em', color: T.text }}>{price}</span>
                   {period && <span style={{ fontSize: 13, color: T.muted }}>{period}</span>}
                 </div>
                 <p style={{ fontSize: 13, color: T.muted, marginBottom: 28, lineHeight: 1.6 }}>{desc}</p>
@@ -401,7 +401,7 @@ const LandingPage = ({ navigateTo }) => {
           }} />
           <div style={{ position: 'relative' }}>
             <img src="/launchguard-icon.svg" alt="LaunchGuard" style={{ width: 44, height: 44, marginBottom: 24 }} />
-            <h2 style={{ fontFamily: "'Syne', system-ui, sans-serif", fontSize: 'clamp(26px, 3.5vw, 42px)', fontWeight: 800, letterSpacing: '-0.04em', margin: '0 0 16px' }}>
+            <h2 style={{ fontFamily: "var(--font-display)", fontSize: 'clamp(26px, 3.5vw, 42px)', fontWeight: 800, letterSpacing: '-0.04em', margin: '0 0 16px' }}>
               Ready to launch securely?
             </h2>
             <p style={{ fontSize: 15, color: T.muted, marginBottom: 36, maxWidth: 440, margin: '0 auto 36px', lineHeight: 1.65 }}>
@@ -424,7 +424,7 @@ const LandingPage = ({ navigateTo }) => {
         <div style={{ maxWidth: 1040, margin: '0 auto', display: 'flex', flexWrap: 'wrap', gap: 20, alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <img src="/launchguard-icon.svg" alt="LaunchGuard" style={{ width: 22, height: 22 }} />
-            <span style={{ fontFamily: "'Syne', system-ui, sans-serif", fontWeight: 700, fontSize: 13, color: T.muted, letterSpacing: '-0.01em' }}>LaunchGuard</span>
+            <span style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 13, color: T.muted, letterSpacing: '-0.01em' }}>LaunchGuard</span>
           </div>
           <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap' }}>
             {[
@@ -442,7 +442,7 @@ const LandingPage = ({ navigateTo }) => {
               </button>
             ))}
           </div>
-          <p style={{ fontSize: 11, color: T.dim, margin: 0, fontFamily: "'IBM Plex Mono', monospace", letterSpacing: '0.02em' }}>
+          <p style={{ fontSize: 11, color: T.dim, margin: 0, fontFamily: "var(--font-mono)", letterSpacing: '0.02em' }}>
             © {new Date().getFullYear()} LAUNCHGUARD
           </p>
         </div>

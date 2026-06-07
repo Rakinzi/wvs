@@ -319,6 +319,18 @@ const PrivacyWrapper = () => {
   return <PrivacyPolicy navigateTo={(page) => navigate(page === 'landing' ? '/landing' : `/${page}`)} />;
 };
 
+const HomeRoute = () => {
+  if (!isAuthenticated()) {
+    return <LandingPageWrapper />;
+  }
+
+  return (
+    <ProtectedRoute>
+      <DashboardWrapper />
+    </ProtectedRoute>
+  );
+};
+
 const App = () => {
   const themeValue = useThemeProvider();
   return (
@@ -379,13 +391,7 @@ const App = () => {
 
         <Route path="/" element={
           <Layout>
-            {isAuthenticated() ? (
-              <ProtectedRoute>
-                <DashboardWrapper />
-              </ProtectedRoute>
-            ) : (
-              <LandingPageWrapper />
-            )}
+            <HomeRoute />
           </Layout>
         } />
         

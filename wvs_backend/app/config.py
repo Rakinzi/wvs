@@ -1,5 +1,6 @@
 from datetime import timedelta
 from pathlib import Path
+from urllib.parse import urlparse
 
 from app.settings import INSTANCE_DIR, settings
 
@@ -67,6 +68,9 @@ class Config:
     WPSCAN_CLI_PATH = settings.wpscan_cli_path
     SQLMAP_ENABLED = settings.sqlmap_enabled
     SQLMAP_CLI_PATH = settings.sqlmap_cli_path
+    NOSQLMAP_ENABLED = settings.nosqlmap_enabled
+    NOSQLMAP_CLI_PATH = settings.nosqlmap_cli_path
+    NOSQLMAP_COMMAND_TEMPLATE = settings.nosqlmap_command_template
     FFUF_ENABLED = settings.ffuf_enabled
     FFUF_CLI_PATH = settings.ffuf_cli_path
     FFUF_WORDLIST = settings.ffuf_wordlist
@@ -176,6 +180,36 @@ class ProductionConfig(Config):
             raise RuntimeError(
                 f"Missing required production environment variables: {', '.join(missing)}"
             )
+        weak_secret_values = {
+            "change-me",
+            "change-me-too",
+            "dev-secret-key",
+            "dev-secret-key-change-me",
+            "dev-jwt-secret-change-me",
+        }
+        weak = [
+            name
+            for name, value in {
+                "SECRET_KEY": cls.SECRET_KEY,
+                "JWT_SECRET_KEY": cls.JWT_SECRET_KEY,
+            }.items()
+            if value in weak_secret_values or len(value or "") < 32
+        ]
+        if weak:
+            raise RuntimeError(
+                "Production secrets must be unique random values of at least 32 characters: "
+                + ", ".join(weak)
+            )
+        if "*" in cls.CORS_ORIGINS:
+            raise RuntimeError("FRONTEND_ORIGINS must not include '*' in production")
+        insecure_origins = []
+        for origin in cls.CORS_ORIGINS:
+            parsed = urlparse(origin)
+            hostname = parsed.hostname or ""
+            if parsed.scheme != "https" and hostname not in {"localhost", "127.0.0.1"}:
+                insecure_origins.append(origin)
+        if insecure_origins:
+            raise RuntimeError("Production FRONTEND_ORIGINS must use HTTPS")
 
 
 def get_config():

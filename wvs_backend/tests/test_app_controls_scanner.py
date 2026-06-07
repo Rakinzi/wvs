@@ -67,6 +67,72 @@ def test_app_controls_extracts_js_openapi_and_cors_issues(monkeypatch):
     assert any(issue["evidence"]["rule_id"] == "protected-path-public" for issue in result["issues"])
 
 
+def test_app_controls_skips_auth_hardening_for_static_site(monkeypatch):
+    scanner = AppControlsScanner()
+    monkeypatch.setattr(scanner, "_extract_js_endpoints", lambda base_url, scripts: ([], []))
+    monkeypatch.setattr(scanner, "_discover_openapi", lambda base_url: ([], []))
+    monkeypatch.setattr(scanner, "_check_cors", lambda endpoints: [])
+    monkeypatch.setattr(scanner, "_discover_common_surface", lambda *args, **kwargs: [])
+    monkeypatch.setattr(scanner, "_check_protected_paths", lambda *args, **kwargs: [])
+    monkeypatch.setattr(scanner, "_check_enumeration", lambda *args, **kwargs: [])
+    monkeypatch.setattr(scanner, "_check_idor_templates", lambda *args, **kwargs: [])
+    monkeypatch.setattr(
+        scanner,
+        "_rendered_surface",
+        lambda page_url: {
+            "scripts": [],
+            "forms": [],
+            "pageText": "portfolio projects case studies contact resume",
+        },
+    )
+
+    result = scanner.scan("https://example.com", page_paths=["/"])
+
+    assert result["status"] == "ok"
+    assert result["app_classification"]["auth_surface_detected"] is False
+    assert result["app_classification"]["account_creation_surface_detected"] is False
+    assert {item["control"] for item in result["skipped_controls"]} == {
+        "mfa-signal",
+        "email-verification-signal",
+    }
+    assert not any(issue["evidence"]["rule_id"] == "mfa-signal-missing" for issue in result["issues"])
+    assert not any(issue["evidence"]["rule_id"] == "email-verification-signal-missing" for issue in result["issues"])
+
+
+def test_app_controls_flags_auth_hardening_when_signup_surface_exists(monkeypatch):
+    scanner = AppControlsScanner()
+    monkeypatch.setattr(scanner, "_extract_js_endpoints", lambda base_url, scripts: (["https://example.com/api/signup"], []))
+    monkeypatch.setattr(scanner, "_discover_openapi", lambda base_url: ([], []))
+    monkeypatch.setattr(scanner, "_check_cors", lambda endpoints: [])
+    monkeypatch.setattr(scanner, "_discover_common_surface", lambda *args, **kwargs: [])
+    monkeypatch.setattr(scanner, "_check_protected_paths", lambda *args, **kwargs: [])
+    monkeypatch.setattr(scanner, "_check_enumeration", lambda *args, **kwargs: [])
+    monkeypatch.setattr(scanner, "_check_idor_templates", lambda *args, **kwargs: [])
+    monkeypatch.setattr(
+        scanner,
+        "_rendered_surface",
+        lambda page_url: {
+            "scripts": ["https://example.com/app.js"],
+            "forms": [{
+                "action": "/signup",
+                "method": "POST",
+                "selector": "#signup",
+                "inputTypes": [{"type": "password", "name": "password"}],
+                "text": "create account password",
+            }],
+            "pageText": "create account email password",
+        },
+    )
+
+    result = scanner.scan("https://example.com", page_paths=["/"])
+
+    assert result["status"] == "issues_found"
+    assert result["app_classification"]["auth_surface_detected"] is True
+    assert result["app_classification"]["account_creation_surface_detected"] is True
+    assert any(issue["evidence"]["rule_id"] == "mfa-signal-missing" for issue in result["issues"])
+    assert any(issue["evidence"]["rule_id"] == "email-verification-signal-missing" for issue in result["issues"])
+
+
 def test_app_controls_flow_into_summary_and_sections():
     findings = {
         "app_controls": {

@@ -22,6 +22,100 @@ _AXE_IMPACT_TO_SEVERITY = {
 }
 
 
+def _node_element_summary(node: dict[str, Any]) -> str:
+    return str(node.get("elementSummary") or "").strip()
+
+
+def _node_text(node: dict[str, Any]) -> str:
+    element = node.get("element") if isinstance(node.get("element"), dict) else {}
+    return str(element.get("text") or "").strip()
+
+
+def _attrs(node: dict[str, Any]) -> dict[str, Any]:
+    element = node.get("element") if isinstance(node.get("element"), dict) else {}
+    attrs = element.get("attributes") if isinstance(element.get("attributes"), dict) else {}
+    return attrs
+
+
+def _selector_from_node(node: dict[str, Any]) -> str:
+    target = node.get("target")
+    if isinstance(target, list) and target:
+        return str(target[0] or "")
+    return ""
+
+
+def _specific_accessibility_text(rule_id: str, title: str, description: str, node: dict[str, Any]) -> tuple[str, str, str]:
+    summary = _node_element_summary(node) or "The affected element"
+    selector = _selector_from_node(node)
+    selector_text = f" ({selector})" if selector else ""
+    text = _node_text(node)
+    attrs = _attrs(node)
+
+    if rule_id == "label":
+        label_target = attrs.get("id") or attrs.get("name") or selector
+        label_hint = (
+            f"Add a visible label for this field. In code, connect it with <label for=\"{label_target}\">...</label>, or use aria-labelledby when the label text already exists on the page."
+            if label_target
+            else "Add a visible label for this field. If the visual design cannot show a label, add a clear aria-label that explains what the field is for."
+        )
+        return (
+            f"The field {summary}{selector_text} is missing a readable label. Someone using a screen reader or voice control may only hear a vague control name instead of knowing what to enter.",
+            "People using screen readers, voice control, or translation tools may not understand what this field is asking for.",
+            label_hint,
+        )
+
+    if rule_id == "button-name":
+        visible_text = " It does not contain visible text." if not text else f" Its visible text is currently '{text}'."
+        return (
+            f"The interactive control {summary}{selector_text} does not have a clear name.{visible_text} A user may not know whether it opens a menu, views a product, removes an item, or performs another action.",
+            "People using screen readers or voice commands need every link and button to have a clear action name.",
+            "Give the control a short action label. Prefer visible text when possible; otherwise add aria-label or aria-labelledby, such as 'Open menu', 'View product', or 'Remove item'.",
+        )
+
+    if rule_id == "heading-order":
+        heading_text = f" The heading text is '{text}'." if text else ""
+        return (
+            f"The heading {summary}{selector_text} appears out of order. {description}{heading_text}",
+            "People who navigate by headings may lose the page structure or miss important sections.",
+            "Keep heading levels in sequence, like H1, H2, then H3. Change the affected heading to the next logical level, or add the missing section heading above it.",
+        )
+
+    if rule_id == "image-alt":
+        return (
+            f"The visible image {summary}{selector_text} does not have alternative text.",
+            "People who cannot see the image may miss important product, navigation, or context information.",
+            "Add short alt text that describes the image's purpose. If the image is only decorative, use an empty alt attribute so assistive tools skip it.",
+        )
+
+    if rule_id == "duplicate-id":
+        duplicate_id = attrs.get("id")
+        return (
+            f"The element {summary}{selector_text} reuses the id '{duplicate_id}', which should be unique on the page.",
+            "Duplicate IDs can make labels, error messages, and in-page links point to the wrong element.",
+            "Give this element a unique id and update any label, aria-labelledby, aria-describedby, or link that points to it.",
+        )
+
+    if rule_id == "frame-title":
+        return (
+            f"The embedded frame {summary}{selector_text} does not have a title.",
+            "People using assistive tools may not know what content or service is inside the embedded frame.",
+            "Add a short title that explains the embedded content, such as 'Payment form', 'Map', or 'Product video'.",
+        )
+
+    if rule_id == "html-lang":
+        return (
+            "The page does not declare its main language.",
+            "Screen readers and translation tools may choose the wrong pronunciation or language rules.",
+            "Set the language on the html element, for example <html lang=\"en\">.",
+        )
+
+    return (
+        f"The element {summary}{selector_text} needs an accessibility fix: {description or title}",
+        "Some users may not be able to understand or complete this part of the page reliably.",
+        description or "Adjust the affected control or page structure so it is understandable and usable with assistive tools.",
+    )
+
+
 class AccessibilityScanner:
     def __init__(self, timeout_seconds: int | None = None):
         self.timeout_ms = (timeout_seconds or settings.ux_scan_page_timeout_seconds) * 1000
@@ -30,6 +124,8 @@ class AccessibilityScanner:
         selector = ((node.get("target") or [None])[0]) if isinstance(node.get("target"), list) else None
         description = node.get("failureSummary") or violation.get("description") or ""
         title = violation.get("help") or violation.get("id") or "Accessibility issue"
+        rule_id = str(violation.get("id") or "")
+        evidence_description, user_impact, remediation = _specific_accessibility_text(rule_id, title, description, node)
         issue = ux_finding_defaults(
             "accessibility",
             "Accessibility",
@@ -40,12 +136,15 @@ class AccessibilityScanner:
             confidence="measured",
             selector=selector,
             evidence={
-                "rule_id": violation.get("id"),
-                "description": description,
+                "rule_id": rule_id,
+                "description": evidence_description,
+                "element": node.get("element") if isinstance(node.get("element"), dict) else {},
+                "element_summary": _node_element_summary(node),
+                "html": str(node.get("html") or ""),
                 "screenshot_path": screenshot_path,
             },
-            user_impact="Assistive technology users may not be able to understand or complete core tasks reliably.",
-            technical_remediation=description or "Adjust the page so the affected control or structure meets accessibility requirements.",
+            user_impact=user_impact,
+            technical_remediation=remediation,
             references=[],
         )
         issue["builder_prompt"] = build_builder_prompt(issue)
@@ -156,9 +255,15 @@ class AccessibilityScanner:
                                           // (avoids flagging intentionally narrow pill badges).
                                           if (rect.width < MIN && rect.height < MIN) {
                                             return {
-                                              selector: el.id
-                                                ? `#${el.id}`
-                                                : `${el.tagName.toLowerCase()}:nth-of-type(${index + 1})`,
+                                              selector: window.__launchGuardA11y?.selectorFor
+                                                ? window.__launchGuardA11y.selectorFor(el)
+                                                : (el.id ? `#${el.id}` : `${el.tagName.toLowerCase()}:nth-of-type(${index + 1})`),
+                                              element: window.__launchGuardA11y?.elementDetails
+                                                ? window.__launchGuardA11y.elementDetails(el)
+                                                : { tag: el.tagName.toLowerCase(), attributes: {}, text: '' },
+                                              elementSummary: window.__launchGuardA11y?.elementSummary
+                                                ? window.__launchGuardA11y.elementSummary(el)
+                                                : `<${el.tagName.toLowerCase()}>`,
                                               width: Math.round(rect.width),
                                               height: Math.round(rect.height),
                                             };
@@ -170,6 +275,11 @@ class AccessibilityScanner:
                                     """
                                 )
                                 for raw in measured:
+                                    summary = str(raw.get("elementSummary") or "Interactive target").strip()
+                                    selector = raw.get("selector")
+                                    selector_text = f" at `{selector}`" if selector else ""
+                                    width = raw.get("width")
+                                    height = raw.get("height")
                                     issue = ux_finding_defaults(
                                         "accessibility",
                                         "Mobile Accessibility",
@@ -178,14 +288,16 @@ class AccessibilityScanner:
                                         title="Tap target is too small on mobile",
                                         severity="medium",
                                         confidence="measured",
-                                        selector=raw.get("selector"),
+                                        selector=selector,
                                         evidence={
                                             "rule_id": "tap-target-size",
-                                            "description": f"Interactive target is {raw.get('width')}×{raw.get('height')}px — below the 44×44px minimum.",
+                                            "description": f"{summary}{selector_text} is {width}×{height}px, below the 44×44px recommended mobile touch target.",
+                                            "element": raw.get("element") if isinstance(raw.get("element"), dict) else {},
+                                            "element_summary": summary,
                                             "screenshot_path": screenshot_path,
                                         },
-                                        user_impact="Touch users may struggle to activate the control reliably.",
-                                        technical_remediation="Increase target size or spacing so controls are easier to tap on narrow screens.",
+                                        user_impact="Touch users may miss or accidentally activate nearby controls on narrow screens.",
+                                        technical_remediation=f"Increase the tappable area for {summary} to at least 44×44px, or add spacing so adjacent controls are not crowded.",
                                     )
                                     issue["builder_prompt"] = build_builder_prompt(issue)
                                     issues.append(issue)

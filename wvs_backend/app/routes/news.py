@@ -17,6 +17,199 @@ CISA_KEV_URL = 'https://www.cisa.gov/known-exploited-vulnerabilities-catalog'
 
 CURATED_ARTICLES = [
     {
+        'id': 'curated-miasma-redhat-npm-supply-chain-2026-06-01',
+        'title': 'Miasma: TeamPCP compromises 32 Red Hat npm packages — credential-stealing worm hooks Claude, Codex, Copilot, and Gemini',
+        'slug': 'miasma-redhat-npm-supply-chain-teampcp-2026-06-01',
+        'summary': 'On June 1, 2026, Wiz Research discovered "Miasma" — a supply chain attack by TeamPCP that injected a credential-stealing worm into 32 @redhat-cloud-services npm packages (~80,000 weekly downloads). The malware steals cloud credentials, injects hooks into AI coding tools including Claude, Codex, Copilot, Gemini, and Kiro, and wipes the victim\'s home directory if a stolen token is revoked.',
+        'body': (
+            'On June 1, 2026, Wiz Research published a report on "Miasma: The Spreading Blight," a '
+            'supply chain compromise affecting at least 32 package releases under the '
+            '`@redhat-cloud-services` npm namespace. The attack is attributed to TeamPCP — the same '
+            'group behind the May 11 TanStack attack and the May 18 Nx Console poisoning that led to '
+            'the GitHub internal repository breach.\n\n'
+            '**How the attack worked**\n\n'
+            'Evidence points to a specific Red Hat employee\'s GitHub account being compromised and '
+            'used to inject malicious code directly into the packages\' source repositories before '
+            'publishing. The attack bypassed standard CI/CD controls because the commits came from '
+            'a trusted, authenticated account.\n\n'
+            'The malicious packages execute a 4.2 MB obfuscated payload automatically during every '
+            '`npm install`, before any application code runs. The payload is a new variant of the '
+            'Mini Shai-Hulud malware family, upgraded with several new capabilities.\n\n'
+            '**What the malware steals**\n\n'
+            '- GitHub personal access tokens and OAuth tokens\n'
+            '- SSH private keys\n'
+            '- AWS credentials (`~/.aws/credentials`)\n'
+            '- GCP service account tokens and all GCP identities accessible from the machine\n'
+            '- Azure credentials and all Azure identities accessible from the machine\n'
+            '- npm publish tokens (`~/.npmrc`)\n'
+            '- Docker and Kubernetes config files\n\n'
+            '**AI tool hook injection**\n\n'
+            'A new and particularly dangerous capability: the malware injects persistent hooks into '
+            'AI developer tools running on the infected machine, specifically:\n\n'
+            '- Anthropic Claude Code\n'
+            '- OpenAI Codex\n'
+            '- GitHub Copilot\n'
+            '- Google Gemini CLI\n'
+            '- Microsoft Kiro\n'
+            '- opencode\n\n'
+            'These hooks allow the malware to intercept prompts, responses, and any credentials or '
+            'secrets that pass through these tools during a session — a novel exfiltration vector '
+            'that exploits the privileged access AI coding assistants have to local filesystems and '
+            'environment variables.\n\n'
+            '**Destructive kill-switch**\n\n'
+            'If a stolen token is revoked before the malware\'s persistence is removed, the payload '
+            'executes a destructive command that wipes the victim\'s home directory. This is a '
+            'deliberate deterrent against token rotation without full remediation — a tactic designed '
+            'to coerce victims into negotiating rather than simply rotating credentials.\n\n'
+            '**Scale of exposure**\n\n'
+            'The 32 compromised packages collectively average ~80,000 weekly downloads. Red Hat '
+            'published security advisory RHSB-2026-006 on June 1 and removed the malicious versions '
+            'from npm. Any developer or CI system that ran `npm install` with these packages before '
+            'the takedown should treat their entire credential store as compromised.\n\n'
+            '**Affected packages (examples)**\n\n'
+            '- `@redhat-cloud-services/frontend-components`\n'
+            '- `@redhat-cloud-services/frontend-components-utilities`\n'
+            '- `@redhat-cloud-services/frontend-components-notifications`\n'
+            '- 29 additional `@redhat-cloud-services/*` packages\n\n'
+            '**Operational checklist**\n\n'
+            '1. Run `npm ls @redhat-cloud-services` across all projects and CI environments.\n'
+            '2. Check `package-lock.json` / `yarn.lock` for any `@redhat-cloud-services` version '
+            'published on June 1, 2026 before 18:00 UTC.\n'
+            '3. Rotate ALL credentials on any machine that ran `npm install` with these packages: '
+            'GitHub tokens, AWS keys, GCP tokens, Azure credentials, SSH keys, npm tokens.\n'
+            '4. Audit AI developer tool configurations (Claude Code, Copilot, Codex, Gemini) for '
+            'unexpected hook files or modified configuration.\n'
+            '5. Check for the persistence service installed by the malware: look for new systemd '
+            'units, launchd plists, or cron jobs added on June 1.\n'
+            '6. Do NOT simply rotate tokens without first removing the malware — the kill-switch '
+            'will wipe your home directory if a token is revoked while the malware is still running.'
+        ),
+        'category': 'Breach',
+        'tags': ['npm', 'supply-chain', 'redhat', 'teampcp', 'ai-tools', 'credential-theft'],
+        'severity': 'Critical',
+        'cve_ids': [],
+        'source_url': 'https://www.wiz.io/blog/miasma-supply-chain-attack-targeting-redhat-npm-packages',
+        'image_url': 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&w=1200&q=80',
+        'image_alt': 'Dark terminal with npm package installation and malicious code concept',
+        'published': True,
+        'published_at': '2026-06-01T20:00:00+00:00',
+        'created_at': '2026-06-01T20:00:00+00:00',
+        'updated_at': '2026-06-01T20:00:00+00:00',
+        'author': 'LaunchGuard Security Team',
+    },
+    {
+        'id': 'curated-charter-shinyhunters-breach-2026-05-29',
+        'title': 'ShinyHunters breaches Charter Communications via vishing — 42M records claimed, 13M confirmed published after ransom refusal',
+        'slug': 'charter-communications-shinyhunters-breach-2026-05-29',
+        'summary': 'ShinyHunters breached Charter Communications on April 1, 2026 via a voice phishing attack that compromised an employee\'s Microsoft Entra account, then exfiltrated millions of Salesforce customer records. After Charter refused to negotiate, ShinyHunters published at least 13 million records on May 29. Have I Been Pwned confirmed 4.9 million unique email addresses.',
+        'body': (
+            'On May 23, 2026, the cybercriminal extortion group ShinyHunters claimed responsibility '
+            'for a data breach at Charter Communications, the US telecommunications company behind '
+            'the Spectrum brand. ShinyHunters listed Charter on its dark web leak site, claiming to '
+            'hold between 40 and 42 million records containing PII for residential and business '
+            'customers — which, if true, would exceed Charter\'s entire reported customer base of '
+            '32 million.\n\n'
+            '**How the breach happened**\n\n'
+            'ShinyHunters told BleepingComputer that the initial access came on April 1, 2026 via a '
+            'voice phishing (vishing) attack targeting a Charter employee. The attacker impersonated '
+            'IT support and tricked the employee into providing credentials and approving an MFA push, '
+            'compromising their Microsoft Entra (formerly Azure AD) account.\n\n'
+            'Once inside Charter\'s environment, the attacker used the compromised Entra account to '
+            'access Charter\'s Salesforce CRM instance and bulk-export customer records. The vishing '
+            'technique bypasses technical controls entirely — it is the same social engineering vector '
+            'used in the 2022 Uber, Rockstar Games, and Twilio breaches.\n\n'
+            '**What was exposed**\n\n'
+            'Based on the published sample analyzed by SOCRadar and others:\n'
+            '- Full names\n'
+            '- Email addresses\n'
+            '- Phone numbers\n'
+            '- Physical service addresses\n'
+            '- Account numbers and service plan details\n'
+            '- In some records: date of birth and last four digits of SSN\n\n'
+            'Charter stated that "no sensitive personal information or CPNI data was exfiltrated," '
+            'which contradicts the sample data published by ShinyHunters. Have I Been Pwned confirmed '
+            '4.9 million unique email addresses in the exposed dataset.\n\n'
+            '**Timeline**\n\n'
+            '- April 1, 2026 — Breach via vishing / Entra account compromise\n'
+            '- May 23, 2026 — ShinyHunters lists Charter on leak site, demands ransom\n'
+            '- May 27, 2026 — ShinyHunters\' ransom deadline passes; Charter did not negotiate\n'
+            '- May 29, 2026 — ShinyHunters publishes ~13 million records publicly\n'
+            '- June 2026 — Have I Been Pwned ingests 4.9M unique email addresses\n\n'
+            '**Context: ShinyHunters\' recent activity**\n\n'
+            'ShinyHunters is one of the most prolific data extortion groups active in 2025–2026. '
+            'Previous targets include Ticketmaster (560M records, 2024), Santander, and numerous '
+            'SaaS platforms. The group consistently uses social engineering as the initial access '
+            'vector, targeting helpdesk and IT support staff.\n\n'
+            '**Operational checklist for organizations**\n\n'
+            '1. Enroll all Microsoft Entra accounts in phishing-resistant MFA (FIDO2 hardware keys '
+            'or passkeys) — SMS and push-based MFA are vulnerable to real-time vishing attacks.\n'
+            '2. Implement Entra Conditional Access policies that block bulk data exports from CRM '
+            'systems unless performed from managed, compliant devices.\n'
+            '3. Configure Salesforce Data Export Shield or equivalent DLP controls to alert on '
+            'large record exports.\n'
+            '4. Train helpdesk staff on vishing playbooks — verify caller identity through a '
+            'callback to a known number, never the number provided by the caller.\n'
+            '5. If you are a Charter/Spectrum customer: monitor for phishing emails, change account '
+            'passwords, and check Have I Been Pwned for your email address.'
+        ),
+        'category': 'Breach',
+        'tags': ['data-breach', 'vishing', 'social-engineering', 'telecom', 'shinyhunters', 'salesforce'],
+        'severity': 'High',
+        'cve_ids': [],
+        'source_url': 'https://cyberinsider.com/charter-communications-confirms-data-breach-as-hackers-threaten-leak-of-42-million-records/',
+        'image_url': 'https://images.unsplash.com/photo-1504639725590-34d0984388bd?auto=format&fit=crop&w=1200&q=80',
+        'image_alt': 'Data breach concept with exposed records and security lock',
+        'published': True,
+        'published_at': '2026-05-29T14:00:00+00:00',
+        'created_at': '2026-05-29T14:00:00+00:00',
+        'updated_at': '2026-05-29T14:00:00+00:00',
+        'author': 'LaunchGuard Security Team',
+    },
+    {
+        'id': 'curated-oracle-weblogic-cve-2024-21182-kev-2026-06-01',
+        'title': 'Oracle WebLogic CVE-2024-21182 added to CISA KEV — unpatched servers under active attack',
+        'slug': 'oracle-weblogic-cve-2024-21182-cisa-kev-2026-06-01',
+        'summary': 'CISA added CVE-2024-21182, an unspecified Oracle WebLogic Server vulnerability, to the Known Exploited Vulnerabilities catalog on June 1, 2026 after confirmed active exploitation. WebLogic remains one of the most persistently targeted enterprise Java platforms.',
+        'body': (
+            'On June 1, 2026, CISA added CVE-2024-21182 — an unspecified vulnerability in Oracle '
+            'WebLogic Server — to the Known Exploited Vulnerabilities catalog after confirming active '
+            'exploitation in the wild.\n\n'
+            'Oracle WebLogic Server is a frequent and high-value target for threat actors. Its '
+            'deployment profile — enterprise Java applications, often handling financial transactions, '
+            'ERP systems, and critical internal services — makes a successful exploit high-impact. '
+            'WebLogic CVEs have appeared repeatedly in CISA KEV over the past several years, and '
+            'nation-state groups as well as ransomware operators routinely scan for unpatched instances.\n\n'
+            '**Affected product**\n\n'
+            'Oracle WebLogic Server — specific affected versions are documented in Oracle\'s Critical '
+            'Patch Update (CPU) advisory. Organizations running WebLogic should cross-reference their '
+            'installed version against Oracle\'s published patch matrix.\n\n'
+            '**What to do**\n\n'
+            'Oracle releases security patches through its quarterly Critical Patch Update cycle. '
+            'CVE-2024-21182 was originally patched in a prior CPU; organizations that have not '
+            'applied Oracle CPU patches since early 2024 are likely exposed.\n\n'
+            '**Operational checklist**\n\n'
+            '1. Inventory all Oracle WebLogic Server instances in your environment.\n'
+            '2. Apply the latest Oracle Critical Patch Update immediately.\n'
+            '3. If patching is blocked, restrict network access to WebLogic admin ports '
+            '(7001, 7002, 9002) to known management networks only.\n'
+            '4. Review WebLogic access logs for unexpected admin console access or T3/IIOP '
+            'protocol traffic from unfamiliar sources.\n'
+            '5. Federal agencies must remediate by the CISA-specified deadline per BOD 22-01.'
+        ),
+        'category': 'Vulnerability',
+        'tags': ['oracle', 'weblogic', 'java', 'cisa-kev', 'enterprise'],
+        'severity': 'High',
+        'cve_ids': ['CVE-2024-21182'],
+        'source_url': 'https://www.cisa.gov/news-events/alerts/2026/06/01/cisa-adds-one-known-exploited-vulnerability-catalog',
+        'image_url': 'https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=1200&q=80',
+        'image_alt': 'Enterprise server room with Java application server infrastructure',
+        'published': True,
+        'published_at': '2026-06-01T16:00:00+00:00',
+        'created_at': '2026-06-01T16:00:00+00:00',
+        'updated_at': '2026-06-01T16:00:00+00:00',
+        'author': 'LaunchGuard Security Team',
+    },
+    {
         'id': 'curated-github-breach-teampcp-nx-console-2026-05-20',
         'title': 'GitHub\'s internal repos breached: TeamPCP poisoned the Nx Console VS Code extension to steal 3,800 private repositories',
         'slug': 'github-internal-breach-nx-console-teampcp-2026-05-20',
@@ -927,6 +1120,19 @@ def _filtered_curated_articles(category: str | None, severity: str | None, tag: 
     return articles
 
 
+def _available_categories():
+    db_categories = {
+        row[0]
+        for row in db.session.query(NewsArticle.category)
+        .filter(NewsArticle.published.is_(True))
+        .distinct()
+        .all()
+        if row[0]
+    }
+    curated_categories = {a['category'] for a in CURATED_ARTICLES if a.get('category')}
+    return sorted(db_categories | curated_categories)
+
+
 # ── Public endpoints ──────────────────────────────────────────────────────────
 
 @bp.get('/news')
@@ -968,6 +1174,7 @@ def list_articles():
             'page': page,
             'per_page': per_page,
             'pages': max(1, -(-total // per_page)),
+            'categories': _available_categories(),
         }
     }), 200
 

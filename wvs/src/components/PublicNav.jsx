@@ -49,14 +49,14 @@ const PublicNav = ({
           <button onClick={onLogoClick} style={{ display: 'flex', alignItems: 'center', gap: 9, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
             <img src="/launchguard-icon.svg" alt="LaunchGuard" style={{ width: 28, height: 28 }} />
             <span style={{
-              fontFamily: "'Syne', system-ui, sans-serif",
+              fontFamily: "var(--font-display)",
               fontWeight: 700, fontSize: 15, letterSpacing: '-0.02em', color: C.text,
             }}>LaunchGuard</span>
           </button>
           {breadcrumb && (
             <>
               <ChevronRight size={12} color={C.dim} />
-              <span style={{ fontSize: 12, fontWeight: 500, color: C.muted, fontFamily: "'IBM Plex Mono', monospace" }}>{breadcrumb}</span>
+              <span style={{ fontSize: 12, fontWeight: 500, color: C.muted, fontFamily: "var(--font-mono)" }}>{breadcrumb}</span>
             </>
           )}
         </div>

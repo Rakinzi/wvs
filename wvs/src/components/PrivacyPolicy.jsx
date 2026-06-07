@@ -19,7 +19,7 @@ const LAST_UPDATED = 'June 1, 2026';
 const Section = ({ id, title, children }) => (
   <section id={id} style={{ marginBottom: 48 }}>
     <h2 style={{
-      fontFamily: "'Syne', system-ui, sans-serif",
+      fontFamily: "var(--font-display)",
       fontSize: 18, fontWeight: 700, color: T.text,
       letterSpacing: '-0.02em', margin: '0 0 16px',
       paddingLeft: 12, borderLeft: `2px solid ${T.info}`,
@@ -46,7 +46,7 @@ const DataTable = ({ rows }) => (
       <thead>
         <tr style={{ background: T.surface }}>
           {['Category', 'Examples', 'Purpose'].map(h => (
-            <th key={h} style={{ padding: '10px 14px', textAlign: 'left', color: T.dim, fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', borderBottom: `1px solid ${T.border}` }}>{h}</th>
+            <th key={h} style={{ padding: '10px 14px', textAlign: 'left', color: T.dim, fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', borderBottom: `1px solid ${T.border}` }}>{h}</th>
           ))}
         </tr>
       </thead>
@@ -54,7 +54,7 @@ const DataTable = ({ rows }) => (
         {rows.map(([cat, ex, purpose], i) => (
           <tr key={i} style={{ borderBottom: i < rows.length - 1 ? `1px solid ${T.border}` : 'none' }}>
             <td style={{ padding: '10px 14px', color: T.text, fontWeight: 600 }}>{cat}</td>
-            <td style={{ padding: '10px 14px', color: T.muted, fontFamily: "'IBM Plex Mono', monospace", fontSize: 12 }}>{ex}</td>
+            <td style={{ padding: '10px 14px', color: T.muted, fontFamily: "var(--font-mono)", fontSize: 12 }}>{ex}</td>
             <td style={{ padding: '10px 14px', color: T.muted }}>{purpose}</td>
           </tr>
         ))}
@@ -83,7 +83,7 @@ const PrivacyPolicy = ({ navigateTo }) => {
   useEffect(() => { document.title = 'Privacy Policy — LaunchGuard'; }, []);
 
   return (
-    <div style={{ background: T.bg, color: T.text, minHeight: '100vh', fontFamily: "'Inter', system-ui, sans-serif" }}>
+    <div style={{ background: T.bg, color: T.text, minHeight: '100vh', fontFamily: "var(--font-sans)" }}>
 
       {/* Header */}
       <div style={{ borderBottom: `1px solid ${T.border}`, padding: '16px 24px', display: 'flex', alignItems: 'center', gap: 16, background: T.surface }}>
@@ -92,8 +92,8 @@ const PrivacyPolicy = ({ navigateTo }) => {
           <ArrowLeft size={12} /> Back
         </button>
         <div style={{ borderLeft: `2px solid ${T.info}`, paddingLeft: 12 }}>
-          <h1 style={{ fontFamily: "'Syne', system-ui, sans-serif", fontSize: 15, fontWeight: 700, margin: 0, letterSpacing: '-0.02em', color: T.text }}>Privacy Policy</h1>
-          <p style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, color: T.dim, margin: '2px 0 0' }}>Last updated: {LAST_UPDATED}</p>
+          <h1 style={{ fontFamily: "var(--font-display)", fontSize: 15, fontWeight: 700, margin: 0, letterSpacing: '-0.02em', color: T.text }}>Privacy Policy</h1>
+          <p style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: T.dim, margin: '2px 0 0' }}>Last updated: {LAST_UPDATED}</p>
         </div>
       </div>
 
@@ -101,7 +101,7 @@ const PrivacyPolicy = ({ navigateTo }) => {
 
         {/* Sticky TOC */}
         <nav style={{ position: 'sticky', top: 24 }}>
-          <p style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, fontWeight: 700, color: T.dim, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 12 }}>Contents</p>
+          <p style={{ fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, color: T.dim, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 12 }}>Contents</p>
           {TOC.map(([id, label]) => (
             <a key={id} href={`#${id}`}
               style={{ display: 'block', fontSize: 12, color: T.muted, textDecoration: 'none', padding: '4px 0', borderBottom: `1px solid ${T.border}`, lineHeight: 1.5, transition: 'color 100ms' }}
@@ -190,7 +190,7 @@ const PrivacyPolicy = ({ navigateTo }) => {
               'Restriction: request that we restrict processing of your data',
               'Withdraw consent: where processing is based on consent, withdraw at any time',
             ]} />
-            <P>To exercise these rights, contact us at <span style={{ color: T.info, fontFamily: "'IBM Plex Mono', monospace" }}>privacy@launchguard.app</span>. We will respond within 30 days. We may require identity verification before processing requests.</P>
+            <P>To exercise these rights, contact us at <span style={{ color: T.info, fontFamily: "var(--font-mono)" }}>privacy@launchguard.app</span>. We will respond within 30 days. We may require identity verification before processing requests.</P>
             <P>If you are in the EU/EEA, you also have the right to lodge a complaint with your local data protection authority.</P>
           </Section>
 
@@ -222,7 +222,7 @@ const PrivacyPolicy = ({ navigateTo }) => {
 
           <Section id="contact" title="12. Contact Us">
             <P>For privacy-related questions, data requests, or complaints, contact our privacy team:</P>
-            <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderLeft: `2px solid ${T.info}`, padding: '12px 16px', fontFamily: "'IBM Plex Mono', monospace", fontSize: 12, color: T.muted, lineHeight: 1.8 }}>
+            <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderLeft: `2px solid ${T.info}`, padding: '12px 16px', fontFamily: "var(--font-mono)", fontSize: 12, color: T.muted, lineHeight: 1.8 }}>
               LaunchGuard — Privacy<br />
               privacy@launchguard.app
             </div>

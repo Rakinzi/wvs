@@ -296,6 +296,10 @@ def extract_universal_findings(findings: Mapping[str, Any]) -> list[dict[str, An
         "performance_ux",
         "form_usability",
         "seo",
+        "broken_links",
+        "app_controls",
+        "exposed_services",
+        "abuse_controls",
         "visual_ai",
     ]
     normalized: list[dict[str, Any]] = []

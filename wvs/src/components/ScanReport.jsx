@@ -35,6 +35,19 @@ const T = {
   purpleDim:   'var(--color-info-dim)',
 };
 
+const OWASP_CATEGORY_DETAILS = {
+  'A01:2021': 'Access-control bypass, privilege escalation, IDOR, and forced browsing risks.',
+  'A02:2021': 'Weak TLS, poor crypto choices, secret exposure, and sensitive data protection failures.',
+  'A03:2021': 'SQL injection, XSS, command injection, SSRF input abuse, and unsafe interpreter input.',
+  'A04:2021': 'Missing security design controls, unsafe abuse cases, and risky trust assumptions.',
+  'A05:2021': 'Unsafe defaults, missing headers, exposed files, DNS issues, and server misconfiguration.',
+  'A06:2021': 'Outdated frameworks, vulnerable packages, risky components, and exposed technology versions.',
+  'A07:2021': 'Weak login, session, password reset, MFA, and account identity controls.',
+  'A08:2021': 'Untrusted dependencies, insecure update paths, missing integrity checks, and CI/CD trust issues.',
+  'A09:2021': 'Missing audit events, weak alerting, poor error visibility, and monitoring gaps.',
+  'A10:2021': 'Server-side request forgery paths that can reach internal or cloud metadata services.',
+};
+
 const fmt = (d) => {
   const dt = new Date(d);
   return dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
@@ -77,13 +90,13 @@ const deltaLabel = (value) => {
 
 /* Collapsible section */
 const Section = ({ id, label, subLabel, icon: Icon, iconColor, iconBg, expanded, onToggle, children }) => (
-  <div className="card overflow-hidden">
+  <div id={`report-section-${id}`} className="card overflow-hidden scroll-mt-24">
     <button onClick={() => onToggle(id)}
       className="w-full flex items-center justify-between px-5 py-4 cursor-pointer transition-colors"
       style={{ background: 'var(--color-surface)' }} aria-expanded={expanded}>
       <div className="flex items-center gap-3" style={{ borderLeft: `2px solid ${iconColor}`, paddingLeft: 10 }}>
         <div className="text-left">
-          <p className="text-sm font-semibold" style={{ color: T.text, fontFamily: "'IBM Plex Mono', monospace", fontSize: 11 }}>{label}</p>
+          <p className="text-sm font-semibold" style={{ color: T.text, fontFamily: "var(--font-mono)", fontSize: 11 }}>{label}</p>
           {subLabel && <p className="text-xs mt-0.5" style={{ color: T.muted }}>{subLabel}</p>}
         </div>
       </div>
@@ -95,6 +108,20 @@ const Section = ({ id, label, subLabel, icon: Icon, iconColor, iconBg, expanded,
       </div>
     )}
   </div>
+);
+
+const ScoreSummaryRow = ({ label, value, color, sectionId, onJump }) => (
+  <button
+    type="button"
+    onClick={() => onJump(sectionId)}
+    className="w-full flex items-center justify-between gap-3 text-xs py-1.5 text-left rounded-md transition-colors cursor-pointer"
+    style={{ color: T.muted }}
+    onMouseEnter={(event) => { event.currentTarget.style.background = T.surface; }}
+    onMouseLeave={(event) => { event.currentTarget.style.background = 'transparent'; }}
+  >
+    <span className="min-w-0 truncate">{label}</span>
+    <span className="font-mono flex-shrink-0" style={{ color }}>{value}</span>
+  </button>
 );
 
 /* Finding card */
@@ -204,7 +231,7 @@ const ScreenshotPanel = ({ screenshots }) => {
         style={{ background: 'var(--color-surface)', borderBottom: '1px solid var(--color-border)' }}>
         <div className="flex items-center gap-3" style={{ borderLeft: `2px solid ${T.primary}`, paddingLeft: 10 }}>
           <div>
-            <p className="text-sm font-semibold" style={{ color: T.text, fontFamily: "'IBM Plex Mono', monospace", fontSize: 11 }}>Site Screenshots</p>
+            <p className="text-sm font-semibold" style={{ color: T.text, fontFamily: "var(--font-mono)", fontSize: 11 }}>Site Screenshots</p>
             <p className="text-xs mt-0.5" style={{ color: T.muted }}>Captured at scan time</p>
           </div>
         </div>
@@ -268,6 +295,16 @@ const ScanReport = ({ scanId, navigateTo }) => {
   useEffect(() => { document.title = 'Scan Report — LaunchGuard'; }, []);
 
   const toggle = (id) => setExpanded(p => ({ ...p, [id]: !p[id] }));
+  const jumpToSection = (id) => {
+    if (!id) return;
+    if (!['top-launch-actions'].includes(id)) {
+      setExpanded(p => ({ ...p, [id]: true }));
+    }
+    requestAnimationFrame(() => {
+      document.getElementById(id === 'top-launch-actions' ? id : `report-section-${id}`)
+        ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  };
 
   const handleDownload = () => {
     const tzOffset = new Date().getTimezoneOffset();
@@ -345,6 +382,9 @@ const ScanReport = ({ scanId, navigateTo }) => {
   const comparison = report.comparison || null;
 
   const hasSql       = findings.sqli && findings.sqli.length > 0;
+  const nosqliIssues = findings.nosqli?.issues || [];
+  const hasNosqli    = nosqliIssues.length > 0;
+  const nosqliStatus = findings.nosqli?.status;
   const hasSsl       = findings.ssl  && !findings.ssl.valid;
   const hdrIssues    = findings.headers?.issues || [];
   const wpIssues     = findings.wordpress?.issues || [];
@@ -391,6 +431,7 @@ const ScanReport = ({ scanId, navigateTo }) => {
   const totalIssues = summary.total_issues ??
     (
       (hasSql ? findings.sqli.length : 0) +
+      nosqliIssues.length +
       hdrIssues.length +
       wpIssues.length +
       zapIssues.length +
@@ -408,6 +449,7 @@ const ScanReport = ({ scanId, navigateTo }) => {
     );
 
   const score = meta.security_score ?? (totalIssues === 0 ? 100 : Math.max(0, 100 - totalIssues * 5));
+  const scoreBreakdown = meta.score_breakdown || summary.score_breakdown || {};
   const risk  = meta.risk_rating || (totalIssues > 5 || isMal ? 'Critical' : totalIssues > 3 ? 'High' : totalIssues > 0 ? 'Medium' : 'Low');
   const url   = meta.target_url || report.url || '';
   const ts    = meta.timestamp  || report.timestamp;
@@ -499,7 +541,7 @@ const ScanReport = ({ scanId, navigateTo }) => {
             </div>
           </div>
           {topLaunchActions.length > 0 && (
-            <div className="mt-5 pt-4" style={{ borderTop: `1px solid ${T.borderSubtle}` }}>
+            <div id="top-launch-actions" className="mt-5 pt-4 scroll-mt-24" style={{ borderTop: `1px solid ${T.borderSubtle}` }}>
               <p className="section-label mb-3">Top Launch Actions</p>
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
                 {topLaunchActions.map((item, index) => (
@@ -533,121 +575,82 @@ const ScanReport = ({ scanId, navigateTo }) => {
                 </span>
               </div>
               <div className="w-full pt-2" style={{ borderTop: '1px solid var(--color-border-subtle)' }}>
-                <div className="flex items-center justify-between text-xs py-1.5">
-                  <span style={{ color: T.muted }}>Issues found</span>
-                  <span className="font-mono font-semibold" style={{ color: totalIssues > 0 ? T.danger : T.secure }}>{totalIssues}</span>
-                </div>
-                {isSecurityScan && (<>
-                <div className="flex items-center justify-between text-xs py-1.5">
-                  <span style={{ color: T.muted }}>SQL Injection</span>
-                  <span className="font-mono" style={{ color: hasSql ? T.danger : T.secure }}>{hasSql ? findings.sqli.length : '—'}</span>
-                </div>
-                <div className="flex items-center justify-between text-xs py-1.5">
-                  <span style={{ color: T.muted }}>SSL Issues</span>
-                  <span className="font-mono" style={{ color: hasSsl ? T.warn : T.secure }}>{hasSsl ? '1' : '—'}</span>
-                </div>
-                <div className="flex items-center justify-between text-xs py-1.5">
-                  <span style={{ color: T.muted }}>Header Issues</span>
-                  <span className="font-mono" style={{ color: hdrIssues.length > 0 ? T.info : T.secure }}>{hdrIssues.length || '—'}</span>
-                </div>
-                <div className="flex items-center justify-between text-xs py-1.5">
-                  <span style={{ color: T.muted }}>ZAP Alerts</span>
-                  <span className="font-mono" style={{ color: zapIssues.length > 0 ? T.danger : T.secure }}>{zapIssues.length || '—'}</span>
-                </div>
-                <div className="flex items-center justify-between text-xs py-1.5">
-                  <span style={{ color: T.muted }}>XSS Issues</span>
-                  <span className="font-mono" style={{ color: xssIssues.length > 0 ? T.purple : T.secure }}>{xssIssues.length || '—'}</span>
-                </div>
-                <div className="flex items-center justify-between text-xs py-1.5">
-                  <span style={{ color: T.muted }}>Tech Issues</span>
-                  <span className="font-mono" style={{ color: actionableTechIssues.length > 0 ? T.info : T.secure }}>{actionableTechIssues.length || '—'}</span>
-                </div>
-                <div className="flex items-center justify-between text-xs py-1.5">
-                  <span style={{ color: T.muted }}>Sensitive Exposure</span>
-                  <span className="font-mono" style={{ color: exposureIssues.length > 0 ? T.warn : T.secure }}>{exposureIssues.length || '—'}</span>
-                </div>
-                {findings.secrets && (
-                  <div className="flex items-center justify-between text-xs py-1.5">
-                    <span style={{ color: T.muted }}>Public Secrets</span>
-                    <span className="font-mono" style={{ color: secretsIssues.length > 0 ? T.danger : T.secure }}>{secretsIssues.length || '—'}</span>
+                {scoreBreakdown.overall?.explanation && (
+                  <p className="text-[11px] mb-3 leading-relaxed" style={{ color: T.muted }}>
+                    {scoreBreakdown.overall.explanation}
+                  </p>
+                )}
+                {Object.entries(scoreBreakdown).filter(([key]) => key !== 'overall').length > 0 && (
+                  <div className="grid grid-cols-2 gap-2 mb-3">
+                    {Object.entries(scoreBreakdown).filter(([key]) => key !== 'overall').map(([key, item]) => (
+                      <div key={key} className="rounded p-2" style={{ background: T.elev, border: `1px solid ${T.borderSubtle}` }}>
+                        <p className="text-[10px] uppercase tracking-wide truncate" style={{ color: T.dim }}>{item.label}</p>
+                        <p className="text-sm font-bold font-mono" style={{ color: item.score < 50 ? T.danger : item.score < 80 ? T.warn : T.secure }}>{item.score ?? '—'}</p>
+                      </div>
+                    ))}
                   </div>
                 )}
-                <div className="flex items-center justify-between text-xs py-1.5">
-                  <span style={{ color: T.muted }}>Malicious Flags</span>
-                  <span className="font-mono" style={{ color: isMal ? T.purple : T.secure }}>{isMal ? '1' : '—'}</span>
-                </div>
+                <ScoreSummaryRow
+                  label="Issues found"
+                  value={totalIssues}
+                  color={totalIssues > 0 ? T.danger : T.secure}
+                  sectionId={topLaunchActions.length > 0 ? 'top-launch-actions' : 'owasp'}
+                  onJump={jumpToSection}
+                />
+                {isSecurityScan && (<>
+                <ScoreSummaryRow label="SQL Injection" value={hasSql ? findings.sqli.length : '—'} color={hasSql ? T.danger : T.secure} sectionId="sql" onJump={jumpToSection} />
+                {findings.nosqli && (
+                  <ScoreSummaryRow label="NoSQL Injection" value={hasNosqli ? nosqliIssues.length : nosqliStatus === 'unavailable' ? 'Tool missing' : '—'} color={hasNosqli ? T.danger : nosqliStatus === 'unavailable' ? T.warn : T.secure} sectionId="nosqli" onJump={jumpToSection} />
+                )}
+                <ScoreSummaryRow label="SSL Issues" value={hasSsl ? '1' : '—'} color={hasSsl ? T.warn : T.secure} sectionId="ssl" onJump={jumpToSection} />
+                <ScoreSummaryRow label="Header Issues" value={hdrIssues.length || '—'} color={hdrIssues.length > 0 ? T.info : T.secure} sectionId="headers" onJump={jumpToSection} />
+                <ScoreSummaryRow label="ZAP Alerts" value={zapIssues.length || '—'} color={zapIssues.length > 0 ? T.danger : T.secure} sectionId="zap" onJump={jumpToSection} />
+                <ScoreSummaryRow label="XSS Issues" value={xssIssues.length || '—'} color={xssIssues.length > 0 ? T.purple : T.secure} sectionId="xss" onJump={jumpToSection} />
+                <ScoreSummaryRow label="Tech Issues" value={actionableTechIssues.length || '—'} color={actionableTechIssues.length > 0 ? T.info : T.secure} sectionId="tech" onJump={jumpToSection} />
+                <ScoreSummaryRow label="Sensitive Exposure" value={exposureIssues.length || '—'} color={exposureIssues.length > 0 ? T.warn : T.secure} sectionId="exposure" onJump={jumpToSection} />
+                {findings.secrets && (
+                  <ScoreSummaryRow label="Public Secrets" value={secretsIssues.length || '—'} color={secretsIssues.length > 0 ? T.danger : T.secure} sectionId="secrets" onJump={jumpToSection} />
+                )}
+                <ScoreSummaryRow label="Malicious Flags" value={isMal ? '1' : '—'} color={isMal ? T.purple : T.secure} sectionId="malicious" onJump={jumpToSection} />
                 </>)}
                 {findings.dns && (
-                  <div className="flex items-center justify-between text-xs py-1.5">
-                    <span style={{ color: T.muted }}>DNS Issues</span>
-                    <span className="font-mono" style={{ color: dnsIssues.length > 0 ? T.warn : T.secure }}>{dnsIssues.length || '—'}</span>
-                  </div>
+                  <ScoreSummaryRow label="DNS Issues" value={dnsIssues.length || '—'} color={dnsIssues.length > 0 ? T.warn : T.secure} sectionId="dns" onJump={jumpToSection} />
                 )}
                 {findings.redirect && (
-                  <div className="flex items-center justify-between text-xs py-1.5">
-                    <span style={{ color: T.muted }}>Open Redirects</span>
-                    <span className="font-mono" style={{ color: redirIssues.length > 0 ? T.danger : T.secure }}>{redirIssues.length || '—'}</span>
-                  </div>
+                  <ScoreSummaryRow label="Open Redirects" value={redirIssues.length || '—'} color={redirIssues.length > 0 ? T.danger : T.secure} sectionId="redirect" onJump={jumpToSection} />
                 )}
                 {findings.takeover && (
-                  <div className="flex items-center justify-between text-xs py-1.5">
-                    <span style={{ color: T.muted }}>Subdomain Takeover</span>
-                    <span className="font-mono" style={{ color: takeIssues.length > 0 ? T.danger : T.secure }}>{takeIssues.length || '—'}</span>
-                  </div>
+                  <ScoreSummaryRow label="Subdomain Takeover" value={takeIssues.length || '—'} color={takeIssues.length > 0 ? T.danger : T.secure} sectionId="takeover" onJump={jumpToSection} />
                 )}
                 {findings.ssrf && findings.ssrf.status !== 'disabled' && (
-                  <div className="flex items-center justify-between text-xs py-1.5">
-                    <span style={{ color: T.muted }}>SSRF</span>
-                    <span className="font-mono" style={{ color: ssrfIssues.length > 0 ? T.danger : T.secure }}>{ssrfIssues.length || '—'}</span>
-                  </div>
+                  <ScoreSummaryRow label="SSRF" value={ssrfIssues.length || '—'} color={ssrfIssues.length > 0 ? T.danger : T.secure} sectionId="ssrf" onJump={jumpToSection} />
                 )}
                 {findings.auth && (
-                  <div className="flex items-center justify-between text-xs py-1.5">
-                    <span style={{ color: T.muted }}>Auth Controls</span>
-                    <span className="font-mono" style={{ color: authIssues.length > 0 ? T.warn : T.secure }}>{authIssues.length || '—'}</span>
-                  </div>
+                  <ScoreSummaryRow label="Auth Controls" value={authIssues.length || '—'} color={authIssues.length > 0 ? T.warn : T.secure} sectionId="auth" onJump={jumpToSection} />
+                )}
+                {findings.exposed_services && (
+                  <ScoreSummaryRow label="Exposed Services" value={exposedServiceIssues.length || '—'} color={exposedServiceIssues.length > 0 ? T.danger : T.secure} sectionId="exposed_services" onJump={jumpToSection} />
                 )}
                 {findings.integrity && (
-                  <div className="flex items-center justify-between text-xs py-1.5">
-                    <span style={{ color: T.muted }}>Software Integrity</span>
-                    <span className="font-mono" style={{ color: integrityIssues.length > 0 ? T.warn : T.secure }}>{integrityIssues.length || '—'}</span>
-                  </div>
+                  <ScoreSummaryRow label="Software Integrity" value={integrityIssues.length || '—'} color={integrityIssues.length > 0 ? T.warn : T.secure} sectionId="integrity" onJump={jumpToSection} />
                 )}
                 {findings.logging_monitor && (
-                  <div className="flex items-center justify-between text-xs py-1.5">
-                    <span style={{ color: T.muted }}>Logging & Monitoring</span>
-                    <span className="font-mono" style={{ color: logMonIssues.length > 0 ? T.warn : T.secure }}>{logMonIssues.length || '—'}</span>
-                  </div>
+                  <ScoreSummaryRow label="Logging & Monitoring" value={logMonIssues.length || '—'} color={logMonIssues.length > 0 ? T.warn : T.secure} sectionId="logging_monitor" onJump={jumpToSection} />
                 )}
                 {findings.accessibility && (
-                  <div className="flex items-center justify-between text-xs py-1.5">
-                    <span style={{ color: T.muted }}>Accessibility</span>
-                    <span className="font-mono" style={{ color: accessibilityIssues.length > 0 ? T.info : T.secure }}>{accessibilityIssues.length || '—'}</span>
-                  </div>
+                  <ScoreSummaryRow label="Accessibility" value={accessibilityIssues.length || '—'} color={accessibilityIssues.length > 0 ? T.info : T.secure} sectionId="accessibility" onJump={jumpToSection} />
                 )}
                 {findings.responsive_ux && (
-                  <div className="flex items-center justify-between text-xs py-1.5">
-                    <span style={{ color: T.muted }}>Responsive UX</span>
-                    <span className="font-mono" style={{ color: responsiveIssues.length > 0 ? T.warn : T.secure }}>{responsiveIssues.length || '—'}</span>
-                  </div>
+                  <ScoreSummaryRow label="Responsive UX" value={responsiveIssues.length || '—'} color={responsiveIssues.length > 0 ? T.warn : T.secure} sectionId="responsive_ux" onJump={jumpToSection} />
                 )}
                 {findings.performance_ux && (
-                  <div className="flex items-center justify-between text-xs py-1.5">
-                    <span style={{ color: T.muted }}>Performance UX</span>
-                    <span className="font-mono" style={{ color: performanceIssues.length > 0 ? T.warn : T.secure }}>{performanceIssues.length || '—'}</span>
-                  </div>
+                  <ScoreSummaryRow label="Performance UX" value={performanceIssues.length || '—'} color={performanceIssues.length > 0 ? T.warn : T.secure} sectionId="performance_ux" onJump={jumpToSection} />
                 )}
                 {findings.form_usability && (
-                  <div className="flex items-center justify-between text-xs py-1.5">
-                    <span style={{ color: T.muted }}>Form Usability</span>
-                    <span className="font-mono" style={{ color: formIssues.length > 0 ? T.warn : T.secure }}>{formIssues.length || '—'}</span>
-                  </div>
+                  <ScoreSummaryRow label="Form Usability" value={formIssues.length || '—'} color={formIssues.length > 0 ? T.warn : T.secure} sectionId="form_usability" onJump={jumpToSection} />
                 )}
                 {findings.seo && (
-                  <div className="flex items-center justify-between text-xs py-1.5">
-                    <span style={{ color: T.muted }}>SEO Readiness</span>
-                    <span className="font-mono" style={{ color: seoIssues.length > 0 ? T.info : T.secure }}>{seoIssues.length || '—'}</span>
-                  </div>
+                  <ScoreSummaryRow label="SEO Readiness" value={seoIssues.length || '—'} color={seoIssues.length > 0 ? T.info : T.secure} sectionId="seo" onJump={jumpToSection} />
                 )}
               </div>
             </div>
@@ -730,31 +733,40 @@ const ScanReport = ({ scanId, navigateTo }) => {
             )}
 
             {owaspCoverage.length > 0 && (
-              <div className="card p-5">
+              <div id="report-section-owasp" className="card p-5 scroll-mt-24">
                 <button onClick={() => toggle('owasp')} className="w-full flex items-center justify-between cursor-pointer mb-3">
                   <p className="section-label">OWASP Top 10 2021</p>
                   {expanded.owasp ? <ChevronUp size={13} style={{ color: T.dim }} /> : <ChevronDown size={13} style={{ color: T.dim }} />}
                 </button>
                 {expanded.owasp && (
                   <div className="flex flex-col gap-1">
-                    {owaspCoverage.map((cat) => {
-                      const statusColor = cat.status === 'covered_no_findings' ? T.secure
-                        : cat.status === 'covered_with_findings' ? T.warn
-                        : T.dim;
-                      const statusLabel = cat.status === 'covered_no_findings' ? 'Pass'
-                        : cat.status === 'covered_with_findings' ? `${cat.finding_count} finding${cat.finding_count !== 1 ? 's' : ''}`
-                        : 'Not tested';
-                      return (
-                        <div key={cat.id} className="flex items-center justify-between gap-2 py-1.5 text-xs"
-                          style={{ borderBottom: `1px solid ${T.borderSubtle}` }}>
-                          <div className="min-w-0 flex-1">
-                            <span className="font-mono font-semibold" style={{ color: T.dim }}>{cat.id.replace(':2021', '')}</span>
-                            <span className="ml-1.5 truncate" style={{ color: T.muted }}>{cat.name}</span>
-                          </div>
-                          <span className="font-semibold flex-shrink-0" style={{ color: statusColor }}>{statusLabel}</span>
-                        </div>
-                      );
-                    })}
+	                    {owaspCoverage.map((cat) => {
+	                      const categoryId = cat.id.replace(':2021', '');
+	                      const detail = OWASP_CATEGORY_DETAILS[cat.id];
+	                      const statusColor = cat.status === 'covered_no_findings' ? T.secure
+	                        : cat.status === 'covered_with_findings' ? T.warn
+	                        : T.dim;
+	                      const statusLabel = cat.status === 'covered_no_findings' ? 'Pass'
+	                        : cat.status === 'covered_with_findings' ? `${cat.finding_count} finding${cat.finding_count !== 1 ? 's' : ''}`
+	                        : 'Not tested';
+	                      return (
+	                        <div key={cat.id} className="grid grid-cols-[1fr_auto] gap-3 py-2.5 text-xs"
+	                          style={{ borderBottom: `1px solid ${T.borderSubtle}` }}>
+	                          <div className="min-w-0">
+	                            <div className="flex items-baseline gap-2 min-w-0">
+	                              <span className="font-mono font-semibold flex-shrink-0" style={{ color: T.dim }}>{categoryId}</span>
+	                              <span className="font-medium leading-snug min-w-0" style={{ color: T.muted }}>{cat.name}</span>
+	                            </div>
+	                            {detail && (
+	                              <p className="mt-1 leading-snug" style={{ color: T.dim }}>
+	                                {detail}
+	                              </p>
+	                            )}
+	                          </div>
+	                          <span className="font-semibold text-right whitespace-nowrap self-start" style={{ color: statusColor }}>{statusLabel}</span>
+	                        </div>
+	                      );
+	                    })}
                   </div>
                 )}
               </div>
@@ -798,6 +810,33 @@ const ScanReport = ({ scanId, navigateTo }) => {
                   <Recs items={['Use parameterized queries / prepared statements', 'Validate and sanitize all user input', 'Apply least-privilege to database users', 'Consider a Web Application Firewall (WAF)']} />
                 </div>
               ) : <CleanState icon={CheckCircle} title="No SQL Injection Vulnerabilities" body="Protected against SQL injection attacks." />}
+            </Section>}
+
+            {isSecurityScan && findings.nosqli && <Section id="nosqli" label="NoSQL Injection (NoSQLMap)" subLabel={hasNosqli ? `${nosqliIssues.length} finding${nosqliIssues.length !== 1 ? 's' : ''}` : nosqliStatus === 'unavailable' ? 'NoSQLMap not available' : nosqliStatus === 'disabled' ? 'Disabled' : 'No issues'}
+              icon={hasNosqli ? AlertTriangle : Database} iconColor={hasNosqli ? T.danger : nosqliStatus === 'unavailable' ? T.warn : T.secure}
+              iconBg={hasNosqli ? T.dangerDim : nosqliStatus === 'unavailable' ? T.warnDim : T.secureDim}
+              expanded={expanded.nosqli} onToggle={toggle}>
+              {hasNosqli ? (
+                <div className="flex flex-col gap-3">
+                  <p className="text-xs" style={{ color: T.muted }}>NoSQL injection targets query operators and JSON/body parameters in MongoDB-style APIs.</p>
+                  {nosqliIssues.map((v, i) => (
+                    <FindingCard key={i} color={T.danger} bg={T.dangerDim} icon={Database}
+                      title={v.name || `NoSQLMap Finding ${i + 1}`}
+                      items={[
+                        v.parameter && `Parameter: ${v.parameter}`,
+                        v.severity && `Severity: ${v.severity}`,
+                        v.evidence && `Evidence: ${v.evidence}`,
+                      ].filter(Boolean)} />
+                  ))}
+                  <Recs items={findings.nosqli.recommendations || ['Use strict schema validation for JSON and request bodies', 'Reject MongoDB operator keys such as $ne, $gt, $regex from user input', 'Use allowlisted filters instead of passing user JSON directly into database queries']} />
+                </div>
+              ) : (
+                <CleanState
+                  icon={nosqliStatus === 'unavailable' ? AlertTriangle : CheckCircle}
+                  title={nosqliStatus === 'unavailable' ? 'NoSQLMap Not Available' : nosqliStatus === 'disabled' ? 'NoSQLMap Disabled' : 'No NoSQL Injection Findings'}
+                  body={findings.nosqli.summary || 'NoSQLMap external validation did not report NoSQL injection findings.'}
+                />
+              )}
             </Section>}
 
             {/* SSL */}
@@ -964,7 +1003,11 @@ const ScanReport = ({ scanId, navigateTo }) => {
                 iconBg={niktoIssues.length > 0 ? T.warnDim : T.secureDim}
                 expanded={expanded.nikto} onToggle={toggle}>
                 {['disabled', 'unavailable', 'not_run', 'not_authorized'].includes(findings.nikto?.status) ? (
-                  <CleanState icon={Info} title="Nikto Not Available" body={findings.nikto?.summary || 'Install Nikto in the backend scanner environment to enable this integration.'} />
+                  <CleanState
+                    icon={Info}
+                    title={findings.nikto?.status === 'not_authorized' ? 'Nikto Requires Verified Target' : 'Nikto Not Available'}
+                    body={findings.nikto?.summary || 'Install Nikto in the backend scanner environment to enable this integration.'}
+                  />
                 ) : niktoIssues.length > 0 ? (
                   <div className="flex flex-col gap-3">
                     {niktoIssues.map((issue, i) => (
@@ -1183,7 +1226,7 @@ const ScanReport = ({ scanId, navigateTo }) => {
                               <pre className="px-4 pb-4 text-xs overflow-x-auto whitespace-pre-wrap break-all" style={{
                                 color: T.info,
                                 background: T.elev,
-                                fontFamily: 'monospace',
+                                fontFamily: 'var(--font-mono)',
                                 lineHeight: '1.5',
                                 maxHeight: '320px',
                                 overflowY: 'auto',
@@ -1571,10 +1614,12 @@ const ScanReport = ({ scanId, navigateTo }) => {
                         const color = issue.severity === 'high' ? T.danger : issue.severity === 'medium' ? T.warn : T.info;
                         const bg = issue.severity === 'high' ? T.dangerDim : issue.severity === 'medium' ? T.warnDim : T.infoDim;
                         return (
-                          <div key={i} className="rounded-lg p-4" style={{ background: bg, border: `1px solid ${color}30` }}>
-                            <div className="flex items-start justify-between gap-3">
+                          <div key={i} className="rounded-lg overflow-hidden" style={{ background: bg, border: `1px solid ${color}30` }}>
+                            <div className="flex items-start justify-between gap-3 p-4">
                               <div className="flex-1 min-w-0">
                                 <p className="text-sm font-semibold" style={{ color }}>{issue.title || issue.name}</p>
+                                {issue.url && <p className="text-xs mt-1 font-mono break-all" style={{ color: T.info }}>{issue.url}</p>}
+                                {issue.content_length != null && <p className="text-xs mt-0.5" style={{ color: T.dim }}>{issue.content_length.toLocaleString()} bytes</p>}
                                 {issue.user_impact && <p className="text-xs mt-1" style={{ color: T.muted }}>{issue.user_impact}</p>}
                                 {issue.technical_remediation && <p className="text-xs mt-2" style={{ color: T.text }}>{issue.technical_remediation}</p>}
                               </div>
@@ -1582,6 +1627,19 @@ const ScanReport = ({ scanId, navigateTo }) => {
                                 {issue.severity}
                               </span>
                             </div>
+                            {issue.content_preview && (
+                              <div style={{ borderTop: `1px solid ${color}20` }}>
+                                <p className="px-4 pt-2 pb-1 text-xs font-semibold uppercase tracking-wider" style={{ color: T.dim }}>Content Preview</p>
+                                <pre className="px-4 pb-4 text-xs overflow-x-auto whitespace-pre-wrap break-all" style={{
+                                  color: T.info,
+                                  background: T.elev,
+                                  fontFamily: 'var(--font-mono)',
+                                  lineHeight: '1.5',
+                                  maxHeight: '320px',
+                                  overflowY: 'auto',
+                                }}>{issue.content_preview}</pre>
+                              </div>
+                            )}
                           </div>
                         );
                       })}
@@ -1599,16 +1657,16 @@ const ScanReport = ({ scanId, navigateTo }) => {
             })()}
 
             {[
-              { id: 'accessibility', label: 'Accessibility', issues: accessibilityIssues, iconColor: T.info, iconBg: T.infoDim, recommendations: findings.accessibility?.recommendations || [] },
-              { id: 'responsive_ux', label: 'Mobile and Responsive UX', issues: responsiveIssues, iconColor: T.warn, iconBg: T.warnDim, recommendations: findings.responsive_ux?.recommendations || [] },
-              { id: 'performance_ux', label: 'Performance UX', issues: performanceIssues, iconColor: T.info, iconBg: T.infoDim, recommendations: findings.performance_ux?.recommendations || [], rawMetrics: findings.performance_ux?.raw_metrics },
-              { id: 'form_usability', label: 'Form and Interaction Usability', issues: formIssues, iconColor: T.warn, iconBg: T.warnDim, recommendations: findings.form_usability?.recommendations || [] },
-              { id: 'seo', label: 'SEO Readiness', issues: seoIssues, iconColor: T.info, iconBg: T.infoDim, recommendations: findings.seo?.recommendations || [] },
-              { id: 'broken_links', label: 'Broken Links', issues: brokenLinkIssues, iconColor: T.warn, iconBg: T.warnDim, recommendations: findings.broken_links?.recommendations || [] },
-              { id: 'app_controls', label: 'Application Controls', issues: appControlIssues, iconColor: T.warn, iconBg: T.warnDim, recommendations: findings.app_controls?.recommendations || [], endpoints: findings.app_controls?.discovered_endpoints || [], forms: findings.app_controls?.form_matrix || [] },
-              { id: 'exposed_services', label: 'Exposed Services', issues: exposedServiceIssues, iconColor: T.danger, iconBg: T.dangerDim, recommendations: findings.exposed_services?.recommendations || [], services: findings.exposed_services?.open_services || [], ports: findings.exposed_services?.ports_checked || [] },
-              { id: 'abuse_controls', label: 'Abuse Controls and Exposed Routes', issues: abuseIssues, iconColor: T.danger, iconBg: T.dangerDim, recommendations: findings.abuse_controls?.recommendations || [], routes: findings.abuse_controls?.discovery?.routes || [] },
-              { id: 'visual_ai', label: 'Visual UX Recommendations', issues: visualAiIssues, iconColor: T.purple, iconBg: T.purpleDim, recommendations: findings.visual_ai?.recommendations || [] },
+              { id: 'accessibility', label: 'Accessibility', issues: accessibilityIssues, groups: sections.accessibility?.groups || [], iconColor: T.info, iconBg: T.infoDim, recommendations: findings.accessibility?.recommendations || [] },
+              { id: 'responsive_ux', label: 'Mobile and Responsive UX', issues: responsiveIssues, groups: sections.responsive_ux?.groups || [], iconColor: T.warn, iconBg: T.warnDim, recommendations: findings.responsive_ux?.recommendations || [] },
+              { id: 'performance_ux', label: 'Performance UX', issues: performanceIssues, groups: sections.performance_ux?.groups || [], iconColor: T.info, iconBg: T.infoDim, recommendations: findings.performance_ux?.recommendations || [], rawMetrics: findings.performance_ux?.raw_metrics },
+              { id: 'form_usability', label: 'Form and Interaction Usability', issues: formIssues, groups: sections.form_usability?.groups || [], iconColor: T.warn, iconBg: T.warnDim, recommendations: findings.form_usability?.recommendations || [] },
+              { id: 'seo', label: 'SEO Readiness', issues: seoIssues, groups: sections.seo?.groups || [], iconColor: T.info, iconBg: T.infoDim, recommendations: findings.seo?.recommendations || [] },
+              { id: 'broken_links', label: 'Broken Links', issues: brokenLinkIssues, groups: sections.broken_links?.groups || [], iconColor: T.warn, iconBg: T.warnDim, recommendations: findings.broken_links?.recommendations || [] },
+              { id: 'app_controls', label: 'Application Controls', issues: appControlIssues, groups: sections.app_controls?.groups || [], iconColor: T.warn, iconBg: T.warnDim, recommendations: findings.app_controls?.recommendations || [], endpoints: findings.app_controls?.discovered_endpoints || [], forms: findings.app_controls?.form_matrix || [] },
+              { id: 'exposed_services', label: 'Exposed Services', issues: exposedServiceIssues, groups: sections.exposed_services?.groups || [], iconColor: T.danger, iconBg: T.dangerDim, recommendations: findings.exposed_services?.recommendations || [], services: findings.exposed_services?.open_services || [], ports: findings.exposed_services?.ports_checked || [] },
+              { id: 'abuse_controls', label: 'Abuse Controls and Exposed Routes', issues: abuseIssues, groups: sections.abuse_controls?.groups || [], iconColor: T.danger, iconBg: T.dangerDim, recommendations: findings.abuse_controls?.recommendations || [], routes: findings.abuse_controls?.discovery?.routes || [] },
+              { id: 'visual_ai', label: 'Visual UX Recommendations', issues: visualAiIssues, groups: sections.visual_ai?.groups || [], iconColor: T.purple, iconBg: T.purpleDim, recommendations: findings.visual_ai?.recommendations || [] },
             ].filter((item) => findings[item.id]).map((item) => (
               <Section
                 key={item.id}
@@ -1715,6 +1773,41 @@ const ScanReport = ({ scanId, navigateTo }) => {
                           )}
                         </div>
                       )}
+                      {item.groups?.length > 0 && (
+                        <div className="rounded-lg p-4" style={{ background: T.surface, border: `1px solid ${T.border}` }}>
+                          <div className="flex items-center justify-between gap-3 mb-3">
+                            <p className="text-xs font-semibold" style={{ color: T.muted }}>GROUPED FINDINGS</p>
+                            <span className="text-[11px]" style={{ color: T.dim }}>{item.groups.length} issue type{item.groups.length !== 1 ? 's' : ''}</span>
+                          </div>
+                          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                            {item.groups.map((group) => (
+                              <div key={group.id} className="rounded-lg p-3" style={{ background: T.elev, border: `1px solid ${T.borderSubtle}` }}>
+                                <div className="flex items-start justify-between gap-3">
+                                  <div className="min-w-0">
+                                    <p className="text-sm font-semibold" style={{ color: T.text }}>{group.title}</p>
+                                    <p className="text-xs mt-1" style={{ color: T.muted }}>{group.blocker_reason}</p>
+                                  </div>
+                                  <span className="px-2 py-1 rounded text-xs font-semibold flex-shrink-0" style={{ background: item.iconBg, color: item.iconColor }}>
+                                    {group.count}x
+                                  </span>
+                                </div>
+                                <div className="mt-3 flex flex-wrap gap-2">
+                                  {[group.readiness_area, group.owner, group.fix_effort, labelForConfidence(group.confidence)].filter(Boolean).map((label) => (
+                                    <span key={label} className="px-2 py-0.5 rounded text-[11px]" style={{ background: T.surface, color: T.muted, border: `1px solid ${T.border}` }}>{label}</span>
+                                  ))}
+                                </div>
+                                {(group.example_page_url || group.example_selector) && (
+                                  <details className="mt-3">
+                                    <summary className="cursor-pointer text-[11px] font-semibold" style={{ color: T.info }}>Technical details</summary>
+                                    {group.example_page_url && <p className="mt-2 text-xs font-mono break-all" style={{ color: T.text }}>{group.example_page_url}</p>}
+                                    {group.example_selector && <p className="mt-1 text-xs font-mono break-all" style={{ color: T.dim }}>{group.example_selector}</p>}
+                                  </details>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                       {item.issues.length > 0 ? (
                         <>
                           {item.issues.map((issue, index) => (
@@ -1723,6 +1816,21 @@ const ScanReport = ({ scanId, navigateTo }) => {
                                 <div>
                                   <p className="text-sm font-semibold" style={{ color: T.text }}>{issue.title || issue.name}</p>
                                   <div className="mt-2 flex items-center gap-2 flex-wrap">
+                                    {issue.readiness_area && (
+                                      <span className="px-2 py-0.5 rounded text-[11px] font-semibold" style={{ background: T.elev, color: item.iconColor, border: `1px solid ${T.border}` }}>
+                                        {issue.readiness_area}
+                                      </span>
+                                    )}
+                                    {issue.owner && (
+                                      <span className="px-2 py-0.5 rounded text-[11px]" style={{ background: T.elev, color: T.muted, border: `1px solid ${T.border}` }}>
+                                        {issue.owner}
+                                      </span>
+                                    )}
+                                    {issue.fix_effort && (
+                                      <span className="px-2 py-0.5 rounded text-[11px]" style={{ background: T.elev, color: T.muted, border: `1px solid ${T.border}` }}>
+                                        {issue.fix_effort}
+                                      </span>
+                                    )}
                                     <span className="px-2 py-0.5 rounded text-[11px] font-semibold" style={{ background: T.elev, color: item.iconColor, border: `1px solid ${T.border}` }}>
                                       {labelForConfidence(issue.confidence)}
                                     </span>
@@ -1738,8 +1846,19 @@ const ScanReport = ({ scanId, navigateTo }) => {
                                       </span>
                                     )}
                                   </div>
+                                  {issue.blocker_reason && <p className="text-xs mt-2" style={{ color: T.muted }}>{issue.blocker_reason}</p>}
                                   {issue.user_impact && <p className="text-xs mt-2" style={{ color: T.muted }}>{issue.user_impact}</p>}
                                   {issue.technical_remediation && <p className="text-xs mt-2" style={{ color: T.text }}>{issue.technical_remediation}</p>}
+                                  {(issue.selector || issue.evidence?.rule_id || issue.evidence?.element_summary || issue.evidence?.html) && (
+                                    <details className="mt-2">
+                                      <summary className="cursor-pointer text-[11px] font-semibold" style={{ color: T.info }}>Technical details</summary>
+                                      {issue.selector && <p className="mt-2 text-xs font-mono break-all" style={{ color: T.dim }}>Selector: {issue.selector}</p>}
+                                      {issue.evidence?.rule_id && <p className="mt-1 text-xs font-mono break-all" style={{ color: T.dim }}>Rule: {issue.evidence.rule_id}</p>}
+                                      {(issue.evidence?.element_summary || issue.evidence?.html) && (
+                                        <p className="mt-1 text-xs font-mono break-all" style={{ color: T.dim }}>{issue.evidence.element_summary || issue.evidence.html}</p>
+                                      )}
+                                    </details>
+                                  )}
                                   {issue.builder_prompt && (
                                     <pre className="mt-2 text-xs whitespace-pre-wrap break-words" style={{ color: T.info, background: T.elev, padding: '10px', borderRadius: '8px' }}>
                                       {issue.builder_prompt}

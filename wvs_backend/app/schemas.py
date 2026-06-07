@@ -168,6 +168,7 @@ class UptimeMonitorCreatePayload(BaseModel):
 
     name: str = Field(min_length=2, max_length=120)
     target_url: str = Field(min_length=8, max_length=2048)
+    verified_target_id: str = Field(min_length=1, max_length=36)
     check_interval_minutes: int = Field(default=5, ge=1, le=1440)
 
 

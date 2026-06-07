@@ -45,6 +45,28 @@ class AppControlsScanner:
         "/files/upload",
         "/api/files/upload",
     )
+    AUTH_PATH_TERMS = (
+        "/login",
+        "/signin",
+        "/sign-in",
+        "/auth/login",
+        "/api/login",
+        "/api/auth/login",
+        "/account",
+        "/dashboard",
+        "/admin",
+    )
+    ACCOUNT_CREATION_TERMS = (
+        "signup",
+        "sign up",
+        "register",
+        "create account",
+        "/signup",
+        "/sign-up",
+        "/register",
+        "/api/signup",
+        "/api/register",
+    )
     MFA_TERMS = ("mfa", "2fa", "two-factor", "one-time", "otp", "verification code", "authenticator")
     EMAIL_VERIFY_TERMS = ("verify your email", "email verification", "verification email", "confirm your email")
     ENDPOINT_RE = re.compile(
@@ -189,6 +211,48 @@ class AppControlsScanner:
                 ))
         return issues, matrix
 
+    def _has_auth_surface(
+        self,
+        *,
+        page_text: str,
+        form_matrix: list[dict[str, Any]],
+        discovered_endpoints: list[str],
+        protected_paths: list[str] | None,
+        auth_test_accounts: list[dict[str, Any]] | None,
+    ) -> bool:
+        if auth_test_accounts:
+            return True
+        if protected_paths:
+            return True
+        if any(form.get("classification") == "auth" for form in form_matrix):
+            return True
+        lowered_endpoints = " ".join(discovered_endpoints).lower()
+        if any(term in lowered_endpoints for term in self.AUTH_PATH_TERMS):
+            return True
+        text = page_text.lower()
+        return "password" in text and any(term in text for term in ("login", "sign in", "signin", "account", "admin"))
+
+    def _has_account_creation_surface(
+        self,
+        *,
+        page_text: str,
+        form_matrix: list[dict[str, Any]],
+        discovered_endpoints: list[str],
+    ) -> bool:
+        lowered_endpoints = " ".join(discovered_endpoints).lower()
+        if any(term in lowered_endpoints for term in self.ACCOUNT_CREATION_TERMS):
+            return True
+        text = page_text.lower()
+        if any(term in text for term in self.ACCOUNT_CREATION_TERMS):
+            return True
+        for form in form_matrix:
+            if form.get("classification") != "auth":
+                continue
+            action = str(form.get("action") or "").lower()
+            if any(term in action for term in self.ACCOUNT_CREATION_TERMS):
+                return True
+        return False
+
     def _extract_js_endpoints(self, base_url: str, scripts: list[str]) -> tuple[list[str], list[dict[str, Any]]]:
         endpoints: list[str] = []
         js_files: list[dict[str, Any]] = []
@@ -313,10 +377,11 @@ class AppControlsScanner:
                     target,
                     title=title,
                     severity=severity,
+                    confidence="heuristic",
                     rule_id=category.lower().replace(" ", "-"),
-                    description=f"{path} responded with HTTP {response.status_code}.",
-                    user_impact="Attackers enumerate common pre-production routes and abuse endpoints that are accidentally exposed.",
-                    technical_remediation="Protect the route with authentication, signature verification, environment gating, or remove it before launch.",
+                    description=f"{path} responded with HTTP {response.status_code}. Authentication, authorization, and signature verification were not confirmed by this passive check.",
+                    user_impact="Public webhook, callback, or upload routes are sometimes intentional, but they need explicit controls before launch.",
+                    technical_remediation="Verify authentication, signature verification, environment gating, file validation, and logging for this route; remove it if it is unused.",
                 ))
         return issues
 
@@ -504,10 +569,28 @@ class AppControlsScanner:
         openapi_endpoints, openapi_specs = self._discover_openapi(url)
         discovered_endpoints = list(dict.fromkeys([*js_endpoints, *openapi_endpoints]))[: settings.app_controls_max_endpoints]
         issues.extend(self._check_cors(discovered_endpoints or [self._origin(url)]))
-        issues.extend(self._discover_common_surface(url, self.WEBHOOK_PATHS, "Webhook Checks", "Webhook or callback route is publicly reachable", "medium"))
-        issues.extend(self._discover_common_surface(url, self.UPLOAD_PATHS, "Upload Checks", "Common upload route is publicly reachable", "medium"))
+        issues.extend(self._discover_common_surface(url, self.WEBHOOK_PATHS, "Webhook Checks", "Public webhook or callback route needs verification", "medium"))
+        issues.extend(self._discover_common_surface(url, self.UPLOAD_PATHS, "Upload Checks", "Public upload route needs verification", "medium"))
 
-        if not any(term in page_text for term in self.MFA_TERMS):
+        accounts = auth_test_accounts or []
+        has_auth_surface = self._has_auth_surface(
+            page_text=page_text,
+            form_matrix=form_matrix,
+            discovered_endpoints=discovered_endpoints,
+            protected_paths=protected_paths,
+            auth_test_accounts=accounts,
+        )
+        has_account_creation_surface = self._has_account_creation_surface(
+            page_text=page_text,
+            form_matrix=form_matrix,
+            discovered_endpoints=discovered_endpoints,
+        )
+        skipped_controls = []
+
+        has_mfa_signal = any(term in page_text for term in self.MFA_TERMS)
+        has_email_verify_signal = any(term in page_text for term in self.EMAIL_VERIFY_TERMS)
+
+        if has_auth_surface and not has_mfa_signal:
             issues.append(self._issue(
                 "app_controls",
                 "MFA and Verification",
@@ -519,7 +602,13 @@ class AppControlsScanner:
                 user_impact="Launch-critical accounts may lack a second-factor option.",
                 technical_remediation="Add MFA for admin and high-risk user accounts, or document why it is not required for this app.",
             ))
-        if not any(term in page_text for term in self.EMAIL_VERIFY_TERMS):
+        elif not has_auth_surface:
+            skipped_controls.append({
+                "control": "mfa-signal",
+                "reason": "No login, account, admin, protected route, or test-account surface was detected.",
+            })
+
+        if has_account_creation_surface and not has_email_verify_signal:
             issues.append(self._issue(
                 "app_controls",
                 "MFA and Verification",
@@ -531,8 +620,12 @@ class AppControlsScanner:
                 user_impact="Fake or mistyped accounts may reach protected workflows after launch.",
                 technical_remediation="Require email verification before access to sensitive or abuse-prone workflows.",
             ))
+        elif not has_account_creation_surface:
+            skipped_controls.append({
+                "control": "email-verification-signal",
+                "reason": "No signup, registration, or account-creation surface was detected.",
+            })
 
-        accounts = auth_test_accounts or []
         login_candidates = active_check_paths or ["/login", "/signin", "/api/login", "/api/auth/login"]
         cookies = None
         if accounts:
@@ -551,6 +644,11 @@ class AppControlsScanner:
             "javascript_files": js_files,
             "openapi_specs": openapi_specs,
             "form_matrix": form_matrix,
+            "app_classification": {
+                "auth_surface_detected": has_auth_surface,
+                "account_creation_surface_detected": has_account_creation_surface,
+            },
+            "skipped_controls": skipped_controls,
             "score": max(0, 100 - len([item for item in normalized if item.get("severity") in {"critical", "high", "medium"}]) * 8),
             "recommendations": [
                 "Review discovered JavaScript and OpenAPI endpoints before launch.",

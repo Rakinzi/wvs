@@ -213,6 +213,96 @@ def _strip_html(text: str) -> str:
     return text.strip()
 
 
+def _action_for_finding(item: dict) -> str:
+    title = str(item.get('title') or item.get('name') or '').lower()
+    remediation = item.get('technical_remediation') or item.get('remediation') or item.get('recommendation')
+    if remediation:
+        return str(remediation)
+    if 'terraform' in title or 'secret' in title or 'credential' in title or 'sensitive' in title:
+        return 'Verify the exposure manually, block the path, and rotate any affected credentials.'
+    if 'content-security-policy' in title or 'csp' in title:
+        return 'Add a Content-Security-Policy tuned to the site assets and third-party services.'
+    if 'strict-transport-security' in title or 'hsts' in title:
+        return 'Add Strict-Transport-Security after confirming HTTPS is enforced everywhere.'
+    if 'x-frame-options' in title or 'clickjack' in title or 'frame' in title:
+        return 'Add frame-ancestors in CSP or X-Frame-Options: SAMEORIGIN.'
+    if 'spf' in title or 'dmarc' in title or 'dkim' in title:
+        return 'Configure email authentication DNS records if the domain sends mail.'
+    if 'tap target' in title:
+        return 'Increase the tappable area to at least 44 by 44 pixels on mobile.'
+    if 'label' in title or 'accessible name' in title:
+        return 'Add visible labels or concise aria-label values for the affected controls.'
+    return 'Fix or verify this finding before relying on the page in production.'
+
+
+def _business_summary(summary: dict, verdict_label: str, total: int) -> str:
+    blockers = int(summary.get('launch_blocker_count') or 0)
+    high_signal = []
+    if summary.get('exposure_count'):
+        high_signal.append('possible sensitive file exposure')
+    if summary.get('secrets_count'):
+        high_signal.append('public secret exposure')
+    if summary.get('header_issue_count'):
+        high_signal.append('missing browser security headers')
+    if summary.get('dns_issue_count'):
+        high_signal.append('email-domain DNS protections')
+    if summary.get('accessibility_issue_count'):
+        high_signal.append('accessibility blockers')
+    if summary.get('performance_issue_count'):
+        high_signal.append('mobile performance budget risk')
+
+    concerns = ', '.join(high_signal[:4]) if high_signal else 'the findings listed below'
+    if blockers:
+        return (
+            f'LaunchGuard detected <b>{total}</b> finding{"s" if total != 1 else ""}. '
+            f'The current launch verdict is <b>{escape(verdict_label)}</b> because {blockers} launch-blocking '
+            f'item{"s" if blockers != 1 else ""} require attention. The most important concerns are {escape(concerns)}. '
+            'Fix or verify the launch blockers first, then handle lower-severity hardening work.'
+        )
+    if total:
+        return (
+            f'LaunchGuard detected <b>{total}</b> finding{"s" if total != 1 else ""}. '
+            f'The current launch verdict is <b>{escape(verdict_label)}</b>. The main concerns are {escape(concerns)}. '
+            'These items should be prioritized by user impact and exploitability.'
+        )
+    return 'No launch-blocking findings were detected in this scan. Continue monitoring headers, dependencies, and release configuration before shipping.'
+
+
+def _group_findings(items: list[dict]) -> list[dict]:
+    grouped: dict[tuple[str, str], dict] = {}
+    for item in items:
+        name = item.get('name') or item.get('alert') or item.get('title') or item.get('type') or 'Finding'
+        sev = item.get('severity') or item.get('risk') or 'Info'
+        key = (str(name), str(sev))
+        if key not in grouped:
+            grouped[key] = dict(item)
+            grouped[key]['name'] = str(name)
+            grouped[key]['severity'] = str(sev).title()
+            grouped[key]['occurrences'] = 1
+            urls = []
+            if item.get('url'):
+                urls.append(str(item.get('url')))
+            grouped[key]['affected_urls'] = urls
+        else:
+            grouped[key]['occurrences'] += 1
+            if item.get('url'):
+                url = str(item.get('url'))
+                if url not in grouped[key]['affected_urls']:
+                    grouped[key]['affected_urls'].append(url)
+
+    result = []
+    for item in grouped.values():
+        if item.get('occurrences', 1) > 1:
+            evidence = item.get('evidence') or item.get('description') or ''
+            suffix = f"Found on {item['occurrences']} pages/resources."
+            urls = item.get('affected_urls') or []
+            if urls:
+                suffix += f" Examples: {', '.join(urls[:3])}."
+            item['evidence'] = f"{suffix} {evidence}".strip()
+        result.append(item)
+    return result
+
+
 def _findings_block(items, color, ST):
     """Render a list of findings as a styled table block."""
     rows = []
@@ -653,15 +743,21 @@ def generate_report(results):
     important_issues = verdict_data.get('important_issues') or []
     if top_blockers or important_issues:
         story.append(sp(6))
-        rows = [[Paragraph('Top launch actions', ST['h3'])]]
-        for item in (top_blockers or important_issues)[:5]:
+        rows = [[Paragraph('Priority', ST['label']), Paragraph('Issue', ST['label']), Paragraph('Action', ST['label'])]]
+        for index, item in enumerate((top_blockers or important_issues)[:5], start=1):
             title = escape(str(item.get('title') or 'Finding'))
             impact = escape(str(item.get('launch_impact') or 'fix_before_ship').replace('_', ' ').title())
-            rows.append([Paragraph(f"<b>{impact}:</b> {title}", ST['body'])])
-        actions_t = Table(rows, colWidths=[PAGE_W - 2 * MARGIN])
+            rows.append([
+                Paragraph(str(index), ST['body_w']),
+                Paragraph(f"<b>{impact}:</b> {title}", ST['body']),
+                Paragraph(escape(_action_for_finding(item)), ST['body']),
+            ])
+        actions_t = Table(rows, colWidths=[44, 190, PAGE_W - 2 * MARGIN - 234])
         actions_t.setStyle(TableStyle([
             ('BACKGROUND', (0,0), (-1,-1), CARD),
+            ('BACKGROUND', (0,0), (-1,0), SURFACE),
             ('BOX', (0,0), (-1,-1), 0.4, BORDER),
+            ('LINEBELOW', (0,0), (-1,-2), 0.3, BORDER),
             ('TOPPADDING', (0,0), (-1,-1), 6),
             ('BOTTOMPADDING', (0,0), (-1,-1), 6),
             ('LEFTPADDING', (0,0), (-1,-1), 8),
@@ -756,13 +852,9 @@ def generate_report(results):
     story.append(sp(4))
 
     if total == 0:
-        story.append(Paragraph('No security issues detected. The site appears well-protected.', ST['secure']))
+        story.append(Paragraph(_business_summary(summary, verdict_label, total), ST['secure']))
     else:
-        story.append(Paragraph(
-            f'<b>{total}</b> security {"issue was" if total == 1 else "issues were"} detected '
-            f'across this scan. These findings should be reviewed and remediated promptly.',
-            ST['body'],
-        ))
+        story.append(Paragraph(_business_summary(summary, verdict_label, total), ST['body']))
         story.append(sp(6))
         issue_rows = []
         for label, count, color in [
@@ -943,7 +1035,7 @@ def generate_report(results):
     if zap_disabled:
         story.append(Paragraph('OWASP ZAP was not run in this scan environment.', ST['body']))
     elif zap_issues:
-        story.extend(_findings_block(zap_issues, DANGER, ST))
+        story.extend(_findings_block(_group_findings(zap_issues), DANGER, ST))
     else:
         story.append(Paragraph('✓  OWASP ZAP found no additional security alerts.', ST['secure']))
     story.append(sp(10))
@@ -1168,6 +1260,13 @@ def generate_report(results):
             cl = i.get('content_length')
             issue_url = _safe_text(i.get('url') or i.get('path') or '')
             issue_emails = i.get('emails') or []
+            status_code = i.get('status_code') or (i.get('verification') or {}).get('http_status')
+            content_type = i.get('content_type') or (i.get('verification') or {}).get('content_type')
+            confidence = str(i.get('confidence') or (i.get('verification') or {}).get('confidence') or 'unknown').title()
+            detection_reason = i.get('detection_reason') or (i.get('verification') or {}).get('detection_reason')
+            manual_required = i.get('manual_verification_required')
+            if manual_required is None:
+                manual_required = (i.get('verification') or {}).get('manual_verification_required')
 
             # Build structured metadata rows
             meta_rows = [
@@ -1176,11 +1275,34 @@ def generate_report(results):
                 [Paragraph('URL', ST['label']),
                  Paragraph(issue_url, ST['mono'])],
             ]
+            if status_code:
+                meta_rows.append([
+                    Paragraph('HTTP STATUS', ST['label']),
+                    Paragraph(str(status_code), ST['body_w']),
+                ])
+            if content_type:
+                meta_rows.append([
+                    Paragraph('CONTENT TYPE', ST['label']),
+                    Paragraph(_safe_text(content_type, 120), ST['body_w']),
+                ])
             if cl:
                 meta_rows.append([
                     Paragraph('SIZE', ST['label']),
                     Paragraph(f'{cl:,} bytes', ST['body_w']),
                 ])
+            meta_rows.append([
+                Paragraph('CONFIDENCE', ST['label']),
+                Paragraph(confidence, ST['body_w']),
+            ])
+            if detection_reason:
+                meta_rows.append([
+                    Paragraph('WHY FLAGGED', ST['label']),
+                    Paragraph(_safe_text(detection_reason, 260), ST['body_w']),
+                ])
+            meta_rows.append([
+                Paragraph('MANUAL VERIFY', ST['label']),
+                Paragraph('Yes' if manual_required else 'No', ST['body_w']),
+            ])
             if issue_emails:
                 meta_rows.append([
                     Paragraph('EMAILS FOUND', ST['label']),

@@ -22,8 +22,8 @@ SCAN_PROFILE_META = {
         "active_testing": True,
     },
     "product_readiness": {
-        "label": "Passive Product Readiness",
-        "description": "Rendered-page checks for accessibility, mobile UX, performance, SEO, forms, and optional AI visual review.",
+        "label": "Product Readiness",
+        "description": "Passive rendered-page checks for UX, accessibility, mobile layout, performance, SEO, forms, public routes, and exposed services.",
         "permission_level": 1,
         "active_testing": False,
     },

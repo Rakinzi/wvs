@@ -42,7 +42,6 @@ const Sidebar = ({ isAuthenticated, onLogout, navigateTo, currentPage, isAdmin =
 
   const go = (page) => {
     navigateTo(page);
-    setMobileOpen(false);
     setUserOpen(false);
   };
 
@@ -69,7 +68,7 @@ const Sidebar = ({ isAuthenticated, onLogout, navigateTo, currentPage, isAdmin =
           aria-label="Go to dashboard">
           <img src="/launchguard-icon.svg" alt="" style={{ width: 24, height: 24, flexShrink: 0 }} />
           <span style={{
-            fontFamily: "'Syne', system-ui, sans-serif",
+            fontFamily: "var(--font-display)",
             fontWeight: 700, fontSize: 14, letterSpacing: '-0.02em',
             color: 'var(--color-text)',
           }}>LaunchGuard</span>
@@ -83,7 +82,7 @@ const Sidebar = ({ isAuthenticated, onLogout, navigateTo, currentPage, isAdmin =
           {/* Group label */}
           <p style={{
             fontSize: 9, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase',
-            color: 'var(--color-text-dim)', fontFamily: "'IBM Plex Mono', monospace",
+            color: 'var(--color-text-dim)', fontFamily: "var(--font-mono)",
             padding: '8px 8px 4px', margin: 0,
           }}>Navigation</p>
 
@@ -139,7 +138,7 @@ const Sidebar = ({ isAuthenticated, onLogout, navigateTo, currentPage, isAdmin =
                   background: 'var(--color-danger)',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   fontSize: 9, fontWeight: 700, color: '#fff',
-                  fontFamily: "'IBM Plex Mono', monospace", flexShrink: 0,
+                  fontFamily: "var(--font-mono)", flexShrink: 0,
                 }}>{NOTIFICATIONS.length}</span>
               )}
             </button>
@@ -152,7 +151,7 @@ const Sidebar = ({ isAuthenticated, onLogout, navigateTo, currentPage, isAdmin =
                 boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
               }}>
                 <div style={{ padding: '10px 14px 8px', borderBottom: '1px solid var(--color-border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--color-text)', fontFamily: "'IBM Plex Mono', monospace", letterSpacing: '0.06em', textTransform: 'uppercase' }}>Notifications</span>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--color-text)', fontFamily: "var(--font-mono)", letterSpacing: '0.06em', textTransform: 'uppercase' }}>Notifications</span>
                   <span className="section-label">recent</span>
                 </div>
                 {NOTIFICATIONS.map(n => (
@@ -174,7 +173,7 @@ const Sidebar = ({ isAuthenticated, onLogout, navigateTo, currentPage, isAdmin =
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <p style={{ fontSize: 12, color: 'var(--color-text)', margin: 0, lineHeight: 1.4 }}>{n.message}</p>
-                      <p style={{ fontSize: 10, color: 'var(--color-text-dim)', margin: '2px 0 0', fontFamily: "'IBM Plex Mono', monospace" }}>{n.time}</p>
+                      <p style={{ fontSize: 10, color: 'var(--color-text-dim)', margin: '2px 0 0', fontFamily: "var(--font-mono)" }}>{n.time}</p>
                     </div>
                   </div>
                 ))}
@@ -236,7 +235,7 @@ const Sidebar = ({ isAuthenticated, onLogout, navigateTo, currentPage, isAdmin =
                 width: 22, height: 22, borderRadius: 4, flexShrink: 0,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 background: 'var(--color-primary-dim)', color: 'var(--color-primary)',
-                fontSize: 10, fontWeight: 700, fontFamily: "'IBM Plex Mono', monospace",
+                fontSize: 10, fontWeight: 700, fontFamily: "var(--font-mono)",
               }}>{initial}</div>
               <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--color-text)' }}>{username}</span>
               <ChevronDown size={11} style={{ flexShrink: 0, color: 'var(--color-text-dim)', transform: userOpen ? 'rotate(180deg)' : 'none', transition: 'transform 150ms' }} />
@@ -251,7 +250,7 @@ const Sidebar = ({ isAuthenticated, onLogout, navigateTo, currentPage, isAdmin =
               }}>
                 <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--color-border)' }}>
                   <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-text)', margin: 0 }}>{username}</p>
-                  <p style={{ fontSize: 10, color: 'var(--color-text-dim)', margin: '2px 0 0', fontFamily: "'IBM Plex Mono', monospace" }}>Free plan</p>
+                  <p style={{ fontSize: 10, color: 'var(--color-text-dim)', margin: '2px 0 0', fontFamily: "var(--font-mono)" }}>Free plan</p>
                 </div>
                 <button onClick={() => { setUserOpen(false); onLogout(); }}
                   style={{

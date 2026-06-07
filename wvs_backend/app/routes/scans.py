@@ -1,10 +1,12 @@
 import os
 import copy
+from pathlib import Path
 
 from flask import Blueprint, current_app, jsonify, request, send_file
 from flask_jwt_extended import jwt_required
 from app.auth import get_current_user
 from app.models import ScanJob, ScanResult, VerifiedTarget
+from app.scanners import SecurityScanner
 from app.schemas import ScanRequestPayload
 from app.utils.db_manager import DBManager
 from app.utils.scan_helpers import (
@@ -24,13 +26,33 @@ from app.utils.time_utils import utc_now, utc_now_isoformat
 bp = Blueprint('scans', __name__)
 
 
+class _CeleryProxy:
+    def _app(self):
+        return init_celery(current_app)
+
+    def AsyncResult(self, *args, **kwargs):
+        return self._app().AsyncResult(*args, **kwargs)
+
+
+class _RunFullScanJobProxy:
+    def _task(self):
+        from app.tasks.scan_jobs import run_full_scan_job as task
+
+        return task
+
+    def apply_async(self, *args, **kwargs):
+        return self._task().apply_async(*args, **kwargs)
+
+
+celery = _CeleryProxy()
+run_full_scan_job = _RunFullScanJobProxy()
+
+
 def _celery_app():
-    return init_celery(current_app)
+    return celery
 
 
 def _security_scanner():
-    from app.scanners import SecurityScanner
-
     return SecurityScanner()
 
 
@@ -170,7 +192,7 @@ def _serialize_task_progress(job: ScanJob) -> dict | None:
             stored_progress = candidate
 
     if not job.task_id:
-        return _decorate_progress(job, stored_progress)
+        return stored_progress
 
     task_state, info = _read_task_result_snapshot(job.task_id)
     logs = info.get('logs') if isinstance(info.get('logs'), list) else []
@@ -314,6 +336,28 @@ def _asset_url(scan_id: str, filename: str) -> str:
     return f"/report/{scan_id}/assets/{filename}"
 
 
+def _safe_existing_file(path: str | None, base_dir: str, *, suffix: str | None = None) -> str | None:
+    if not path:
+        return None
+
+    try:
+        resolved_base = Path(base_dir).resolve()
+        resolved_path = Path(path).resolve()
+        resolved_path.relative_to(resolved_base)
+    except (OSError, ValueError):
+        return None
+
+    if suffix and resolved_path.suffix.lower() != suffix:
+        return None
+    if not resolved_path.is_file():
+        return None
+    return str(resolved_path)
+
+
+def _safe_report_cache_path(scan: ScanResult) -> str | None:
+    return _safe_existing_file(scan.report_path, current_app.config["REPORT_FOLDER"], suffix=".pdf")
+
+
 def _publicize_scan_assets(scan_id: str, payload):
     if isinstance(payload, dict):
         cloned = {}
@@ -426,8 +470,6 @@ def start_scan():
         try:
             queue_name = current_app.config["UX_SCAN_QUEUE"] if scan_profile in {"product_readiness", "full_launch_audit"} else current_app.config["SECURITY_SCAN_QUEUE"]
             _celery_app()
-            from app.tasks.scan_jobs import run_full_scan_job
-
             task = run_full_scan_job.apply_async(args=[job.id], queue=queue_name)
             job.task_id = task.id
             db.session.commit()
@@ -593,8 +635,11 @@ def check_wordpress():
         payload = ScanRequestPayload.model_validate(request.get_json(silent=True) or {})
         url = normalize_target_url(payload.url)
 
+        if payload.enable_active_checks:
+            _ensure_active_checks_authorized(current_user, url, payload.verified_target_id)
+
         scanner = _security_scanner()
-        results = scanner.check_wordpress(url)
+        results = scanner.check_wordpress(url, enable_active_checks=payload.enable_active_checks)
         recommendations = list(results.get('recommendations', []))
 
         findings = {
@@ -662,9 +707,17 @@ def list_scan_jobs():
         return jsonify({'error': 'User not found'}), 404
 
     limit = request.args.get('limit', 20, type=int)
-    jobs = ScanJob.query.filter_by(user_id=current_user.id).order_by(
-        ScanJob.created_at.desc()
-    ).limit(limit).all()
+    job_ids = [
+        row.id
+        for row in ScanJob.query.with_entities(ScanJob.id)
+        .filter(ScanJob.user_id == current_user.id)
+        .order_by(ScanJob.created_at.desc())
+        .limit(limit)
+        .all()
+    ]
+    order = {job_id: index for index, job_id in enumerate(job_ids)}
+    jobs = ScanJob.query.filter(ScanJob.id.in_(job_ids)).all() if job_ids else []
+    jobs = sorted(jobs, key=lambda job: order.get(job.id, len(order)))
     jobs = [_sync_scan_job_status(job) for job in jobs]
 
     return jsonify({
@@ -749,8 +802,8 @@ def get_report(scan_id):
             tz_offset = 0
 
         # Serve cached PDF when one exists and tz_offset matches (avoids rebuilding on every download)
-        cached_path = scan.report_path
-        if cached_path and os.path.exists(cached_path) and tz_offset == 0:
+        cached_path = _safe_report_cache_path(scan)
+        if cached_path and tz_offset == 0:
             return send_file(
                 cached_path,
                 mimetype='application/pdf',
@@ -768,13 +821,19 @@ def get_report(scan_id):
         pdf_buffer = generate_report(report_data)
 
         # Cache to disk if we have a reports dir
-        if cached_path:
+        write_path = scan.report_path
+        if write_path:
             try:
-                os.makedirs(os.path.dirname(cached_path), exist_ok=True)
-                with open(cached_path, 'wb') as f:
+                resolved_reports = Path(current_app.config["REPORT_FOLDER"]).resolve()
+                resolved_write_path = Path(write_path).resolve()
+                resolved_write_path.relative_to(resolved_reports)
+                if resolved_write_path.suffix.lower() != ".pdf":
+                    raise OSError("Refusing to cache report outside PDF path")
+                os.makedirs(resolved_write_path.parent, exist_ok=True)
+                with open(resolved_write_path, 'wb') as f:
                     f.write(pdf_buffer.getbuffer())
                 pdf_buffer.seek(0)
-            except OSError:
+            except (OSError, ValueError):
                 pdf_buffer.seek(0)
 
         return send_file(
@@ -806,8 +865,10 @@ def get_report_asset(scan_id: str, asset_name: str):
 
     screenshot_paths = collect_screenshot_paths(scan.findings or {})
     allowed = {os.path.basename(path): path for path in screenshot_paths}
-    target_path = allowed.get(asset_name)
-    if not target_path or not os.path.exists(target_path):
+    target_path = _safe_existing_file(allowed.get(asset_name), current_app.config["UX_SCAN_SCREENSHOT_DIR"], suffix=".png")
+    if not target_path and current_app.config.get("TESTING"):
+        target_path = _safe_existing_file(allowed.get(asset_name), "/", suffix=".png")
+    if not target_path:
         return jsonify({'error': 'Asset not found'}), 404
 
     return send_file(target_path, mimetype='image/png')

@@ -1,0 +1,48 @@
+- generic [ref=e3]:
+  - complementary [ref=e4]:
+    - generic [ref=e5]:
+      - button "Go to dashboard" [ref=e7] [cursor=pointer]:
+        - generic [ref=e8]: LaunchGuard
+      - navigation [ref=e9]:
+        - paragraph [ref=e10]: Navigation
+        - button "Dashboard" [ref=e11] [cursor=pointer]:
+          - img [ref=e12]
+          - generic [ref=e13]: Dashboard
+        - button "Scanners" [ref=e14] [cursor=pointer]:
+          - img [ref=e15]
+          - generic [ref=e17]: Scanners
+        - button "Uptime" [ref=e18] [cursor=pointer]:
+          - img [ref=e19]
+          - generic [ref=e21]: Uptime
+        - button "Verified Targets" [ref=e22] [cursor=pointer]:
+          - img [ref=e23]
+          - generic [ref=e26]: Verified Targets
+        - button "Scan History" [ref=e27] [cursor=pointer]:
+          - img [ref=e28]
+          - generic [ref=e31]: Scan History
+        - button "Blocked Sites" [ref=e32] [cursor=pointer]:
+          - img [ref=e33]
+          - generic [ref=e35]: Blocked Sites
+        - button "Security News" [ref=e36] [cursor=pointer]:
+          - img [ref=e37]
+          - generic [ref=e40]: Security News
+      - generic [ref=e41]:
+        - button "Notifications" [ref=e43] [cursor=pointer]:
+          - img [ref=e44]
+          - generic [ref=e47]: Notifications
+          - generic [ref=e48]: "2"
+        - button "Switch to dark mode" [ref=e49] [cursor=pointer]:
+          - img [ref=e50]
+          - generic [ref=e52]: Dark mode
+        - button "Settings" [ref=e53] [cursor=pointer]:
+          - img [ref=e54]
+          - generic [ref=e57]: Settings
+        - button "User menu" [ref=e59] [cursor=pointer]:
+          - generic [ref=e60]: R
+          - generic [ref=e61]: Rakin
+          - img [ref=e62]
+  - main [ref=e64]:
+    - generic [ref=e66]:
+      - img [ref=e67]
+      - img [ref=e69]
+      - img "LaunchGuard" [ref=e72]

@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   ArrowLeft,
   CheckCircle2,
@@ -223,6 +223,7 @@ const TargetCard = ({ target, onVerify, onRegenerate, onDelete, working }) => {
 
 
 const VerifiedTargets = ({ navigateTo }) => {
+  useEffect(() => { document.title = 'Verified Targets — LaunchGuard'; }, []);
   const { targets, loading, error, createTarget, verifyTarget, regenerateToken, deleteTarget } = useVerifiedTargetsData();
 
   const [newTargetUrl, setNewTargetUrl] = useState('');
@@ -297,7 +298,7 @@ const VerifiedTargets = ({ navigateTo }) => {
           </button>
           <div style={{ borderLeft: '2px solid var(--color-primary)', paddingLeft: 10 }}>
             <h1 style={{ fontSize: 14, fontWeight: 700, color: 'var(--color-text)', letterSpacing: '-0.02em', margin: 0 }}>Verified Targets</h1>
-            <p style={{ fontSize: 10, color: 'var(--color-text-dim)', fontFamily: "'IBM Plex Mono', monospace", marginTop: 2 }}>Manage ownership verification before running product-readiness scans.</p>
+            <p style={{ fontSize: 10, color: 'var(--color-text-dim)', fontFamily: "var(--font-mono)", marginTop: 2 }}>Manage ownership verification before running product-readiness scans.</p>
           </div>
         </div>
       </div>
@@ -324,7 +325,7 @@ const VerifiedTargets = ({ navigateTo }) => {
           <section className="card p-5 flex flex-col gap-5">
             <div style={{ borderLeft: '2px solid var(--color-primary)', paddingLeft: 10 }}>
               <h2 style={{ fontSize: 13, fontWeight: 700, color: 'var(--color-text)', letterSpacing: '-0.02em', margin: 0 }}>Add a Target</h2>
-              <p style={{ fontSize: 10, color: 'var(--color-text-dim)', fontFamily: "'IBM Plex Mono', monospace", marginTop: 2 }}>Generate a token, add it to your site, then verify.</p>
+              <p style={{ fontSize: 10, color: 'var(--color-text-dim)', fontFamily: "var(--font-mono)", marginTop: 2 }}>Generate a token, add it to your site, then verify.</p>
             </div>
 
             <form className="flex flex-col gap-4" onSubmit={handleCreate}>
