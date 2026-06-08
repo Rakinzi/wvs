@@ -2,10 +2,14 @@ import os
 import copy
 from pathlib import Path
 
-from flask import Blueprint, current_app, jsonify, request, send_file
-from flask_jwt_extended import jwt_required
-from app.auth import get_current_user
-from app.models import ScanJob, ScanResult, VerifiedTarget
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.responses import FileResponse, JSONResponse
+
+from app.auth import current_user
+from app.models import ScanJob, ScanResult, VerifiedTarget, ROLE_SCAN_LIMITS
+from app.settings import settings
 from app.scanners import SecurityScanner
 from app.schemas import ScanRequestPayload
 from app.utils.db_manager import DBManager
@@ -20,15 +24,20 @@ from app.utils.scan_comparison import build_scan_comparison
 from app.utils.reports import generate_report
 from app.utils.ux_screenshot_manager import collect_screenshot_paths
 from app import db, init_celery, limiter
+from app.config import get_config
 from pydantic import ValidationError
 from app.utils.time_utils import utc_now, utc_now_isoformat
 
-bp = Blueprint('scans', __name__)
+router = APIRouter()
+# bp alias kept for celery task imports that reference scans.bp transitionally
+bp = router
 
 
 class _CeleryProxy:
     def _app(self):
-        return init_celery(current_app)
+        if celery: return celery
+        cfg = get_config()
+        return init_celery({k: v for cls in reversed(cfg.__mro__) for k, v in vars(cls).items() if k.isupper()})
 
     def AsyncResult(self, *args, **kwargs):
         return self._app().AsyncResult(*args, **kwargs)
@@ -49,6 +58,7 @@ run_full_scan_job = _RunFullScanJobProxy()
 
 
 def _celery_app():
+    celery._app()
     return celery
 
 
@@ -62,17 +72,47 @@ def _scan_pipeline():
     return attach_launch_verdict, persist_scan_result
 
 
-def persist_scan(current_user, findings, prefix="scan"):
+def persist_scan(user, findings, prefix="scan"):
     attach_launch_verdict, persist_scan_result = _scan_pipeline()
     if 'launch_verdict' not in findings:
         attach_launch_verdict(findings)
-    return persist_scan_result(findings["url"], findings, current_user.id, prefix=prefix)
+    return persist_scan_result(findings["url"], findings, user.id, prefix=prefix)
 
 
-def _find_verified_target(current_user, url: str, verified_target_id: str | None = None):
+def _check_scan_quota(user) -> tuple[bool, str]:
+    """Return (allowed, error_message). Counts scans started in the last hour."""
+    limit = user.scan_limit
+    if limit is None:
+        return True, ''
+    from datetime import timedelta
+    window_start = utc_now() - timedelta(hours=1)
+    recent = ScanJob.query.filter(
+        ScanJob.user_id == user.id,
+        ScanJob.created_at >= window_start,
+    ).count()
+    if recent >= limit:
+        return False, f'Scan limit reached ({limit}/hour for {user.role} plan). Upgrade to run more scans.'
+    return True, ''
+
+
+def _preflight(user, url: str) -> None:
+    """Run all pre-scan security gates. Raises HTTPException on any failure."""
+    if not user.email_verified:
+        raise HTTPException(403, "Email address must be verified before scanning")
+
+    allowed, quota_msg = _check_scan_quota(user)
+    if not allowed:
+        raise HTTPException(429, quota_msg)
+
+    is_malicious, reason = DBManager.check_malicious_url(url)
+    if is_malicious:
+        raise HTTPException(400, f"URL is flagged as malicious: {reason}")
+
+
+def _find_verified_target(u, url: str, verified_target_id: str | None = None):
     normalized = normalize_target_url(url)
     hostname = normalized.split("://", 1)[1].split("/", 1)[0].split(":", 1)[0].lower()
-    query = VerifiedTarget.query.filter_by(user_id=current_user.id, verification_status="verified")
+    query = VerifiedTarget.query.filter_by(user_id=u.id, verification_status="verified")
     if verified_target_id:
         query = query.filter_by(public_id=verified_target_id)
 
@@ -84,22 +124,22 @@ def _find_verified_target(current_user, url: str, verified_target_id: str | None
 
 
 def _ensure_verified_target(
-    current_user,
+    u,
     url: str,
     verified_target_id: str | None,
     *,
     message: str = "A verified target is required for this scan profile",
 ):
-    target = _find_verified_target(current_user, url, verified_target_id)
+    target = _find_verified_target(u, url, verified_target_id)
     if target:
         return target
 
     raise ValueError(message)
 
 
-def _ensure_active_checks_authorized(current_user, url: str, verified_target_id: str | None) -> None:
+def _ensure_active_checks_authorized(u, url: str, verified_target_id: str | None) -> None:
     _ensure_verified_target(
-        current_user,
+        u,
         url,
         verified_target_id,
         message="Active checks require verified target ownership before they can run.",
@@ -253,7 +293,7 @@ def _sync_scan_job_status(job: ScanJob) -> ScanJob:
 
     current_progress = _serialize_task_progress(job) or {}
     stale_seconds = current_progress.get("stale_seconds") if isinstance(current_progress, dict) else None
-    stale_failure_seconds = int(current_app.config.get("MAX_SCAN_TIME", 900)) + 120
+    stale_failure_seconds = int(int(getattr(settings, "max_scan_time", 900))) + 120
     if job.status == "running" and isinstance(stale_seconds, int) and stale_seconds >= stale_failure_seconds:
         job.status = "failed"
         job.completed_at = utc_now()
@@ -355,7 +395,7 @@ def _safe_existing_file(path: str | None, base_dir: str, *, suffix: str | None =
 
 
 def _safe_report_cache_path(scan: ScanResult) -> str | None:
-    return _safe_existing_file(scan.report_path, current_app.config["REPORT_FOLDER"], suffix=".pdf")
+    return _safe_existing_file(scan.report_path, settings.report_folder, suffix=".pdf")
 
 
 def _publicize_scan_assets(scan_id: str, payload):
@@ -408,45 +448,32 @@ def _find_previous_scan_for_comparison(scan: ScanResult) -> ScanResult | None:
             return candidate
     return candidates[0] if candidates else None
 
-@bp.route('/scan', methods=['POST'])
-@jwt_required()
-@limiter.limit("10 per hour")
-def start_scan():
+@router.post("/scan")
+async def start_scan(request: Request, user: Annotated['User', Depends(current_user)]):
     try:
-        current_user = get_current_user()
-        if not current_user:
-            return jsonify({'error': 'User not found'}), 404
-        payload = ScanRequestPayload.model_validate(request.get_json(silent=True) or {})
+
+        payload = ScanRequestPayload.model_validate(await request.json())
         url = normalize_target_url(payload.url)
         scan_profile = payload.scan_profile or 'security_only'
 
+        _preflight(user, url)
+
         verified_target = None
-        if scan_profile in {'product_readiness', 'full_launch_audit'}:
-            verified_target = _ensure_verified_target(current_user, url, payload.verified_target_id)
-        elif current_app.config.get("REQUIRE_VERIFIED_TARGETS", False):
-            verified_target = _ensure_verified_target(current_user, url, payload.verified_target_id)
+        if settings.require_verified_targets:
+            verified_target = _ensure_verified_target(user, url, payload.verified_target_id)
         elif payload.enable_active_checks:
             verified_target = _ensure_verified_target(
-                current_user,
+                user,
                 url,
                 payload.verified_target_id,
                 message="Active checks require verified target ownership before they can run.",
             )
         
-        # Check if URL is known to be malicious first
-        is_malicious, reason = DBManager.check_malicious_url(url)
-        if is_malicious:
-            return jsonify({
-                'status': 'error',
-                'message': f'URL is flagged as malicious: {reason}',
-                'is_malicious': True
-            }), 400
-        
         job = ScanJob(
             url=url,
             scan_type=scan_profile,
             status='queued',
-            user_id=current_user.id,
+            user_id=user.id,
             findings={
                 '_config': {
                     'page_paths': payload.page_paths,
@@ -468,7 +495,7 @@ def start_scan():
         db.session.commit()
 
         try:
-            queue_name = current_app.config["UX_SCAN_QUEUE"] if scan_profile in {"product_readiness", "full_launch_audit"} else current_app.config["SECURITY_SCAN_QUEUE"]
+            queue_name = settings.ux_scan_queue if scan_profile in {"product_readiness", "full_launch_audit"} else settings.security_scan_queue
             _celery_app()
             task = run_full_scan_job.apply_async(args=[job.id], queue=queue_name)
             job.task_id = task.id
@@ -478,12 +505,12 @@ def start_scan():
             job.error_message = f'Failed to queue scan job: {exc}'
             job.completed_at = utc_now()
             db.session.commit()
-            return jsonify({
+            return JSONResponse(content={
                 'status': 'error',
                 'message': 'Failed to queue scan job. Check Celery broker connectivity.',
-            }), 503
+            }, status_code=503)
 
-        return jsonify({
+        return {
             'status': 'accepted',
             'job_id': job.public_id,
             'task_id': task.id,
@@ -491,30 +518,26 @@ def start_scan():
             'scan_profile': scan_profile,
             'message': 'Scan queued successfully',
             'timestamp': job.created_at.isoformat()
-        }), 202
+        }
         
     except (ValueError, ValidationError) as exc:
-        return jsonify({'status': 'error', 'message': str(exc)}), 400
+        raise HTTPException(400, str(exc))
     except Exception as e:
         db.session.rollback()
-        return jsonify({
+        return JSONResponse(content={
             'status': 'error',
             'message': str(e)
-        }), 500
+        }, status_code=500)
 
-@bp.route('/scan/sqli', methods=['POST'])
-@jwt_required()
-@limiter.limit("20 per hour")
-def check_sql_injection():
+@router.post("/scan/sqli")
+async def check_sql_injection(request: Request, user: Annotated['User', Depends(current_user)]):
     try:
-        current_user = get_current_user()
-        if not current_user:
-            return jsonify({'error': 'User not found'}), 404
-        payload = ScanRequestPayload.model_validate(request.get_json(silent=True) or {})
+        payload = ScanRequestPayload.model_validate(await request.json())
         url = normalize_target_url(payload.url)
+        _preflight(user, url)
         
         if payload.enable_active_checks:
-            _ensure_active_checks_authorized(current_user, url, payload.verified_target_id)
+            _ensure_active_checks_authorized(user, url, payload.verified_target_id)
 
         # Perform the scan synchronously
         scanner = _security_scanner()
@@ -542,9 +565,9 @@ def check_sql_injection():
         findings['summary'] = build_scan_summary(findings)
         findings['sections'] = build_scan_sections(findings)
         
-        scan = persist_scan(current_user, findings, prefix="sqli_scan")
+        scan = persist_scan(user, findings, prefix="sqli_scan")
         
-        return jsonify({
+        return {
             'status': 'success',
             'scan_id': scan.public_id,
             'url': url,
@@ -552,26 +575,22 @@ def check_sql_injection():
             'recommendations': recommendations,
             'vulnerable': findings['summary']['vulnerable'],
             'summary': findings['summary'],
-        }), 200
+        }
         
     except (ValueError, ValidationError) as exc:
-        return jsonify({'status': 'error', 'message': str(exc)}), 400
+        raise HTTPException(400, str(exc))
     except Exception as e:
-        return jsonify({
+        return JSONResponse(content={
             'status': 'error',
             'message': str(e)
-        }), 500
+        }, status_code=500)
 
-@bp.route('/scan/ssl', methods=['POST'])
-@jwt_required()
-@limiter.limit("20 per hour")
-def check_ssl():
+@router.post("/scan/ssl")
+async def check_ssl(request: Request, user: Annotated['User', Depends(current_user)]):
     try:
-        current_user = get_current_user()
-        if not current_user:
-            return jsonify({'error': 'User not found'}), 404
-        payload = ScanRequestPayload.model_validate(request.get_json(silent=True) or {})
+        payload = ScanRequestPayload.model_validate(await request.json())
         url = normalize_target_url(payload.url)
+        _preflight(user, url)
         
         scanner = _security_scanner()
         results = scanner.check_ssl(url)
@@ -602,9 +621,9 @@ def check_ssl():
         recommendations.extend(findings['wordpress'].get('recommendations', []))
         recommendations = list(dict.fromkeys(recommendations))
         
-        scan = persist_scan(current_user, findings, prefix="ssl_scan")
+        scan = persist_scan(user, findings, prefix="ssl_scan")
         
-        return jsonify({
+        return {
             'status': 'success',
             'scan_id': scan.public_id,
             'url': url,
@@ -613,30 +632,26 @@ def check_ssl():
             'header_findings': findings['headers'],
             'wordpress_findings': findings['wordpress'],
             'summary': findings['summary'],
-        }), 200
+        }
         
     except (ValueError, ValidationError) as exc:
-        return jsonify({'status': 'error', 'message': str(exc)}), 400
+        raise HTTPException(400, str(exc))
     except Exception as e:
-        return jsonify({
+        return JSONResponse(content={
             'status': 'error',
             'message': str(e)
-        }), 500
+        }, status_code=500)
 
 
-@bp.route('/scan/wordpress', methods=['POST'])
-@jwt_required()
-@limiter.limit("20 per hour")
-def check_wordpress():
+@router.post("/scan/wordpress")
+async def check_wordpress(request: Request, user: Annotated['User', Depends(current_user)]):
     try:
-        current_user = get_current_user()
-        if not current_user:
-            return jsonify({'error': 'User not found'}), 404
-        payload = ScanRequestPayload.model_validate(request.get_json(silent=True) or {})
+        payload = ScanRequestPayload.model_validate(await request.json())
         url = normalize_target_url(payload.url)
+        _preflight(user, url)
 
         if payload.enable_active_checks:
-            _ensure_active_checks_authorized(current_user, url, payload.verified_target_id)
+            _ensure_active_checks_authorized(user, url, payload.verified_target_id)
 
         scanner = _security_scanner()
         results = scanner.check_wordpress(url, enable_active_checks=payload.enable_active_checks)
@@ -655,36 +670,32 @@ def check_wordpress():
         findings['summary'] = build_scan_summary(findings)
         findings['sections'] = build_scan_sections(findings)
 
-        scan = persist_scan(current_user, findings, prefix="wordpress_scan")
+        scan = persist_scan(user, findings, prefix="wordpress_scan")
 
-        return jsonify({
+        return {
             'status': 'success',
             'scan_id': scan.public_id,
             'url': url,
             'findings': results,
             'recommendations': recommendations,
             'summary': findings['summary'],
-        }), 200
+        }
 
     except (ValueError, ValidationError) as exc:
-        return jsonify({'status': 'error', 'message': str(exc)}), 400
+        raise HTTPException(400, str(exc))
     except Exception as e:
-        return jsonify({
+        return JSONResponse(content={
             'status': 'error',
             'message': str(e)
-        }), 500
+        }, status_code=500)
 
 
-@bp.route('/scan/jobs/<string:job_id>', methods=['GET'])
-@jwt_required()
-def get_scan_job(job_id):
-    current_user = get_current_user()
-    if not current_user:
-        return jsonify({'error': 'User not found'}), 404
+@router.get("/scan/jobs/{job_id}")
+def get_scan_job(job_id: str, user: Annotated['User', Depends(current_user)]):
 
     job = ScanJob.query.filter_by(public_id=job_id).first_or_404()
-    if job.user_id != current_user.id and not current_user.is_admin:
-        return jsonify({'error': 'Unauthorized'}), 403
+    if job.user_id != user.id and not user.is_admin:
+        raise HTTPException(403, 'Unauthorized')
     job = _sync_scan_job_status(job)
 
     payload = job.to_dict()
@@ -693,24 +704,20 @@ def get_scan_job(job_id):
         (job.findings or {}).get('summary', {}).get('vulnerable', False)
     )
     payload['progress'] = _serialize_task_progress(job)
-    return jsonify({
+    return {
         'status': 'success',
         'job': payload,
-    }), 200
+    }
 
 
-@bp.route('/scan/jobs', methods=['GET'])
-@jwt_required()
-def list_scan_jobs():
-    current_user = get_current_user()
-    if not current_user:
-        return jsonify({'error': 'User not found'}), 404
+@router.get("/scan/jobs")
+def list_scan_jobs(user: Annotated['User', Depends(current_user)], limit: int = Query(default=20, ge=1, le=100), request: Request = None):
 
     limit = request.args.get('limit', 20, type=int)
     job_ids = [
         row.id
         for row in ScanJob.query.with_entities(ScanJob.id)
-        .filter(ScanJob.user_id == current_user.id)
+        .filter(ScanJob.user_id == user.id)
         .order_by(ScanJob.created_at.desc())
         .limit(limit)
         .all()
@@ -720,7 +727,7 @@ def list_scan_jobs():
     jobs = sorted(jobs, key=lambda job: order.get(job.id, len(order)))
     jobs = [_sync_scan_job_status(job) for job in jobs]
 
-    return jsonify({
+    return {
         'status': 'success',
         'jobs': [
             {
@@ -729,23 +736,19 @@ def list_scan_jobs():
             }
             for job in jobs
         ],
-    }), 200
+    }
 
-@bp.route('/report/<string:scan_id>', methods=['GET'])
-@jwt_required()
-def get_report(scan_id):
+@router.get("/report/{scan_id}")
+async def get_report(scan_id: str, request: Request, user: Annotated['User', Depends(current_user)]):
     try:
-        current_user = get_current_user()
-        if not current_user:
-            return jsonify({'error': 'User not found'}), 404
         
         scan = ScanResult.query.filter_by(public_id=scan_id).first_or_404()
         
         # Check if user owns the scan or is admin
-        if scan.user_id != current_user.id and not current_user.is_admin:
-            return jsonify({'error': 'Unauthorized access to report'}), 403
+        if scan.user_id != user.id and not user.is_admin:
+            raise HTTPException(403, 'Unauthorized access to report')
         
-        report_format = request.args.get('format', 'pdf').lower()
+        report_format = (request.query_params.get('format') or 'pdf').lower()
         findings = scan.findings or {}
         if 'summary' not in findings:
             findings['summary'] = build_scan_summary(findings)
@@ -769,7 +772,7 @@ def get_report(scan_id):
                 comparison = build_scan_comparison(public_findings, _publicize_scan_assets(previous_scan.public_id, copy.deepcopy(previous_findings)))
                 comparison["previous_scan_id"] = previous_scan.public_id
                 comparison["previous_timestamp"] = previous_scan.timestamp.isoformat()
-            return jsonify({
+            return {
                 'status': 'success',
                 'scan_id': scan.public_id,
                 'url': scan.url,
@@ -781,10 +784,10 @@ def get_report(scan_id):
                 'best_practices': build_best_practices(public_findings),
                 'findings': public_findings,
                 'comparison': comparison,
-            }), 200
+            }
 
         if report_format == 'sbom':
-            return jsonify({
+            return {
                 'status': 'success',
                 'sbom': {
                     'scan_id': scan.public_id,
@@ -794,17 +797,17 @@ def get_report(scan_id):
                     'advisories': (findings.get('tech') or {}).get('advisories', []),
                     'best_practices': build_best_practices(findings),
                 },
-            }), 200
+            }
 
         try:
-            tz_offset = int(request.args.get('tz_offset', 0))
+            tz_offset = int(request.query_params.get('tz_offset') or 0)
         except ValueError:
             tz_offset = 0
 
         # Serve cached PDF when one exists and tz_offset matches (avoids rebuilding on every download)
         cached_path = _safe_report_cache_path(scan)
         if cached_path and tz_offset == 0:
-            return send_file(
+            return FileResponse(
                 cached_path,
                 mimetype='application/pdf',
                 as_attachment=True,
@@ -824,7 +827,7 @@ def get_report(scan_id):
         write_path = scan.report_path
         if write_path:
             try:
-                resolved_reports = Path(current_app.config["REPORT_FOLDER"]).resolve()
+                resolved_reports = Path(settings.report_folder).resolve()
                 resolved_write_path = Path(write_path).resolve()
                 resolved_write_path.relative_to(resolved_reports)
                 if resolved_write_path.suffix.lower() != ".pdf":
@@ -836,7 +839,7 @@ def get_report(scan_id):
             except (OSError, ValueError):
                 pdf_buffer.seek(0)
 
-        return send_file(
+        return FileResponse(
             pdf_buffer,
             mimetype='application/pdf',
             as_attachment=True,
@@ -846,43 +849,31 @@ def get_report(scan_id):
     except Exception as e:
         import traceback
         traceback.print_exc()
-        return jsonify({
-            'status': 'error',
-            'message': str(e)
-        }), 500
+        raise HTTPException(500, str(e))
 
 
-@bp.route('/report/<string:scan_id>/assets/<path:asset_name>', methods=['GET'])
-@jwt_required()
-def get_report_asset(scan_id: str, asset_name: str):
-    current_user = get_current_user()
-    if not current_user:
-        return jsonify({'error': 'User not found'}), 404
+@router.get("/report/{scan_id}/assets/{asset_name}")
+def get_report_asset(scan_id: str, asset_name: str, user: Annotated['User', Depends(current_user)]):
 
     scan = ScanResult.query.filter_by(public_id=scan_id).first_or_404()
-    if scan.user_id != current_user.id and not current_user.is_admin:
-        return jsonify({'error': 'Unauthorized access to report assets'}), 403
+    if scan.user_id != user.id and not user.is_admin:
+        raise HTTPException(403, 'Unauthorized access to report assets')
 
     screenshot_paths = collect_screenshot_paths(scan.findings or {})
     allowed = {os.path.basename(path): path for path in screenshot_paths}
-    target_path = _safe_existing_file(allowed.get(asset_name), current_app.config["UX_SCAN_SCREENSHOT_DIR"], suffix=".png")
-    if not target_path and current_app.config.get("TESTING"):
+    target_path = _safe_existing_file(allowed.get(asset_name), settings.ux_scan_screenshot_dir, suffix=".png")
+    if not target_path and getattr(settings, "testing", False):
         target_path = _safe_existing_file(allowed.get(asset_name), "/", suffix=".png")
     if not target_path:
-        return jsonify({'error': 'Asset not found'}), 404
+        raise HTTPException(404, 'Asset not found')
 
-    return send_file(target_path, mimetype='image/png')
+    return FileResponse(target_path, media_type="image/png")
 
-@bp.route('/scans/history', methods=['GET'])
-@jwt_required()
-def get_scan_history():
+@router.get("/scans/history")
+def get_scan_history(user: Annotated['User', Depends(current_user)], limit: int = Query(default=20, ge=1, le=200), request: Request = None):
     try:
-        current_user = get_current_user()
-        if not current_user:
-            return jsonify({'error': 'User not found'}), 404
             
-        limit = request.args.get('limit', 20, type=int)
-        scans = DBManager.get_user_scans(current_user.id, limit)
+        scans = DBManager.get_user_scans(user.id, limit)
         
         results = []
         for scan in scans:
@@ -897,27 +888,23 @@ def get_scan_history():
                 'issue_count': summary.get('total_issues', 0),
             })
         
-        return jsonify({
+        return {
             'status': 'success',
             'scans': results
-        }), 200
+        }
         
     except Exception as e:
-        return jsonify({
+        return JSONResponse(content={
             'status': 'error',
             'message': str(e)
-        }), 500
+        }, status_code=500)
 
-@bp.route('/scan/xss', methods=['POST'])
-@jwt_required()
-@limiter.limit("20 per hour")
-def check_xss():
+@router.post("/scan/xss")
+async def check_xss(request: Request, user: Annotated['User', Depends(current_user)]):
     try:
-        current_user = get_current_user()
-        if not current_user:
-            return jsonify({'error': 'User not found'}), 404
-        payload = ScanRequestPayload.model_validate(request.get_json(silent=True) or {})
+        payload = ScanRequestPayload.model_validate(await request.json())
         url = normalize_target_url(payload.url)
+        _preflight(user, url)
 
         scanner = _security_scanner()
         results = scanner.check_xss(url)
@@ -944,9 +931,9 @@ def check_xss():
         findings['summary'] = build_scan_summary(findings)
         findings['sections'] = build_scan_sections(findings)
 
-        scan = persist_scan(current_user, findings, prefix="xss_scan")
+        scan = persist_scan(user, findings, prefix="xss_scan")
 
-        return jsonify({
+        return {
             'status': 'success',
             'scan_id': scan.public_id,
             'url': url,
@@ -954,24 +941,20 @@ def check_xss():
             'recommendations': recommendations,
             'vulnerable': results.get('reflected_xss_count', 0) > 0,
             'summary': findings['summary'],
-        }), 200
+        }
 
     except (ValueError, ValidationError) as exc:
-        return jsonify({'status': 'error', 'message': str(exc)}), 400
+        raise HTTPException(400, str(exc))
     except Exception as e:
-        return jsonify({'status': 'error', 'message': str(e)}), 500
+        raise HTTPException(500, str(e))
 
 
-@bp.route('/scan/tech', methods=['POST'])
-@jwt_required()
-@limiter.limit("20 per hour")
-def check_tech():
+@router.post("/scan/tech")
+async def check_tech(request: Request, user: Annotated['User', Depends(current_user)]):
     try:
-        current_user = get_current_user()
-        if not current_user:
-            return jsonify({'error': 'User not found'}), 404
-        payload = ScanRequestPayload.model_validate(request.get_json(silent=True) or {})
+        payload = ScanRequestPayload.model_validate(await request.json())
         url = normalize_target_url(payload.url)
+        _preflight(user, url)
 
         scanner = _security_scanner()
         results = scanner.check_tech(url)
@@ -990,9 +973,9 @@ def check_tech():
         findings['summary'] = build_scan_summary(findings)
         findings['sections'] = build_scan_sections(findings)
 
-        scan = persist_scan(current_user, findings, prefix="tech_scan")
+        scan = persist_scan(user, findings, prefix="tech_scan")
 
-        return jsonify({
+        return {
             'status': 'success',
             'scan_id': scan.public_id,
             'url': url,
@@ -1000,27 +983,23 @@ def check_tech():
             'findings': results,
             'recommendations': results.get('recommendations', []),
             'summary': findings['summary'],
-        }), 200
+        }
 
     except (ValueError, ValidationError) as exc:
-        return jsonify({'status': 'error', 'message': str(exc)}), 400
+        raise HTTPException(400, str(exc))
     except Exception as e:
-        return jsonify({'status': 'error', 'message': str(e)}), 500
+        raise HTTPException(500, str(e))
 
 
-@bp.route('/scan/exposure', methods=['POST'])
-@jwt_required()
-@limiter.limit("20 per hour")
-def check_exposure():
+@router.post("/scan/exposure")
+async def check_exposure(request: Request, user: Annotated['User', Depends(current_user)]):
     try:
-        current_user = get_current_user()
-        if not current_user:
-            return jsonify({'error': 'User not found'}), 404
-        payload = ScanRequestPayload.model_validate(request.get_json(silent=True) or {})
+        payload = ScanRequestPayload.model_validate(await request.json())
         url = normalize_target_url(payload.url)
+        _preflight(user, url)
 
         if payload.enable_active_checks:
-            _ensure_active_checks_authorized(current_user, url, payload.verified_target_id)
+            _ensure_active_checks_authorized(user, url, payload.verified_target_id)
 
         scanner = _security_scanner()
         results = scanner.check_exposure(url, enable_active_checks=payload.enable_active_checks)
@@ -1039,12 +1018,12 @@ def check_exposure():
         findings['summary'] = build_scan_summary(findings)
         findings['sections'] = build_scan_sections(findings)
 
-        scan = persist_scan(current_user, findings, prefix="exposure_scan")
+        scan = persist_scan(user, findings, prefix="exposure_scan")
 
         issues = results.get('issues', [])
         has_critical = any(i.get('severity') in ('Critical', 'High') for i in issues)
 
-        return jsonify({
+        return {
             'status': 'success',
             'scan_id': scan.public_id,
             'url': url,
@@ -1052,24 +1031,20 @@ def check_exposure():
             'recommendations': results.get('recommendations', []),
             'vulnerable': has_critical,
             'summary': findings['summary'],
-        }), 200
+        }
 
     except (ValueError, ValidationError) as exc:
-        return jsonify({'status': 'error', 'message': str(exc)}), 400
+        raise HTTPException(400, str(exc))
     except Exception as e:
-        return jsonify({'status': 'error', 'message': str(e)}), 500
+        raise HTTPException(500, str(e))
 
 
-@bp.route('/scan/malware', methods=['POST'])
-@jwt_required()
-@limiter.limit("10 per hour")
-def check_malware():
+@router.post("/scan/malware")
+async def check_malware(request: Request, user: Annotated['User', Depends(current_user)]):
     try:
-        current_user = get_current_user()
-        if not current_user:
-            return jsonify({'error': 'User not found'}), 404
-        payload = ScanRequestPayload.model_validate(request.get_json(silent=True) or {})
+        payload = ScanRequestPayload.model_validate(await request.json())
         url = normalize_target_url(payload.url)
+        _preflight(user, url)
 
         scanner = _security_scanner()
         results = scanner.check_malware_analysis(url)
@@ -1088,10 +1063,10 @@ def check_malware():
         findings['summary'] = build_scan_summary(findings)
         findings['sections'] = build_scan_sections(findings)
 
-        scan = persist_scan(current_user, findings, prefix="malware_scan")
+        scan = persist_scan(user, findings, prefix="malware_scan")
         has_high_risk = any(str(i.get('severity') or '').title() in ('Critical', 'High') for i in (results.get('issues') or []))
 
-        return jsonify({
+        return {
             'status': 'success',
             'scan_id': scan.public_id,
             'url': url,
@@ -1099,24 +1074,20 @@ def check_malware():
             'recommendations': results.get('recommendations', []),
             'vulnerable': has_high_risk,
             'summary': findings['summary'],
-        }), 200
+        }
 
     except (ValueError, ValidationError) as exc:
-        return jsonify({'status': 'error', 'message': str(exc)}), 400
+        raise HTTPException(400, str(exc))
     except Exception as e:
-        return jsonify({'status': 'error', 'message': str(e)}), 500
+        raise HTTPException(500, str(e))
 
 
-@bp.route('/scans/<string:scan_id>', methods=['DELETE'])
-@jwt_required()
-def delete_scan(scan_id):
-    current_user = get_current_user()
-    if not current_user:
-        return jsonify({'error': 'User not found'}), 404
+@router.delete("/scans/{scan_id}")
+def delete_scan(scan_id: str, user: Annotated['User', Depends(current_user)]):
 
     scan = ScanResult.query.filter_by(public_id=scan_id).first_or_404()
-    if scan.user_id != current_user.id and not current_user.is_admin:
-        return jsonify({'error': 'Unauthorized'}), 403
+    if scan.user_id != user.id and not user.is_admin:
+        raise HTTPException(403, 'Unauthorized')
 
     try:
         report_path = scan.report_path
@@ -1140,22 +1111,18 @@ def delete_scan(scan_id):
                 except OSError:
                     pass
 
-        return jsonify({'status': 'success', 'message': 'Scan deleted'}), 200
+        return {'status': 'success', 'message': 'Scan deleted'}
     except Exception as e:
         db.session.rollback()
-        return jsonify({'status': 'error', 'message': str(e)}), 500
+        raise HTTPException(500, str(e))
 
 
-@bp.route('/scan/dns', methods=['POST'])
-@jwt_required()
-@limiter.limit("20 per hour")
-def check_dns():
+@router.post("/scan/dns")
+async def check_dns(request: Request, user: Annotated['User', Depends(current_user)]):
     try:
-        current_user = get_current_user()
-        if not current_user:
-            return jsonify({'error': 'User not found'}), 404
-        payload = ScanRequestPayload.model_validate(request.get_json(silent=True) or {})
+        payload = ScanRequestPayload.model_validate(await request.json())
         url = normalize_target_url(payload.url)
+        _preflight(user, url)
 
         scanner = _security_scanner()
         results = scanner.check_dns(url)
@@ -1174,9 +1141,9 @@ def check_dns():
         findings['summary'] = build_scan_summary(findings)
         findings['sections'] = build_scan_sections(findings)
 
-        scan = persist_scan(current_user, findings, prefix="dns_scan")
+        scan = persist_scan(user, findings, prefix="dns_scan")
 
-        return jsonify({
+        return {
             'status': 'success',
             'scan_id': scan.public_id,
             'url': url,
@@ -1184,24 +1151,20 @@ def check_dns():
             'recommendations': results.get('recommendations', []),
             'vulnerable': bool(results.get('issues')),
             'summary': findings['summary'],
-        }), 200
+        }
 
     except (ValueError, ValidationError) as exc:
-        return jsonify({'status': 'error', 'message': str(exc)}), 400
+        raise HTTPException(400, str(exc))
     except Exception as e:
-        return jsonify({'status': 'error', 'message': str(e)}), 500
+        raise HTTPException(500, str(e))
 
 
-@bp.route('/scan/redirect', methods=['POST'])
-@jwt_required()
-@limiter.limit("20 per hour")
-def check_redirect():
+@router.post("/scan/redirect")
+async def check_redirect(request: Request, user: Annotated['User', Depends(current_user)]):
     try:
-        current_user = get_current_user()
-        if not current_user:
-            return jsonify({'error': 'User not found'}), 404
-        payload = ScanRequestPayload.model_validate(request.get_json(silent=True) or {})
+        payload = ScanRequestPayload.model_validate(await request.json())
         url = normalize_target_url(payload.url)
+        _preflight(user, url)
 
         scanner = _security_scanner()
         results = scanner.check_redirect(url)
@@ -1220,9 +1183,9 @@ def check_redirect():
         findings['summary'] = build_scan_summary(findings)
         findings['sections'] = build_scan_sections(findings)
 
-        scan = persist_scan(current_user, findings, prefix="redirect_scan")
+        scan = persist_scan(user, findings, prefix="redirect_scan")
 
-        return jsonify({
+        return {
             'status': 'success',
             'scan_id': scan.public_id,
             'url': url,
@@ -1230,24 +1193,20 @@ def check_redirect():
             'recommendations': results.get('recommendations', []),
             'vulnerable': bool(results.get('issues')),
             'summary': findings['summary'],
-        }), 200
+        }
 
     except (ValueError, ValidationError) as exc:
-        return jsonify({'status': 'error', 'message': str(exc)}), 400
+        raise HTTPException(400, str(exc))
     except Exception as e:
-        return jsonify({'status': 'error', 'message': str(e)}), 500
+        raise HTTPException(500, str(e))
 
 
-@bp.route('/scan/takeover', methods=['POST'])
-@jwt_required()
-@limiter.limit("20 per hour")
-def check_takeover():
+@router.post("/scan/takeover")
+async def check_takeover(request: Request, user: Annotated['User', Depends(current_user)]):
     try:
-        current_user = get_current_user()
-        if not current_user:
-            return jsonify({'error': 'User not found'}), 404
-        payload = ScanRequestPayload.model_validate(request.get_json(silent=True) or {})
+        payload = ScanRequestPayload.model_validate(await request.json())
         url = normalize_target_url(payload.url)
+        _preflight(user, url)
 
         scanner = _security_scanner()
         results = scanner.check_takeover(url)
@@ -1266,9 +1225,9 @@ def check_takeover():
         findings['summary'] = build_scan_summary(findings)
         findings['sections'] = build_scan_sections(findings)
 
-        scan = persist_scan(current_user, findings, prefix="takeover_scan")
+        scan = persist_scan(user, findings, prefix="takeover_scan")
 
-        return jsonify({
+        return {
             'status': 'success',
             'scan_id': scan.public_id,
             'url': url,
@@ -1277,24 +1236,20 @@ def check_takeover():
             'vulnerable': bool(results.get('issues')),
             'subdomains_checked': results.get('subdomains_checked', []),
             'summary': findings['summary'],
-        }), 200
+        }
 
     except (ValueError, ValidationError) as exc:
-        return jsonify({'status': 'error', 'message': str(exc)}), 400
+        raise HTTPException(400, str(exc))
     except Exception as e:
-        return jsonify({'status': 'error', 'message': str(e)}), 500
+        raise HTTPException(500, str(e))
 
 
-@bp.route('/scan/auth', methods=['POST'])
-@jwt_required()
-@limiter.limit("20 per hour")
-def check_auth():
+@router.post("/scan/auth")
+async def check_auth(request: Request, user: Annotated['User', Depends(current_user)]):
     try:
-        current_user = get_current_user()
-        if not current_user:
-            return jsonify({'error': 'User not found'}), 404
-        payload = ScanRequestPayload.model_validate(request.get_json(silent=True) or {})
+        payload = ScanRequestPayload.model_validate(await request.json())
         url = normalize_target_url(payload.url)
+        _preflight(user, url)
 
         scanner = _security_scanner()
         results = scanner.check_auth(url)
@@ -1312,9 +1267,9 @@ def check_auth():
         findings['summary'] = build_scan_summary(findings)
         findings['sections'] = build_scan_sections(findings)
 
-        scan = persist_scan(current_user, findings, prefix="auth_scan")
+        scan = persist_scan(user, findings, prefix="auth_scan")
 
-        return jsonify({
+        return {
             'status': 'success',
             'scan_id': scan.public_id,
             'url': url,
@@ -1322,24 +1277,20 @@ def check_auth():
             'recommendations': results.get('recommendations', []),
             'vulnerable': bool(results.get('issues')),
             'summary': findings['summary'],
-        }), 200
+        }
 
     except (ValueError, ValidationError) as exc:
-        return jsonify({'status': 'error', 'message': str(exc)}), 400
+        raise HTTPException(400, str(exc))
     except Exception as e:
-        return jsonify({'status': 'error', 'message': str(e)}), 500
+        raise HTTPException(500, str(e))
 
 
-@bp.route('/scan/integrity', methods=['POST'])
-@jwt_required()
-@limiter.limit("20 per hour")
-def check_integrity():
+@router.post("/scan/integrity")
+async def check_integrity(request: Request, user: Annotated['User', Depends(current_user)]):
     try:
-        current_user = get_current_user()
-        if not current_user:
-            return jsonify({'error': 'User not found'}), 404
-        payload = ScanRequestPayload.model_validate(request.get_json(silent=True) or {})
+        payload = ScanRequestPayload.model_validate(await request.json())
         url = normalize_target_url(payload.url)
+        _preflight(user, url)
 
         scanner = _security_scanner()
         results = scanner.check_integrity(url)
@@ -1357,9 +1308,9 @@ def check_integrity():
         findings['summary'] = build_scan_summary(findings)
         findings['sections'] = build_scan_sections(findings)
 
-        scan = persist_scan(current_user, findings, prefix="integrity_scan")
+        scan = persist_scan(user, findings, prefix="integrity_scan")
 
-        return jsonify({
+        return {
             'status': 'success',
             'scan_id': scan.public_id,
             'url': url,
@@ -1367,24 +1318,20 @@ def check_integrity():
             'recommendations': results.get('recommendations', []),
             'vulnerable': bool(results.get('issues')),
             'summary': findings['summary'],
-        }), 200
+        }
 
     except (ValueError, ValidationError) as exc:
-        return jsonify({'status': 'error', 'message': str(exc)}), 400
+        raise HTTPException(400, str(exc))
     except Exception as e:
-        return jsonify({'status': 'error', 'message': str(e)}), 500
+        raise HTTPException(500, str(e))
 
 
-@bp.route('/scan/logging_monitor', methods=['POST'])
-@jwt_required()
-@limiter.limit("20 per hour")
-def check_logging_monitor():
+@router.post("/scan/logging_monitor")
+async def check_logging_monitor(request: Request, user: Annotated['User', Depends(current_user)]):
     try:
-        current_user = get_current_user()
-        if not current_user:
-            return jsonify({'error': 'User not found'}), 404
-        payload = ScanRequestPayload.model_validate(request.get_json(silent=True) or {})
+        payload = ScanRequestPayload.model_validate(await request.json())
         url = normalize_target_url(payload.url)
+        _preflight(user, url)
 
         scanner = _security_scanner()
         results = scanner.check_logging_monitor(url)
@@ -1402,9 +1349,9 @@ def check_logging_monitor():
         findings['summary'] = build_scan_summary(findings)
         findings['sections'] = build_scan_sections(findings)
 
-        scan = persist_scan(current_user, findings, prefix="logging_scan")
+        scan = persist_scan(user, findings, prefix="logging_scan")
 
-        return jsonify({
+        return {
             'status': 'success',
             'scan_id': scan.public_id,
             'url': url,
@@ -1412,27 +1359,23 @@ def check_logging_monitor():
             'recommendations': results.get('recommendations', []),
             'vulnerable': bool(results.get('issues')),
             'summary': findings['summary'],
-        }), 200
+        }
 
     except (ValueError, ValidationError) as exc:
-        return jsonify({'status': 'error', 'message': str(exc)}), 400
+        raise HTTPException(400, str(exc))
     except Exception as e:
-        return jsonify({'status': 'error', 'message': str(e)}), 500
+        raise HTTPException(500, str(e))
 
 
-@bp.route('/scan/ssrf', methods=['POST'])
-@jwt_required()
-@limiter.limit("10 per hour")
-def check_ssrf():
+@router.post("/scan/ssrf")
+async def check_ssrf(request: Request, user: Annotated['User', Depends(current_user)]):
     try:
-        current_user = get_current_user()
-        if not current_user:
-            return jsonify({'error': 'User not found'}), 404
-        payload = ScanRequestPayload.model_validate(request.get_json(silent=True) or {})
+        payload = ScanRequestPayload.model_validate(await request.json())
         url = normalize_target_url(payload.url)
+        _preflight(user, url)
 
         if payload.enable_active_checks:
-            _ensure_active_checks_authorized(current_user, url, payload.verified_target_id)
+            _ensure_active_checks_authorized(user, url, payload.verified_target_id)
 
         scanner = _security_scanner()
         results = scanner.check_ssrf(url, enable_active_checks=payload.enable_active_checks)
@@ -1450,9 +1393,9 @@ def check_ssrf():
         findings['summary'] = build_scan_summary(findings)
         findings['sections'] = build_scan_sections(findings)
 
-        scan = persist_scan(current_user, findings, prefix="ssrf_scan")
+        scan = persist_scan(user, findings, prefix="ssrf_scan")
 
-        return jsonify({
+        return {
             'status': 'success',
             'scan_id': scan.public_id,
             'url': url,
@@ -1461,17 +1404,14 @@ def check_ssrf():
             'vulnerable': bool(results.get('issues')),
             'params_tested': results.get('params_tested', []),
             'summary': findings['summary'],
-        }), 200
+        }
 
     except (ValueError, ValidationError) as exc:
-        return jsonify({'status': 'error', 'message': str(exc)}), 400
+        raise HTTPException(400, str(exc))
     except Exception as e:
-        return jsonify({'status': 'error', 'message': str(e)}), 500
+        raise HTTPException(500, str(e))
 
 
-@bp.route('/health', methods=['GET'])
+@router.get("/health")
 def health_check():
-    return jsonify({
-        'status': 'OK',
-        'message': 'Service is healthy'
-    }), 200
+    return {'status': 'OK', 'message': 'Service is healthy'}

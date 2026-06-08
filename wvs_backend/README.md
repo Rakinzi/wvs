@@ -7,13 +7,13 @@ This backend now uses `uv` for Python dependency management.
 ```bash
 cd wvs_backend
 uv sync
-uv run flask --app manage.py db upgrade
+uv run alembic -c migrations/alembic.ini upgrade head
 ```
 
 ## Run
 
 ```bash
-uv run python manage.py
+uv run uvicorn asgi:app --host 0.0.0.0 --port 5001 --reload
 uv run celery -A app.celery_app:celery_app worker -Q security_scans --loglevel=info
 uv run celery -A app.celery_app:celery_app worker -Q ux_scans --loglevel=info --concurrency=1
 uv run celery -A app.celery_app:celery_app beat --loglevel=info
@@ -48,7 +48,7 @@ inside the container.
 ## Migrations
 
 ```bash
-uv run flask --app manage.py db upgrade
+uv run alembic -c migrations/alembic.ini upgrade head
 ```
 
 ## Environment

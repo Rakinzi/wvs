@@ -2,7 +2,7 @@
 # Usage: docker compose -f docker-compose.yml -f docker-compose.dev.yml up
 #
 # Frontend: Vite dev server on :5173 with source volume-mounted (HMR)
-# Backend:  no hot reload; restart backend after Python changes
+# Backend:  FastAPI with uvicorn reload
 # Workers:  no hot reload; restarting Celery mid-scan kills Playwright/screenshots
 
 services:
@@ -19,10 +19,10 @@ services:
     environment:
       - VITE_API_BASE_URL=${VITE_API_BASE_URL:-http://localhost:5001}
     depends_on:
-      backend:
+      api:
         condition: service_healthy
 
-  backend:
+  api:
     environment:
       FRONTEND_BASE_URL: http://localhost:5173
       FRONTEND_ORIGINS: "http://localhost:5173,http://localhost:8080"
@@ -34,7 +34,7 @@ services:
     command:
       - sh
       - -c
-      - "uv run gunicorn --bind 0.0.0.0:5001 --workers 1 --timeout 120 wsgi:app"
+      - "uv run uvicorn asgi:app --host 0.0.0.0 --port 5001 --reload"
 
   worker-security:
     volumes:

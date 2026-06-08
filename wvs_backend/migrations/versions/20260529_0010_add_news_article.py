@@ -17,6 +17,7 @@ depends_on = None
 
 
 def upgrade():
+    conn = op.get_bind()
     op.create_table('news_article',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('public_id', sa.String(length=36), nullable=False),
@@ -54,8 +55,12 @@ def upgrade():
                existing_type=mysql.VARCHAR(length=100),
                nullable=False)
 
-    with op.batch_alter_table('verified_target', schema=None) as batch_op:
-        batch_op.drop_index(batch_op.f('public_id'))
+    verified_target_indexes = {
+        index["name"] for index in sa.inspect(conn).get_indexes("verified_target")
+    }
+    if "public_id" in verified_target_indexes:
+        with op.batch_alter_table('verified_target', schema=None) as batch_op:
+            batch_op.drop_index(batch_op.f('public_id'))
 
 
 def downgrade():

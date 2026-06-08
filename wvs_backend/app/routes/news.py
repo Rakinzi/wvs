@@ -2,16 +2,16 @@ from __future__ import annotations
 
 import re
 from datetime import datetime, timezone
+from typing import Annotated
 
-from flask import Blueprint, jsonify, request
-from flask_jwt_extended import jwt_required
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
-from app import db, limiter
-from app.auth import get_current_user
-from app.models import NewsArticle
+from app import db
+from app.auth import current_user, require_admin
+from app.models import NewsArticle, User
 from app.utils.time_utils import utc_now
 
-bp = Blueprint('news', __name__)
+router = APIRouter()
 
 CISA_KEV_URL = 'https://www.cisa.gov/known-exploited-vulnerabilities-catalog'
 
@@ -1135,15 +1135,14 @@ def _available_categories():
 
 # ── Public endpoints ──────────────────────────────────────────────────────────
 
-@bp.get('/news')
-@limiter.limit('120/minute')
-def list_articles():
-    page = max(1, request.args.get('page', 1, type=int))
-    per_page = min(20, max(1, request.args.get('per_page', 12, type=int)))
-    category = request.args.get('category')
-    severity = request.args.get('severity')
-    tag = request.args.get('tag')
-
+@router.get('/news')
+def list_articles(
+    page: int = Query(default=1, ge=1),
+    per_page: int = Query(default=12, ge=1, le=20),
+    category: str | None = None,
+    severity: str | None = None,
+    tag: str | None = None,
+):
     q = NewsArticle.query.filter_by(published=True).order_by(NewsArticle.published_at.desc())
     if category:
         q = q.filter(NewsArticle.category == category)
@@ -1165,61 +1164,66 @@ def list_articles():
 
     total = len(articles)
     start = (page - 1) * per_page
-    page_items = articles[start:start + per_page]
-
-    return jsonify({
+    return {
         'data': {
-            'articles': page_items,
+            'articles': articles[start:start + per_page],
             'total': total,
             'page': page,
             'per_page': per_page,
             'pages': max(1, -(-total // per_page)),
             'categories': _available_categories(),
         }
-    }), 200
+    }
 
 
-@bp.get('/news/<slug>')
-@limiter.limit('120/minute')
-def get_article(slug):
+@router.get('/news/admin/all')
+def admin_list_all(
+    admin: Annotated[User, Depends(require_admin)],
+    page: int = Query(default=1, ge=1),
+    per_page: int = Query(default=20, ge=1, le=50),
+):
+    q = NewsArticle.query.order_by(NewsArticle.created_at.desc())
+    total = q.count()
+    articles = q.offset((page - 1) * per_page).limit(per_page).all()
+    return {
+        'data': {
+            'articles': [a.to_dict() for a in articles],
+            'total': total,
+            'page': page,
+            'per_page': per_page,
+            'pages': max(1, -(-total // per_page)),
+        }
+    }
+
+
+@router.get('/news/{slug}')
+def get_article(slug: str):
     article = NewsArticle.query.filter_by(slug=slug, published=True).first()
     if article:
-        return jsonify({'data': article.to_dict(body=True)}), 200
-
+        return {'data': article.to_dict(body=True)}
     curated = next((a for a in CURATED_ARTICLES if a['slug'] == slug), None)
     if curated:
-        return jsonify({'data': curated}), 200
-
-    return jsonify({'error': 'Article not found'}), 404
+        return {'data': curated}
+    raise HTTPException(404, 'Article not found')
 
 
 # ── Admin endpoints ───────────────────────────────────────────────────────────
 
-@bp.post('/news')
-@jwt_required()
-@limiter.limit('30/minute')
-def create_article():
-    current_user = get_current_user()
-    if not current_user.is_admin:
-        return jsonify({'error': 'Admin access required'}), 403
-
-    body = request.get_json(silent=True) or {}
+@router.post('/news', status_code=201)
+async def create_article(request: Request, admin: Annotated[User, Depends(require_admin)]):
+    body = await request.json() if request.headers.get('content-type', '').startswith('application/json') else {}
     title = str(body.get('title') or '').strip()
     if not title:
-        return jsonify({'error': 'title is required'}), 422
-
+        raise HTTPException(422, 'title is required')
     summary = str(body.get('summary') or '').strip()
     content = str(body.get('body') or '').strip()
     if not summary or not content:
-        return jsonify({'error': 'summary and body are required'}), 422
+        raise HTTPException(422, 'summary and body are required')
 
-    slug = _unique_slug(_slugify(str(body.get('slug') or title)))
     published = bool(body.get('published', False))
-    published_at = utc_now() if published else None
-
     article = NewsArticle(
         title=title,
-        slug=slug,
+        slug=_unique_slug(_slugify(str(body.get('slug') or title))),
         summary=summary,
         body=content,
         category=str(body.get('category') or 'General').strip(),
@@ -1228,46 +1232,30 @@ def create_article():
         cve_ids=body.get('cve_ids') or [],
         source_url=body.get('source_url') or None,
         published=published,
-        published_at=published_at,
-        author_id=current_user.id,
+        published_at=utc_now() if published else None,
+        author_id=admin.id,
     )
     db.session.add(article)
     db.session.commit()
-    return jsonify({'data': article.to_dict(body=True)}), 201
+    return {'data': article.to_dict(body=True)}
 
 
-@bp.patch('/news/<article_id>')
-@jwt_required()
-@limiter.limit('60/minute')
-def update_article(article_id):
-    current_user = get_current_user()
-    if not current_user.is_admin:
-        return jsonify({'error': 'Admin access required'}), 403
-
+@router.patch('/news/{article_id}')
+async def update_article(article_id: str, request: Request, admin: Annotated[User, Depends(require_admin)]):
     article = NewsArticle.query.filter_by(public_id=article_id).first()
     if not article:
-        return jsonify({'error': 'Article not found'}), 404
+        raise HTTPException(404, 'Article not found')
 
-    body = request.get_json(silent=True) or {}
-
-    if 'title' in body:
-        article.title = str(body['title']).strip()
-    if 'slug' in body:
-        article.slug = _unique_slug(_slugify(str(body['slug'])), exclude_id=article.id)
-    if 'summary' in body:
-        article.summary = str(body['summary']).strip()
-    if 'body' in body:
-        article.body = str(body['body']).strip()
-    if 'category' in body:
-        article.category = str(body['category']).strip()
-    if 'tags' in body:
-        article.tags = body['tags'] or []
-    if 'severity' in body:
-        article.severity = body['severity'] or None
-    if 'cve_ids' in body:
-        article.cve_ids = body['cve_ids'] or []
-    if 'source_url' in body:
-        article.source_url = body['source_url'] or None
+    body = await request.json() if request.headers.get('content-type', '').startswith('application/json') else {}
+    if 'title' in body:    article.title    = str(body['title']).strip()
+    if 'slug' in body:     article.slug     = _unique_slug(_slugify(str(body['slug'])), exclude_id=article.id)
+    if 'summary' in body:  article.summary  = str(body['summary']).strip()
+    if 'body' in body:     article.body     = str(body['body']).strip()
+    if 'category' in body: article.category = str(body['category']).strip()
+    if 'tags' in body:     article.tags     = body['tags'] or []
+    if 'severity' in body: article.severity = body['severity'] or None
+    if 'cve_ids' in body:  article.cve_ids  = body['cve_ids'] or []
+    if 'source_url' in body: article.source_url = body['source_url'] or None
     if 'published' in body:
         was_published = article.published
         article.published = bool(body['published'])
@@ -1277,47 +1265,14 @@ def update_article(article_id):
             article.published_at = None
 
     db.session.commit()
-    return jsonify({'data': article.to_dict(body=True)}), 200
+    return {'data': article.to_dict(body=True)}
 
 
-@bp.delete('/news/<article_id>')
-@jwt_required()
-@limiter.limit('30/minute')
-def delete_article(article_id):
-    current_user = get_current_user()
-    if not current_user.is_admin:
-        return jsonify({'error': 'Admin access required'}), 403
-
+@router.delete('/news/{article_id}')
+def delete_article(article_id: str, admin: Annotated[User, Depends(require_admin)]):
     article = NewsArticle.query.filter_by(public_id=article_id).first()
     if not article:
-        return jsonify({'error': 'Article not found'}), 404
-
+        raise HTTPException(404, 'Article not found')
     db.session.delete(article)
     db.session.commit()
-    return jsonify({'message': 'Deleted'}), 200
-
-
-@bp.get('/news/admin/all')
-@jwt_required()
-@limiter.limit('60/minute')
-def admin_list_all():
-    current_user = get_current_user()
-    if not current_user.is_admin:
-        return jsonify({'error': 'Admin access required'}), 403
-
-    page = max(1, request.args.get('page', 1, type=int))
-    per_page = min(50, max(1, request.args.get('per_page', 20, type=int)))
-
-    q = NewsArticle.query.order_by(NewsArticle.created_at.desc())
-    total = q.count()
-    articles = q.offset((page - 1) * per_page).limit(per_page).all()
-
-    return jsonify({
-        'data': {
-            'articles': [a.to_dict() for a in articles],
-            'total': total,
-            'page': page,
-            'per_page': per_page,
-            'pages': max(1, -(-total // per_page)),
-        }
-    }), 200
+    return {'message': 'Deleted'}

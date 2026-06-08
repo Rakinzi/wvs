@@ -17,7 +17,7 @@ depends_on = None
 
 def upgrade():
     conn = op.get_bind()
-    cols = [row[0] for row in conn.execute(sa.text("SHOW COLUMNS FROM user")).fetchall()]
+    cols = [column["name"] for column in sa.inspect(conn).get_columns("user")]
     if 'verification_token_expires_at' not in cols:
         op.add_column("user", sa.Column("verification_token_expires_at", sa.DateTime(), nullable=True))
 

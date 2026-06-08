@@ -92,4 +92,4 @@ RUN mkdir -p /app/instance /app/reports /app/reports/screenshots /app/reports/ma
 
 EXPOSE 5001
 
-CMD ["sh", "-c", "uv run flask --app manage.py db upgrade && uv run gunicorn --bind 0.0.0.0:${PORT:-5001} --workers ${WEB_CONCURRENCY:-2} --threads ${WEB_THREADS:-4} --timeout ${WEB_TIMEOUT:-120} wsgi:app"]
+CMD ["sh", "-c", "uv run alembic -c migrations/alembic.ini upgrade head && uv run uvicorn asgi:app --host 0.0.0.0 --port ${PORT:-5001} --workers ${WEB_CONCURRENCY:-2} --timeout-keep-alive ${WEB_TIMEOUT:-120}"]

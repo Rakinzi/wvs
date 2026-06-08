@@ -1,191 +1,122 @@
-from flask import Blueprint, jsonify, request
-from app.auth import get_current_user
-from app.models import MaliciousSite, BlockedRequest
+from __future__ import annotations
+
+from datetime import datetime
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from pydantic import ValidationError
+
+from app import db
+from app.auth import current_user, require_admin
+from app.models import BlockedRequest, MaliciousSite, User
 from app.schemas import AddMaliciousPayload, BlockedLogPayload
 from app.utils.db_manager import DBManager
-from flask_jwt_extended import jwt_required
 from app.utils.scan_helpers import normalize_target_url
-from app import db, limiter
-from datetime import datetime
-from pydantic import ValidationError
 from app.utils.time_utils import utc_now
 
-bp = Blueprint('malicious', __name__)
+router = APIRouter()
 
-@bp.route('/api/malicious/check', methods=['GET'])
-@limiter.limit("30 per hour")
-def check_malicious():
+
+@router.get("/api/malicious/check")
+def check_malicious(url: str = Query(...)):
     try:
-        url = normalize_target_url(request.args.get('url'))
+        url = normalize_target_url(url)
     except ValueError as exc:
-        return jsonify({'error': str(exc)}), 400
-        
-    # Check database first (fastest)
-    is_blocked, reason = DBManager.check_malicious_url(url)
-    
-    if is_blocked:
-        return jsonify({
-            'url': url,
-            'blocked': True,
-            'reason': reason or 'Domain in database',
-            'source': 'database',
-        }), 200
-    
-    # If not in database, use the malicious detector
-    from app.scanners import SecurityScanner
+        raise HTTPException(400, str(exc))
 
+    is_blocked, reason = DBManager.check_malicious_url(url)
+    if is_blocked:
+        return {"url": url, "blocked": True, "reason": reason or "Domain in database", "source": "database"}
+
+    from app.scanners import SecurityScanner
     scanner = SecurityScanner()
     malicious_result = scanner.malicious_detector.analyze_url(url)
-    
-    if malicious_result['is_malicious']:
-        reason = []
-        if malicious_result['phishing_match']:
-            reason.append("Phishing site")
-        if malicious_result['dnsbl'].get('blacklisted', False):
-            reason.append("Listed in DNS blacklists")
-        if malicious_result['score'] >= 7:
-            reason.append("Suspicious URL characteristics")
-            
-        reason_str = " | ".join(reason) or "Malicious site"
-        
-        # Add to database for faster future lookups
+
+    if malicious_result["is_malicious"]:
+        parts = []
+        if malicious_result["phishing_match"]: parts.append("Phishing site")
+        if malicious_result["dnsbl"].get("blacklisted"): parts.append("Listed in DNS blacklists")
+        if malicious_result["score"] >= 7: parts.append("Suspicious URL characteristics")
+        reason_str = " | ".join(parts) or "Malicious site"
         DBManager.add_malicious_url(url, reason_str, "scanner")
-        
-        return jsonify({
-            'url': url,
-            'blocked': True,
-            'reason': reason_str,
-            'details': malicious_result,
-            'source': 'rule_engine',
-        }), 200
-    
-    # Run AI prediction as a final check
+        return {"url": url, "blocked": True, "reason": reason_str, "details": malicious_result, "source": "rule_engine"}
+
     try:
         prediction_int, prediction_label, prediction_source = scanner.check_ai(url)
         if prediction_label in ["phishing", "malware", "defacement"]:
             reason_str = f"AI classified as {prediction_label}"
             DBManager.add_malicious_url(url, reason_str, "ai")
-            return jsonify({
-                'url': url,
-                'blocked': True,
-                'reason': reason_str,
-                'source': prediction_source,
-                'ai': {
-                    'backend': prediction_source,
-                    'label': prediction_label,
-                    'prediction': prediction_int,
-                },
-            }), 200
+            return {"url": url, "blocked": True, "reason": reason_str, "source": prediction_source,
+                    "ai": {"backend": prediction_source, "label": prediction_label, "prediction": prediction_int}}
     except Exception:
         pass
-        
-    return jsonify({
-        'url': url,
-        'blocked': False,
-        'source': 'none',
-    }), 200
 
-@bp.route('/api/malicious/list', methods=['GET'])
-@jwt_required()
-@limiter.limit("30 per hour")
-def list_malicious():
-    since = request.args.get('since', 0, type=int)
-    limit = request.args.get('limit', 1000, type=int)
-    
+    return {"url": url, "blocked": False, "source": "none"}
+
+
+@router.get("/api/malicious/list")
+def list_malicious(
+    admin: Annotated[User, Depends(require_admin)],
+    since: int = Query(default=0),
+    limit: int = Query(default=1000, le=1000),
+):
     if since > 0:
         since_date = datetime.fromtimestamp(since)
-        sites = MaliciousSite.query.filter(
-            MaliciousSite.date_added > since_date
-        ).limit(limit).all()
+        sites = MaliciousSite.query.filter(MaliciousSite.date_added > since_date).limit(limit).all()
     else:
         sites = MaliciousSite.query.limit(limit).all()
-    
-    return jsonify({
-        'count': len(sites),
-        'domains': [site.domain for site in sites],
-        'sites': [site.to_dict() for site in sites],
-    }), 200
+    return {"count": len(sites), "domains": [s.domain for s in sites], "sites": [s.to_dict() for s in sites]}
 
-@bp.route('/api/malicious/add', methods=['POST'])
-@jwt_required()
-@limiter.limit("10 per hour")
-def add_malicious():
+
+@router.post("/api/malicious/add", status_code=201)
+async def add_malicious(request: Request, admin: Annotated[User, Depends(require_admin)]):
     try:
-        payload = AddMaliciousPayload.model_validate(request.get_json(silent=True) or {})
-        reason = payload.reason
+        data = await request.json()
+        payload = AddMaliciousPayload.model_validate(data)
         url = normalize_target_url(payload.url)
     except (ValueError, ValidationError) as exc:
-        return jsonify({'error': str(exc)}), 400
-        
-    success = DBManager.add_malicious_url(url, reason, "manual")
-    
+        raise HTTPException(400, str(exc))
+
+    success = DBManager.add_malicious_url(url, payload.reason, "manual")
     if success:
-        return jsonify({'status': 'success', 'message': 'URL added to malicious database'}), 201
-    else:
-        return jsonify({'status': 'warning', 'message': 'URL already exists in database'}), 200
-        
-@bp.route('/api/blocked/log', methods=['POST'])
-@limiter.limit("60 per hour")
-def log_blocked():
+        return {"status": "success", "message": "URL added to malicious database"}
+    return {"status": "warning", "message": "URL already exists in database"}
+
+
+@router.post("/api/blocked/log", status_code=201)
+async def log_blocked(request: Request):
     try:
-        payload = BlockedLogPayload.model_validate(request.get_json(silent=True) or {})
+        data = await request.json()
+        payload = BlockedLogPayload.model_validate(data)
         url = normalize_target_url(payload.url)
     except (ValueError, ValidationError) as exc:
-        return jsonify({'error': str(exc)}), 400
-    ip_address = payload.ip_address
-    user_agent = payload.user_agent
-    reason = payload.reason
-        
-    log = BlockedRequest(
-        url=url,
-        ip_address=ip_address,
-        user_agent=user_agent,
-        reason=reason
-    )
-    
+        raise HTTPException(400, str(exc))
+
+    log = BlockedRequest(url=url, ip_address=payload.ip_address, user_agent=payload.user_agent, reason=payload.reason)
     db.session.add(log)
     db.session.commit()
-    
-    return jsonify({'status': 'success'}), 201
-    
-@bp.route('/api/blocked/stats', methods=['GET'])
-@jwt_required()
-def blocked_stats():
-    current_user = get_current_user()
-    if not current_user:
-        return jsonify({'error': 'User not found'}), 404
-    if not current_user.is_admin:
-        return jsonify({'error': 'Unauthorized access'}), 403
+    return {"status": "success"}
 
-    period = request.args.get('period', 'day')
-    
-    if period == 'hour':
-        # Last hour
+
+@router.get("/api/blocked/stats")
+def blocked_stats(
+    admin: Annotated[User, Depends(require_admin)],
+    period: str = Query(default="day"),
+):
+    if period == "hour":
         since = utc_now().replace(minute=0, second=0, microsecond=0)
-        data = db.session.query(
-            db.func.count(BlockedRequest.id)
-        ).filter(BlockedRequest.timestamp >= since).scalar()
-        
-    elif period == 'day':
-        # Last 24 hours
+        data = db.session.query(db.func.count(BlockedRequest.id)).filter(BlockedRequest.timestamp >= since).scalar()
+    elif period == "day":
         since = utc_now().replace(hour=0, minute=0, second=0, microsecond=0)
-        data = db.session.query(
-            db.func.count(BlockedRequest.id)
-        ).filter(BlockedRequest.timestamp >= since).scalar()
-        
-    elif period == 'week':
-        # Last 7 days count by day
-        data = db.session.query(
-            db.func.date(BlockedRequest.timestamp).label('date'),
-            db.func.count(BlockedRequest.id).label('count')
-        ).filter(
-            BlockedRequest.timestamp >= utc_now().replace(hour=0, minute=0, second=0, microsecond=0) - db.text("interval '7 days'")
-        ).group_by('date').all()
-        
-        data = {str(d[0]): d[1] for d in data}
-    
-    return jsonify({
-        'status': 'success',
-        'period': period,
-        'data': data
-    }), 200
+        data = db.session.query(db.func.count(BlockedRequest.id)).filter(BlockedRequest.timestamp >= since).scalar()
+    elif period == "week":
+        rows = (
+            db.session.query(db.func.date(BlockedRequest.timestamp).label("date"), db.func.count(BlockedRequest.id).label("count"))
+            .group_by("date")
+            .all()
+        )
+        data = {str(r[0]): r[1] for r in rows}
+    else:
+        raise HTTPException(400, "Invalid period")
+
+    return {"status": "success", "period": period, "data": data}

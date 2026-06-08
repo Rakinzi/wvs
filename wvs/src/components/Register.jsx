@@ -81,6 +81,7 @@ const Register = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [success, setSuccess]           = useState(false);
   const [visible, setVisible]           = useState(false);
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
   const navigate  = useNavigate();
   const { theme } = useContext(ThemeContext) || {};
   const isDark    = theme !== 'light';
@@ -108,6 +109,7 @@ const Register = () => {
     else if (!/[A-Z]/.test(formData.password))                 e.password = 'Include an uppercase letter';
     else if (!/[0-9]/.test(formData.password))                 e.password = 'Include a number';
     if (formData.password !== formData.confirmPassword)        e.confirmPassword = 'Passwords do not match';
+    if (!acceptedTerms)                                        e.terms = 'You must accept the Terms of Service to continue';
     return e;
   };
 
@@ -178,6 +180,25 @@ const Register = () => {
               </div>
             )}
 
+            <label style={{ display: 'flex', alignItems: 'flex-start', gap: 9, cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={acceptedTerms}
+                onChange={(e) => { setAcceptedTerms(e.target.checked); if (errors.terms) setErrors(p => ({ ...p, terms: '' })); }}
+                style={{ marginTop: 2, flexShrink: 0, accentColor: 'var(--color-primary)' }}
+              />
+              <span style={{ fontSize: 12, color: 'var(--color-text-muted)', lineHeight: 1.55 }}>
+                I agree to the{' '}
+                <a href="/terms" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--color-primary)', textDecoration: 'none' }}>Terms of Service</a>
+                {' '}and{' '}
+                <a href="/privacy" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--color-primary)', textDecoration: 'none' }}>Privacy Policy</a>
+                . I confirm I will only scan systems I own or have explicit written permission to test.
+              </span>
+            </label>
+            {errors.terms && (
+              <p role="alert" style={{ fontSize: 11.5, color: 'var(--color-danger)', margin: 0 }}>{errors.terms}</p>
+            )}
+
             <button type="submit" disabled={isLoading} className="btn-primary w-full justify-center"
               style={{ marginTop: 4, padding: '10px 0', fontSize: 14, opacity: isLoading ? 0.75 : 1 }}>
               {isLoading ? <><Spinner size="sm" /> Creating account…</> : <>Create account <ArrowRight size={14} /></>}
@@ -190,12 +211,6 @@ const Register = () => {
               style={{ fontWeight: 600, color: 'var(--color-primary)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
               Sign in
             </button>
-          </p>
-          <p style={{ fontSize: 11, color: 'var(--color-text-dim)', textAlign: 'center', marginTop: 28 }}>
-            By creating an account you agree to our{' '}
-            <a href="/terms" style={{ color: 'var(--color-primary)', textDecoration: 'none' }}>Terms of Service</a>
-            {' '}and{' '}
-            <a href="/privacy" style={{ color: 'var(--color-primary)', textDecoration: 'none' }}>Privacy Policy</a>
           </p>
         </>
       )}

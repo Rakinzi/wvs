@@ -5,7 +5,7 @@ import {
   Zap, Sun, Moon, BadgeCheck, Activity, Newspaper, BookOpen,
 } from 'lucide-react';
 import { useTheme } from '../hooks/useTheme';
-import { getSessionUsername } from '../lib/auth';
+import { getSessionUsername, getSessionRole } from '../lib/auth';
 
 const NAV_ITEMS = [
   { key: 'dashboard',     label: 'Dashboard',       icon: BarChart2 },
@@ -13,10 +13,11 @@ const NAV_ITEMS = [
   { key: 'uptime',        label: 'Uptime',           icon: Activity },
   { key: 'targets',       label: 'Verified Targets', icon: BadgeCheck },
   { key: 'history',       label: 'Scan History',     icon: Clock },
-  { key: 'blockedSites',  label: 'Blocked Sites',    icon: AlertTriangle },
+  { key: 'blockedSites',  label: 'Blocked Sites',    icon: AlertTriangle, adminOnly: true },
   { key: 'blockedAccess', label: 'Access Attempts',  icon: Globe, adminOnly: true },
   { key: 'news',          label: 'Security News',    icon: Newspaper },
   { key: 'news/admin',    label: 'News CMS',         icon: BookOpen, adminOnly: true },
+  { key: 'admin/users',  label: 'User Management',  icon: User,     adminOnly: true },
 ];
 
 const NOTIFICATIONS = [
@@ -46,6 +47,7 @@ const Sidebar = ({ isAuthenticated, onLogout, navigateTo, currentPage, isAdmin =
   };
 
   const username = getSessionUsername() || 'Account';
+  const role     = getSessionRole() || 'free';
   const initial  = username[0].toUpperCase();
 
   const SidebarContent = () => (
@@ -250,7 +252,7 @@ const Sidebar = ({ isAuthenticated, onLogout, navigateTo, currentPage, isAdmin =
               }}>
                 <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--color-border)' }}>
                   <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-text)', margin: 0 }}>{username}</p>
-                  <p style={{ fontSize: 10, color: 'var(--color-text-dim)', margin: '2px 0 0', fontFamily: "var(--font-mono)" }}>Free plan</p>
+                  <p style={{ fontSize: 10, color: 'var(--color-text-dim)', margin: '2px 0 0', fontFamily: "var(--font-mono)", textTransform: 'capitalize' }}>{role} plan</p>
                 </div>
                 <button onClick={() => { setUserOpen(false); onLogout(); }}
                   style={{

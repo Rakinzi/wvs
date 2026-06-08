@@ -3,7 +3,7 @@ import {
   AlertTriangle, Lock, Database,
   RefreshCw, CheckCircle, Search,
   Globe, ArrowRight, Zap, ChevronRight,
-  Code2, Layers, FolderSearch, Shield, Trash2, RotateCcw, KeyRound
+  Code2, Layers, FolderSearch
 } from 'lucide-react';
 import { useScansData } from '../hooks/useScansData';
 import { useVerifiedTargetsData } from '../hooks/useVerifiedTargetsData';
@@ -287,11 +287,6 @@ const FullScanStatus = ({ job, navigateTo }) => {
 /* ════════════════════════════════════════════════ */
 const Scanners = ({ navigateTo }) => {
   const [activeId, setActiveId] = useState('full');
-  const [newTargetUrl, setNewTargetUrl] = useState('');
-  const [newTargetMethod, setNewTargetMethod] = useState('meta_tag');
-  const [verificationToken, setVerificationToken] = useState('');
-  const [verificationInstructions, setVerificationInstructions] = useState(null);
-  const [targetActionError, setTargetActionError] = useState(null);
 
   const {
     fullScanUrl, setFullScanUrl, fullScanProfile, setFullScanProfile,
@@ -318,11 +313,6 @@ const Scanners = ({ navigateTo }) => {
   const {
     targets,
     loading: targetsLoading,
-    error: targetsError,
-    createTarget,
-    verifyTarget,
-    regenerateToken,
-    deleteTarget,
   } = useVerifiedTargetsData();
 
   useEffect(() => { document.title = 'Scanners — LaunchGuard'; }, []);
@@ -345,41 +335,6 @@ const Scanners = ({ navigateTo }) => {
   const selectedTargetHost = normalizeHost(selectedVerifiedTarget?.normalized_domain || '');
   const selectedTargetMatchesUrl = Boolean(selectedVerifiedTarget && (!scanUrlHost || selectedTargetHost === scanUrlHost));
   const matchingVerifiedTarget = verifiedTargets.find((target) => normalizeHost(target.normalized_domain || '') === scanUrlHost) || null;
-
-  const handleCreateTarget = async () => {
-    if (!newTargetUrl) return;
-    try {
-      setTargetActionError(null);
-      const data = await createTarget({ target_url: newTargetUrl, verification_method: newTargetMethod });
-      setVerificationToken(data.verification_token || '');
-      setVerificationInstructions(data.instructions || null);
-      setFullScanVerifiedTargetId(data.target?.id || '');
-    } catch (error) {
-      setTargetActionError(error.message || 'Failed to create target');
-    }
-  };
-
-  const handleVerifyTarget = async () => {
-    if (!fullScanVerifiedTargetId || !verificationToken) return;
-    try {
-      setTargetActionError(null);
-      await verifyTarget(fullScanVerifiedTargetId, verificationToken);
-    } catch (error) {
-      setTargetActionError(error.message || 'Failed to verify target');
-    }
-  };
-
-  const handleRegenerate = async () => {
-    if (!fullScanVerifiedTargetId) return;
-    try {
-      setTargetActionError(null);
-      const data = await regenerateToken(fullScanVerifiedTargetId);
-      setVerificationToken(data.verification_token || '');
-      setVerificationInstructions(data.instructions || null);
-    } catch (error) {
-      setTargetActionError(error.message || 'Failed to regenerate token');
-    }
-  };
 
   const handleVerifiedTargetChange = (targetId) => {
     setFullScanVerifiedTargetId(targetId);
@@ -602,76 +557,6 @@ const Scanners = ({ navigateTo }) => {
                         ) : (
                           <p className="text-xs mt-2" style={{ color: 'var(--color-text-dim)' }}>
                             Enable active checks above to include auth and abuse-control probes.
-                          </p>
-                        )}
-                      </div>
-                      <div className="rounded-xl p-4" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border-subtle)' }}>
-                        <div className="flex items-center gap-2 mb-3">
-                          <Shield size={14} style={{ color: 'var(--color-primary)' }} />
-                          <p className="text-xs font-semibold" style={{ color: 'var(--color-text)' }}>Verified Target</p>
-                        </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                          <input value={newTargetUrl} onChange={(e) => setNewTargetUrl(e.target.value)}
-                            placeholder="https://example.com" className="input text-sm" />
-                          <select value={newTargetMethod} onChange={(e) => setNewTargetMethod(e.target.value)}
-                            className="input text-sm cursor-pointer">
-                            <option value="meta_tag">Meta Tag</option>
-                            <option value="well_known_file">Well-Known File</option>
-                          </select>
-                        </div>
-                        <div className="flex flex-wrap gap-2 mt-3">
-                          <button onClick={handleCreateTarget} className="btn-primary text-xs">
-                            Create Verification Token
-                          </button>
-                          <button onClick={handleVerifyTarget} disabled={!fullScanVerifiedTargetId || !verificationToken}
-                            className="btn-secondary text-xs disabled:opacity-50">
-                            Verify Ownership
-                          </button>
-                          <button onClick={handleRegenerate} disabled={!fullScanVerifiedTargetId}
-                            className="btn-secondary text-xs disabled:opacity-50">
-                            <RotateCcw size={11} /> Regenerate
-                          </button>
-                        </div>
-                        {verificationToken && (
-                          <div className="mt-3 rounded-lg p-3" style={{ background: 'var(--color-card)', border: '1px solid var(--color-border)' }}>
-                            <p className="section-label mb-1">Verification Token</p>
-                            <p className="text-xs font-mono break-all mt-1" style={{ color: 'var(--color-text)' }}>{verificationToken}</p>
-                            {verificationInstructions?.tag && (
-                              <pre className="mt-2 text-xs whitespace-pre-wrap break-words" style={{ color: 'var(--color-info)' }}>{verificationInstructions.tag}</pre>
-                            )}
-                            {verificationInstructions?.path && (
-                              <p className="mt-2 text-xs" style={{ color: 'var(--color-text-muted)' }}>
-                                Upload a file to <span className="font-mono" style={{ color: 'var(--color-text)' }}>{verificationInstructions.path}</span> containing the token above.
-                              </p>
-                            )}
-                          </div>
-                        )}
-                        {targetsLoading ? (
-                          <p className="text-xs mt-3" style={{ color: 'var(--color-text-dim)' }}>Loading targets…</p>
-                        ) : targets.length > 0 && (
-                          <div className="mt-3 flex flex-col gap-2">
-                            {targets.slice(0, 5).map((target) => (
-                              <div key={target.id} className="flex items-center justify-between gap-3 p-2.5 rounded-lg"
-                                style={{ background: 'var(--color-card)', border: '1px solid var(--color-border)' }}>
-                                <div className="min-w-0">
-                                  <p className="text-xs font-mono truncate" style={{ color: 'var(--color-text)' }}>{target.normalized_domain}</p>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                  {target.verification_status === 'verified' && (
-                                    <span className="text-xs font-semibold px-2 py-0.5 rounded" style={{ background: 'var(--color-secure-dim)', color: 'var(--color-secure)' }}>Verified</span>
-                                  )}
-                                  <button onClick={() => deleteTarget(target.id)} className="cursor-pointer p-1 rounded"
-                                    style={{ color: 'var(--color-danger)' }}>
-                                    <Trash2 size={12} />
-                                  </button>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                        {(targetActionError || targetsError) && (
-                          <p className="text-xs mt-3 flex items-center gap-1.5" style={{ color: 'var(--color-danger)' }}>
-                            <AlertTriangle size={11} /> {targetActionError || targetsError}
                           </p>
                         )}
                       </div>

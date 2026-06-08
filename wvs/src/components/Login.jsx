@@ -246,7 +246,7 @@ const Login = () => {
     setIsLoading(true); setError('');
     try {
       const { data } = await apiJson('/login', { method: 'POST', json: true, credentials: 'include', body: { identifier, password } });
-      saveSession({ username: data.username, userId: data.user_id, expiresInSeconds: data.expires_in, isAdmin: data.is_admin });
+      saveSession({ username: data.username, userId: data.user_id, expiresInSeconds: data.expires_in, isAdmin: data.is_admin, role: data.role });
       navigate('/', { replace: true });
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Failed to connect to server');

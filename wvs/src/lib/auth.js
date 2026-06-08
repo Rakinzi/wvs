@@ -65,7 +65,7 @@ export const getSession = () => {
   return session;
 };
 
-export const saveSession = ({ username, userId, expiresInSeconds, isAdmin = null }) => {
+export const saveSession = ({ username, userId, expiresInSeconds, isAdmin = null, role = null }) => {
   const expiresAt = expiresInSeconds
     ? Date.now() + (expiresInSeconds * 1000)
     : null;
@@ -74,6 +74,7 @@ export const saveSession = ({ username, userId, expiresInSeconds, isAdmin = null
     username,
     userId,
     isAdmin,
+    role,
     expiresAt,
   }));
   clearLegacyLocalStorage();
@@ -92,6 +93,7 @@ export const updateSession = (patch) => {
 
 export const getCsrfToken = () => parseCookieValue('csrf_access_token');
 export const getSessionUsername = () => getSession()?.username || null;
+export const getSessionRole = () => getSession()?.role || null;
 export const getSessionIsAdmin = () => {
   const value = getSession()?.isAdmin;
   return typeof value === 'boolean' ? value : null;

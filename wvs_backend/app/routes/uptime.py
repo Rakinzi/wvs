@@ -1,121 +1,78 @@
 from __future__ import annotations
 
-from flask import Blueprint, jsonify, request
-from flask_jwt_extended import jwt_required
-from pydantic import ValidationError
+from typing import Annotated
 from urllib.parse import urlparse
 
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from pydantic import ValidationError
+
 from app import db
-from app.auth import get_current_user
-from app.models import UptimeMonitor, VerifiedTarget
+from app.auth import current_user
+from app.models import UptimeMonitor, User, VerifiedTarget
 from app.schemas import UptimeMonitorCreatePayload, UptimeMonitorUpdatePayload
 from app.services.uptime import perform_uptime_check, serialize_monitor, validate_monitor_target
 
+router = APIRouter()
 
-bp = Blueprint("uptime", __name__)
 
-
-def _hostname_from_url(url: str) -> str:
+def _hostname(url: str) -> str:
     return (urlparse(url).hostname or "").lower()
 
 
-def _get_owned_monitor(monitor_id: str) -> UptimeMonitor:
-    current_user = get_current_user()
-    if not current_user:
-        raise LookupError("User not found")
-
+def _owned_monitor(monitor_id: str, user: User) -> UptimeMonitor:
     monitor = UptimeMonitor.query.filter_by(public_id=monitor_id).first_or_404()
-    if monitor.user_id != current_user.id and not current_user.is_admin:
-        raise PermissionError("Unauthorized")
+    if monitor.user_id != user.id and not user.is_admin:
+        raise HTTPException(403, "Unauthorized")
     return monitor
 
 
-@bp.route("/uptime-monitors", methods=["GET"])
-@jwt_required()
-def list_uptime_monitors():
-    current_user = get_current_user()
-    if not current_user:
-        return jsonify({"status": "error", "message": "User not found"}), 404
-
-    monitors = UptimeMonitor.query.filter_by(user_id=current_user.id).order_by(UptimeMonitor.created_at.desc()).all()
-    return jsonify({
-        "status": "success",
-        "monitors": [serialize_monitor(monitor) for monitor in monitors],
-    }), 200
+@router.get("/uptime-monitors")
+def list_uptime_monitors(user: Annotated[User, Depends(current_user)]):
+    monitors = UptimeMonitor.query.filter_by(user_id=user.id).order_by(UptimeMonitor.created_at.desc()).all()
+    return {"status": "success", "monitors": [serialize_monitor(m) for m in monitors]}
 
 
-@bp.route("/uptime-monitors", methods=["POST"])
-@jwt_required()
-def create_uptime_monitor():
-    current_user = get_current_user()
-    if not current_user:
-        return jsonify({"status": "error", "message": "User not found"}), 404
-
+@router.post("/uptime-monitors", status_code=201)
+async def create_uptime_monitor(request: Request, user: Annotated[User, Depends(current_user)]):
     try:
-        payload = UptimeMonitorCreatePayload.model_validate(request.get_json(silent=True) or {})
+        data = await request.json()
+        payload = UptimeMonitorCreatePayload.model_validate(data)
     except (ValueError, ValidationError) as exc:
-        return jsonify({"status": "error", "message": str(exc)}), 400
+        raise HTTPException(400, str(exc))
 
-    requested_target_url = payload.target_url
     verified_target = VerifiedTarget.query.filter_by(
-        public_id=payload.verified_target_id,
-        user_id=current_user.id,
-        verification_status="verified",
+        public_id=payload.verified_target_id, user_id=user.id, verification_status="verified"
     ).first()
     if not verified_target:
-        return jsonify({
-            "status": "error",
-            "message": "Choose a verified target before adding an uptime monitor.",
-        }), 403
-    if verified_target.normalized_domain.lower() != _hostname_from_url(requested_target_url):
-        return jsonify({
-            "status": "error",
-            "message": "The monitor URL must match the selected verified target.",
-        }), 400
-    try:
-        target_url = validate_monitor_target(requested_target_url)
-    except ValueError as exc:
-        return jsonify({"status": "error", "message": str(exc)}), 400
+        raise HTTPException(403, "Choose a verified target before adding an uptime monitor.")
+    if verified_target.normalized_domain.lower() != _hostname(payload.target_url):
+        raise HTTPException(400, "The monitor URL must match the selected verified target.")
 
-    monitor = UptimeMonitor(
-        name=payload.name,
-        target_url=target_url,
-        check_interval_minutes=payload.check_interval_minutes,
-        user_id=current_user.id,
-    )
+    try:
+        target_url = validate_monitor_target(payload.target_url)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+
+    monitor = UptimeMonitor(name=payload.name, target_url=target_url, check_interval_minutes=payload.check_interval_minutes, user_id=user.id)
     db.session.add(monitor)
     db.session.commit()
+    return {"status": "success", "monitor": serialize_monitor(monitor)}
 
-    return jsonify({"status": "success", "monitor": serialize_monitor(monitor)}), 201
+
+@router.get("/uptime-monitors/{monitor_id}")
+def get_uptime_monitor(monitor_id: str, user: Annotated[User, Depends(current_user)]):
+    monitor = _owned_monitor(monitor_id, user)
+    return {"status": "success", "monitor": serialize_monitor(monitor, include_checks=True)}
 
 
-@bp.route("/uptime-monitors/<string:monitor_id>", methods=["GET"])
-@jwt_required()
-def get_uptime_monitor(monitor_id: str):
+@router.patch("/uptime-monitors/{monitor_id}")
+async def update_uptime_monitor(monitor_id: str, request: Request, user: Annotated[User, Depends(current_user)]):
+    monitor = _owned_monitor(monitor_id, user)
     try:
-        monitor = _get_owned_monitor(monitor_id)
-    except PermissionError:
-        return jsonify({"status": "error", "message": "Unauthorized"}), 403
-    except LookupError:
-        return jsonify({"status": "error", "message": "User not found"}), 404
-
-    return jsonify({"status": "success", "monitor": serialize_monitor(monitor, include_checks=True)}), 200
-
-
-@bp.route("/uptime-monitors/<string:monitor_id>", methods=["PATCH"])
-@jwt_required()
-def update_uptime_monitor(monitor_id: str):
-    try:
-        monitor = _get_owned_monitor(monitor_id)
-    except PermissionError:
-        return jsonify({"status": "error", "message": "Unauthorized"}), 403
-    except LookupError:
-        return jsonify({"status": "error", "message": "User not found"}), 404
-
-    try:
-        payload = UptimeMonitorUpdatePayload.model_validate(request.get_json(silent=True) or {})
+        data = await request.json()
+        payload = UptimeMonitorUpdatePayload.model_validate(data)
     except (ValueError, ValidationError) as exc:
-        return jsonify({"status": "error", "message": str(exc)}), 400
+        raise HTTPException(400, str(exc))
 
     if payload.name is not None:
         monitor.name = payload.name
@@ -129,54 +86,25 @@ def update_uptime_monitor(monitor_id: str):
             monitor.status = "pending"
 
     db.session.commit()
-    return jsonify({"status": "success", "monitor": serialize_monitor(monitor)}), 200
+    return {"status": "success", "monitor": serialize_monitor(monitor)}
 
 
-@bp.route("/uptime-monitors/<string:monitor_id>", methods=["DELETE"])
-@jwt_required()
-def delete_uptime_monitor(monitor_id: str):
-    try:
-        monitor = _get_owned_monitor(monitor_id)
-    except PermissionError:
-        return jsonify({"status": "error", "message": "Unauthorized"}), 403
-    except LookupError:
-        return jsonify({"status": "error", "message": "User not found"}), 404
-
+@router.delete("/uptime-monitors/{monitor_id}")
+def delete_uptime_monitor(monitor_id: str, user: Annotated[User, Depends(current_user)]):
+    monitor = _owned_monitor(monitor_id, user)
     db.session.delete(monitor)
     db.session.commit()
-    return jsonify({"status": "success"}), 200
+    return {"status": "success"}
 
 
-@bp.route("/uptime-monitors/<string:monitor_id>/check", methods=["POST"])
-@jwt_required()
-def run_uptime_monitor_check(monitor_id: str):
-    try:
-        monitor = _get_owned_monitor(monitor_id)
-    except PermissionError:
-        return jsonify({"status": "error", "message": "Unauthorized"}), 403
-    except LookupError:
-        return jsonify({"status": "error", "message": "User not found"}), 404
-
+@router.post("/uptime-monitors/{monitor_id}/check")
+def run_uptime_monitor_check(monitor_id: str, user: Annotated[User, Depends(current_user)]):
+    monitor = _owned_monitor(monitor_id, user)
     check = perform_uptime_check(monitor)
-    return jsonify({
-        "status": "success",
-        "monitor": serialize_monitor(monitor, include_checks=True),
-        "check": check.to_dict(),
-    }), 200
+    return {"status": "success", "monitor": serialize_monitor(monitor, include_checks=True), "check": check.to_dict()}
 
 
-@bp.route("/uptime-monitors/<string:monitor_id>/checks", methods=["GET"])
-@jwt_required()
-def list_uptime_monitor_checks(monitor_id: str):
-    try:
-        monitor = _get_owned_monitor(monitor_id)
-    except PermissionError:
-        return jsonify({"status": "error", "message": "Unauthorized"}), 403
-    except LookupError:
-        return jsonify({"status": "error", "message": "User not found"}), 404
-
-    limit = min(max(request.args.get("limit", 20, type=int), 1), 100)
-    return jsonify({
-        "status": "success",
-        "checks": [check.to_dict() for check in monitor.checks[:limit]],
-    }), 200
+@router.get("/uptime-monitors/{monitor_id}/checks")
+def list_uptime_monitor_checks(monitor_id: str, user: Annotated[User, Depends(current_user)], limit: int = Query(default=20, ge=1, le=100)):
+    monitor = _owned_monitor(monitor_id, user)
+    return {"status": "success", "checks": [c.to_dict() for c in monitor.checks[:limit]]}

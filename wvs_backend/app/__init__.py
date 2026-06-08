@@ -1,157 +1,127 @@
-from flask import Flask, jsonify, request
-from flask_cors import CORS
-from flask_jwt_extended import JWTManager
-from flask_limiter import Limiter
-from flask_limiter.util import get_remote_address
-from flask_sqlalchemy import SQLAlchemy
+from __future__ import annotations
+
+import re
+from typing import Any
+
+import sqlalchemy as sa
+from celery import Celery
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Query, declarative_base, declared_attr, relationship, scoped_session, sessionmaker
 
 from app.config import get_config
 
 
-db = SQLAlchemy()
-jwt = JWTManager()
-celery = None
-limiter = Limiter(key_func=get_remote_address, default_limits=[])
+class CompatQuery(Query):
+    def first_or_404(self):
+        value = self.first()
+        if value is None:
+            from fastapi import HTTPException
+            raise HTTPException(status_code=404, detail="Not found")
+        return value
 
 
-def init_celery(app: Flask):
+class _QueryDescriptor:
+    def __get__(self, obj: Any, owner: type):
+        return db.session.query(owner)
+
+
+class ModelBase:
+    query = _QueryDescriptor()
+
+    @declared_attr.directive
+    def __tablename__(cls) -> str:
+        name = re.sub(r"(?<!^)(?=[A-Z])", "_", cls.__name__).lower()
+        return name
+
+
+class SQLAlchemyCompat:
+    Column = sa.Column
+    Integer = sa.Integer
+    String = sa.String
+    Text = sa.Text
+    DateTime = sa.DateTime
+    Boolean = sa.Boolean
+    JSON = sa.JSON
+    ForeignKey = sa.ForeignKey
+    Index = sa.Index
+    func = sa.func
+    text = sa.text
+
+    def __init__(self) -> None:
+        self.Model = declarative_base(cls=ModelBase)
+        self.session = scoped_session(sessionmaker(query_cls=CompatQuery, autoflush=False))
+        self.engine = None
+
+    @property
+    def metadata(self):
+        return self.Model.metadata
+
+    def relationship(self, *args: Any, **kwargs: Any):
+        return relationship(*args, **kwargs)
+
+    def backref(self, *args: Any, **kwargs: Any):
+        from sqlalchemy.orm import backref
+        return backref(*args, **kwargs)
+
+    def init_db(self, database_url: str) -> None:
+        self.engine = create_engine(database_url, pool_pre_ping=True, future=True)
+        self.session.configure(bind=self.engine)
+
+    def create_all(self) -> None:
+        if self.engine is None:
+            raise RuntimeError("Database engine is not initialized")
+        self.metadata.create_all(self.engine)
+
+    def drop_all(self) -> None:
+        if self.engine is None:
+            raise RuntimeError("Database engine is not initialized")
+        self.metadata.drop_all(self.engine)
+
+    def get_or_404(self, model, ident):
+        value = self.session.get(model, ident)
+        if value is None:
+            from fastapi import HTTPException
+            raise HTTPException(status_code=404, detail="Not found")
+        return value
+
+
+class _Limiter:
+    """No-op rate limiter shim — real limiting is done at the FastAPI layer."""
+    def limit(self, *args, **kwargs):
+        def decorator(fn):
+            return fn
+        return decorator
+
+    def init_app(self, *args, **kwargs):
+        pass
+
+
+db = SQLAlchemyCompat()
+celery: Celery | None = None
+limiter = _Limiter()
+
+
+def init_celery(config):
     global celery
     if celery is None:
-        from celery import Celery
-
         celery = Celery("wvs")
 
     celery.conf.update(
-        broker_url=app.config["CELERY_BROKER_URL"],
-        result_backend=app.config["CELERY_RESULT_BACKEND"],
-        task_serializer=app.config["CELERY_TASK_SERIALIZER"],
-        accept_content=app.config["CELERY_ACCEPT_CONTENT"],
-        result_serializer=app.config["CELERY_RESULT_SERIALIZER"],
-        task_track_started=app.config["CELERY_TASK_TRACK_STARTED"],
-        task_time_limit=app.config["CELERY_TASK_TIME_LIMIT"],
-        timezone=app.config["CELERY_TIMEZONE"],
+        broker_url=config["CELERY_BROKER_URL"],
+        result_backend=config["CELERY_RESULT_BACKEND"],
+        task_serializer=config["CELERY_TASK_SERIALIZER"],
+        accept_content=config["CELERY_ACCEPT_CONTENT"],
+        result_serializer=config["CELERY_RESULT_SERIALIZER"],
+        task_track_started=config["CELERY_TASK_TRACK_STARTED"],
+        task_time_limit=config["CELERY_TASK_TIME_LIMIT"],
+        timezone=config["CELERY_TIMEZONE"],
         enable_utc=True,
-        broker_connection_retry_on_startup=app.config["BROKER_CONNECTION_RETRY_ON_STARTUP"],
-        imports=app.config["CELERY_IMPORTS"],
-        beat_schedule=app.config["CELERY_BEAT_SCHEDULE"],
-        task_default_queue=app.config["SECURITY_SCAN_QUEUE"],
+        broker_connection_retry_on_startup=config["BROKER_CONNECTION_RETRY_ON_STARTUP"],
+        imports=config["CELERY_IMPORTS"],
+        beat_schedule=config["CELERY_BEAT_SCHEDULE"],
+        task_default_queue=config["SECURITY_SCAN_QUEUE"],
         task_annotations={
-            "app.tasks.run_full_scan_job": {"rate_limit": app.config["UX_SCAN_RATE_LIMIT"]},
+            "app.tasks.run_full_scan_job": {"rate_limit": config["UX_SCAN_RATE_LIMIT"]},
         },
     )
-
-    class FlaskTask(celery.Task):
-        def __call__(self, *args, **kwargs):
-            with app.app_context():
-                return self.run(*args, **kwargs)
-
-    celery.Task = FlaskTask
     return celery
-
-
-def register_blueprints(app: Flask) -> None:
-    from app.routes.blocked_access import bp as blocked_access_bp
-    from app.routes.dashboard import bp as dashboard_bp
-    from app.routes.malicious import bp as malicious_bp
-    from app.routes.news import bp as news_bp
-    from app.routes.scans import bp as scans_bp
-    from app.routes.targets import bp as targets_bp
-    from app.routes.uptime import bp as uptime_bp
-    from app.routes.users import bp as users_bp
-
-    app.register_blueprint(blocked_access_bp)
-    app.register_blueprint(dashboard_bp)
-    app.register_blueprint(news_bp)
-    app.register_blueprint(scans_bp)
-    app.register_blueprint(users_bp)
-    app.register_blueprint(malicious_bp)
-    app.register_blueprint(targets_bp)
-    app.register_blueprint(uptime_bp)
-
-
-def create_app(config_class=None):
-    resolved_config = config_class or get_config()
-    resolved_config.validate()
-
-    app = Flask(__name__, instance_relative_config=True)
-    app.config.from_object(resolved_config)
-
-    db.init_app(app)
-    jwt.init_app(app)
-    limiter.init_app(app)
-    CORS(
-        app,
-        resources={r"/*": {"origins": app.config["CORS_ORIGINS"]}},
-        supports_credentials=True,
-        allow_headers=["Authorization", "Content-Type", "X-CSRF-TOKEN"],
-        methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    )
-
-    @jwt.unauthorized_loader
-    def handle_missing_jwt(reason: str):
-        return jsonify({"error": "Authentication is required"}), 401
-
-    @jwt.invalid_token_loader
-    def handle_invalid_jwt(reason: str):
-        return jsonify({"error": "Invalid authentication token"}), 401
-
-    @jwt.expired_token_loader
-    def handle_expired_jwt(jwt_header, jwt_payload):
-        return jsonify({"error": "Authentication token has expired"}), 401
-
-    @jwt.revoked_token_loader
-    def handle_revoked_jwt(jwt_header, jwt_payload):
-        return jsonify({"error": "Authentication token is no longer valid"}), 401
-
-    @jwt.needs_fresh_token_loader
-    def handle_non_fresh_jwt(jwt_header, jwt_payload):
-        return jsonify({"error": "A fresh authentication token is required"}), 401
-
-    @jwt.user_lookup_error_loader
-    def handle_missing_user(jwt_header, jwt_payload):
-        return jsonify({"error": "Authenticated user was not found"}), 401
-
-    @app.after_request
-    def apply_security_headers(response):
-        if not app.config.get("SECURITY_HEADERS_ENABLED", True):
-            return response
-
-        response.headers.setdefault("X-Content-Type-Options", "nosniff")
-        response.headers.setdefault("X-Frame-Options", "DENY")
-        response.headers.setdefault("Referrer-Policy", "no-referrer")
-        response.headers.setdefault(
-            "Permissions-Policy",
-            "accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()",
-        )
-        response.headers.setdefault(
-            "Content-Security-Policy",
-            "default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'; object-src 'none'",
-        )
-
-        sensitive_paths = (
-            "/login",
-            "/register",
-            "/forgot-password",
-            "/reset-password",
-            "/profile",
-            "/users",
-            "/scan",
-            "/report",
-            "/api/dashboard",
-        )
-        if request.headers.get("Authorization") or request.path.startswith(sensitive_paths):
-            response.headers["Cache-Control"] = "no-store"
-            response.headers["Pragma"] = "no-cache"
-
-        return response
-
-    register_blueprints(app)
-
-    from app.commands import register_commands
-
-    register_commands(app)
-    if app.config["AUTO_CREATE_TABLES"]:
-        with app.app_context():
-            db.create_all()
-
-    return app

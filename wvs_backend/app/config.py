@@ -76,6 +76,7 @@ class Config:
     FFUF_WORDLIST = settings.ffuf_wordlist
     SECURITY_SCAN_QUEUE = settings.security_scan_queue
     UX_SCAN_QUEUE = settings.ux_scan_queue
+    AI_SCAN_QUEUE = settings.ai_scan_queue
     UX_SCAN_RATE_LIMIT = settings.ux_scan_rate_limit
     SCAN_RESULT_RETENTION_DAYS = settings.scan_result_retention_days
     SCREENSHOT_RETENTION_DAYS = settings.screenshot_retention_days

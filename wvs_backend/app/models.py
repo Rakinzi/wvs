@@ -58,12 +58,31 @@ class ScanJob(db.Model):
             'result_id': self.result.public_id if self.result else None,
         }
     
+ROLES = ('free', 'pro', 'enterprise', 'admin')
+
+# Scans per hour allowed per role
+ROLE_SCAN_LIMITS = {
+    'free':       5,
+    'pro':        30,
+    'enterprise': 120,
+    'admin':      None,  # unlimited
+}
+
+# Uptime monitors allowed per role
+ROLE_MONITOR_LIMITS = {
+    'free':       3,
+    'pro':        20,
+    'enterprise': 100,
+    'admin':      None,
+}
+
+
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(50), unique=True, nullable=False)
     password = db.Column(db.String(255), nullable=False)
     email = db.Column(db.String(100), unique=True, nullable=False)
-    is_admin = db.Column(db.Boolean, default=False)
+    role = db.Column(db.String(20), nullable=False, default='free', index=True)
     created_on = db.Column(db.DateTime, default=utc_now)
     reset_token_hash = db.Column(db.String(64), nullable=True, index=True)
     reset_token_expires_at = db.Column(db.DateTime, nullable=True)
@@ -71,13 +90,25 @@ class User(db.Model):
     email_verified = db.Column(db.Boolean, default=False, nullable=False)
     verification_token_hash = db.Column(db.String(64), nullable=True, index=True)
     verification_token_expires_at = db.Column(db.DateTime, nullable=True)
-    
+
+    @property
+    def is_admin(self) -> bool:
+        return self.role == 'admin'
+
+    @property
+    def scan_limit(self) -> int | None:
+        return ROLE_SCAN_LIMITS.get(self.role)
+
+    @property
+    def monitor_limit(self) -> int | None:
+        return ROLE_MONITOR_LIMITS.get(self.role)
+
     def __repr__(self):
         return f'<User {self.username}>'
-    
+
     def set_password(self, password):
         self.password = generate_password_hash(password)
-        
+
     def check_password(self, password):
         return check_password_hash(self.password, password)
 

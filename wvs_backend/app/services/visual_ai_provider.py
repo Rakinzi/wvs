@@ -43,8 +43,8 @@ class OpenAICompatibleVisualAIProvider(VisualAIProvider):
         base_url: str,
         timeout_seconds: int = 45,
     ) -> None:
-        super().__init__(enabled=bool(api_key and model))
-        self.api_key = api_key
+        super().__init__(enabled=bool(model and (api_key or "ollama" in base_url.lower())))
+        self.api_key = api_key or "ollama"
         self.model = model
         self.base_url = base_url.rstrip("/")
         self.timeout_seconds = timeout_seconds
@@ -385,11 +385,12 @@ def build_visual_ai_provider() -> VisualAIProvider:
     if not enabled:
         return NoOpVisualAIProvider()
 
-    if provider in {"openai", "openai_compatible"}:
+    if provider in {"openai", "openai_compatible", "ollama"}:
         return OpenAICompatibleVisualAIProvider(
             api_key=settings.visual_ai_api_key or "",
             model=settings.visual_ai_model or "",
-            base_url=settings.visual_ai_base_url,
+            base_url=settings.visual_ai_base_url
+            or ("http://ollama:11434/v1" if provider == "ollama" else "https://api.openai.com/v1"),
             timeout_seconds=settings.visual_ai_timeout_seconds,
         )
 

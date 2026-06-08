@@ -15,7 +15,7 @@ depends_on = None
 
 def upgrade():
     conn = op.get_bind()
-    cols = [row[0] for row in conn.execute(sa.text("SHOW COLUMNS FROM verified_target")).fetchall()]
+    cols = [column["name"] for column in sa.inspect(conn).get_columns("verified_target")]
     if 'verification_token' not in cols:
         op.add_column('verified_target', sa.Column('verification_token', sa.String(128), nullable=True))
 

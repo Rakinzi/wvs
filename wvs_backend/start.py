@@ -1,5 +1,5 @@
 """
-Start Flask + Celery workers + Celery beat in one command.
+Start FastAPI + Celery workers + Celery beat in one command.
 
 Usage:
     uv run python start.py
@@ -35,7 +35,7 @@ UX_WORKER_CONCURRENCY = os.getenv("UX_WORKER_CONCURRENCY", "1").strip()
 START_BEAT = os.getenv("START_CELERY_BEAT", "true").strip().lower() in {"1", "true", "yes", "on"}
 
 COLORS = {
-    "FLASK": "\033[94m",
+    "FASTAPI": "\033[94m",
     "SECURITY_WORKER": "\033[92m",
     "UX_WORKER": "\033[96m",
     "BEAT": "\033[93m",
@@ -92,7 +92,14 @@ def detect_zap_command() -> list[str] | None:
 
 def build_procs() -> dict[str, list[str]]:
     procs = {
-        "FLASK": [sys.executable, "wsgi.py"],
+        "FASTAPI": [
+            * _python_module_cmd("uvicorn"),
+            "asgi:app",
+            "--host",
+            os.getenv("HOST", "0.0.0.0"),
+            "--port",
+            PORT,
+        ],
         "SECURITY_WORKER": [
             * _python_module_cmd("celery"),
             "-A",

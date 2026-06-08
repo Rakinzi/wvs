@@ -1,469 +1,387 @@
+from __future__ import annotations
+
 import hashlib
 import secrets
 import smtplib
-from datetime import datetime, timedelta
+from datetime import timedelta
 from email.message import EmailMessage
+from typing import Annotated
 
-from flask import Blueprint, current_app, jsonify, request
-from flask_jwt_extended import create_access_token, jwt_required, set_access_cookies, unset_jwt_cookies
-from app.auth import get_current_user
-from app.models import User
-from app.schemas import (
-    AuthLoginPayload,
-    AuthRegisterPayload,
-    ForgotPasswordPayload,
-    ResetPasswordPayload,
-)
-from app import db, limiter
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import ValidationError
+
+from app import db
+from app.auth import current_user, require_admin, get_user_from_cookie
+from app.models import User, ROLES, ROLE_SCAN_LIMITS, ROLE_MONITOR_LIMITS
+from app.schemas import AuthLoginPayload, AuthRegisterPayload, ForgotPasswordPayload, ResetPasswordPayload
+from app.settings import settings
 from app.utils.time_utils import utc_now
 
-bp = Blueprint('users', __name__)
+import jwt as pyjwt
+from datetime import datetime, timezone
+
+router = APIRouter()
 
 
-def _validation_error_payload(exc: ValidationError) -> dict:
-    try:
-        errors = exc.errors(include_context=False)
-    except TypeError:
-        errors = exc.errors()
-        for error in errors:
-            if "ctx" in error:
-                error["ctx"] = {key: str(value) for key, value in error["ctx"].items()}
+# ── helpers ─────────────────────────────────────────────────────────────────
 
-    first_error = errors[0]["msg"] if errors else "Invalid request payload"
-    return {"error": first_error, "errors": errors}
-
-
-def _hash_reset_token(token: str) -> str:
+def _hash_token(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
 def _build_reset_link(token: str) -> str:
-    base_url = current_app.config["FRONTEND_BASE_URL"].rstrip("/")
-    return f"{base_url}/reset-password?token={token}"
+    return f"{settings.frontend_base_url.rstrip('/')}/reset-password?token={token}"
 
 
-def _build_reset_email_html(username: str, reset_link: str) -> str:
-    return f"""<!DOCTYPE html>
-<html lang="en">
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
-<body style="margin:0;padding:0;background:#F1F5F9;font-family:'Inter',Arial,sans-serif;">
-  <table width="100%" cellpadding="0" cellspacing="0" style="background:#F1F5F9;padding:40px 16px;">
-    <tr><td align="center">
-      <table width="100%" style="max-width:520px;background:#FFFFFF;border-radius:12px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.08);">
-
-        <!-- Header -->
-        <tr>
-          <td style="background:#0F172A;padding:32px 40px;text-align:center;">
-            <span style="display:inline-block;background:#3B82F6;border-radius:8px;padding:8px 14px;">
-              <span style="color:#FFFFFF;font-size:18px;font-weight:700;letter-spacing:0.5px;">&#128737; WebVulnScanner</span>
-            </span>
-          </td>
-        </tr>
-
-        <!-- Body -->
-        <tr>
-          <td style="padding:40px 40px 32px;">
-            <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#0F172A;">Reset your password</h1>
-            <p style="margin:0 0 24px;font-size:15px;color:#64748B;line-height:1.6;">
-              Hi <strong style="color:#0F172A;">{username}</strong>, we received a request to reset the password for your account.
-            </p>
-            <table width="100%" cellpadding="0" cellspacing="0">
-              <tr><td align="center" style="padding:8px 0 28px;">
-                <a href="{reset_link}"
-                   style="display:inline-block;background:#3B82F6;color:#FFFFFF;text-decoration:none;
-                          font-size:15px;font-weight:600;padding:14px 32px;border-radius:8px;
-                          letter-spacing:0.2px;">
-                  Reset Password
-                </a>
-              </td></tr>
-            </table>
-            <p style="margin:0 0 12px;font-size:13px;color:#94A3B8;line-height:1.6;">
-              Or copy this link into your browser:
-            </p>
-            <p style="margin:0 0 24px;font-size:12px;word-break:break-all;
-                      background:#F8FAFC;border:1px solid #E2E8F0;border-radius:6px;
-                      padding:10px 14px;color:#475569;">
-              {reset_link}
-            </p>
-            <hr style="border:none;border-top:1px solid #E2E8F0;margin:0 0 24px;">
-            <p style="margin:0;font-size:13px;color:#94A3B8;line-height:1.6;">
-              This link expires in 30 minutes. If you didn't request a password reset, you can safely ignore this email — your password won't change.
-            </p>
-          </td>
-        </tr>
-
-        <!-- Footer -->
-        <tr>
-          <td style="background:#F8FAFC;border-top:1px solid #E2E8F0;padding:20px 40px;text-align:center;">
-            <p style="margin:0;font-size:12px;color:#94A3B8;">
-              &copy; 2026 WebVulnScanner &nbsp;&middot;&nbsp; You're receiving this because a reset was requested for your account.
-            </p>
-          </td>
-        </tr>
-
-      </table>
-    </td></tr>
-  </table>
-</body>
-</html>"""
+def _build_verify_link(token: str) -> str:
+    return f"{settings.frontend_base_url.rstrip('/')}/verify-email?token={token}"
 
 
 def _send_reset_email(email: str, username: str, reset_link: str) -> None:
-    smtp_user = current_app.config.get("SMTP_USER")
-    smtp_password = current_app.config.get("SMTP_PASSWORD")
-    smtp_from = current_app.config.get("SMTP_FROM_EMAIL")
-
+    smtp_user = settings.smtp_user
+    smtp_password = settings.smtp_password
+    smtp_from = settings.smtp_from_email
     if not smtp_user or not smtp_password or not smtp_from:
         raise RuntimeError("SMTP credentials are not configured")
+    html = _build_reset_email_html(username, reset_link)
+    msg = EmailMessage()
+    msg["Subject"] = "Reset your LaunchGuard password"
+    msg["From"] = smtp_from
+    msg["To"] = email
+    msg.set_content(f"Hi {username},\n\nReset your password: {reset_link}\n\nExpires in 30 minutes.")
+    msg.add_alternative(html, subtype="html")
+    with smtplib.SMTP(settings.smtp_host, settings.smtp_port) as s:
+        s.ehlo()
+        if settings.smtp_use_tls:
+            s.starttls(); s.ehlo()
+        s.login(smtp_user, smtp_password)
+        s.send_message(msg)
 
-    message = EmailMessage()
-    message["Subject"] = "Reset your WebVulnScanner password"
-    message["From"] = smtp_from
-    message["To"] = email
-    message.set_content(
-        "\n".join(
-            [
-                f"Hello {username},",
-                "",
-                "We received a request to reset your WebVulnScanner password.",
-                f"Use this link to choose a new password: {reset_link}",
-                "",
-                "This link expires in 30 minutes. If you did not request this reset, you can ignore this email.",
-            ]
-        )
-    )
-    message.add_alternative(_build_reset_email_html(username, reset_link), subtype="html")
 
-    with smtplib.SMTP(current_app.config["SMTP_HOST"], current_app.config["SMTP_PORT"]) as smtp:
-        smtp.ehlo()
-        if current_app.config["SMTP_USE_TLS"]:
-            smtp.starttls()
-            smtp.ehlo()
-        smtp.login(smtp_user, smtp_password)
-        smtp.send_message(message)
-
-def _build_verify_link(token: str) -> str:
-    base_url = current_app.config["FRONTEND_BASE_URL"].rstrip("/")
-    return f"{base_url}/verify-email?token={token}"
+def _build_reset_email_html(username: str, reset_link: str) -> str:
+    return f"""<!DOCTYPE html><html lang="en"><body style="font-family:Arial,sans-serif;background:#F1F5F9;padding:40px 16px;">
+<table width="100%" style="max-width:520px;margin:0 auto;background:#fff;border-radius:12px;padding:40px;">
+<tr><td><h1 style="color:#0F172A">Reset your password</h1>
+<p>Hi <strong>{username}</strong>, click the button below to reset your password.</p>
+<a href="{reset_link}" style="display:inline-block;background:#3B82F6;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:600;">Reset Password</a>
+<p style="color:#94A3B8;font-size:13px;margin-top:24px">Expires in 30 minutes. If you didn't request this, ignore this email.</p>
+</td></tr></table></body></html>"""
 
 
 def _send_verification_email(email: str, username: str, verify_link: str) -> None:
-    smtp_user = current_app.config.get("SMTP_USER")
-    smtp_password = current_app.config.get("SMTP_PASSWORD")
-    smtp_from = current_app.config.get("SMTP_FROM_EMAIL")
-
+    smtp_user = settings.smtp_user
+    smtp_password = settings.smtp_password
+    smtp_from = settings.smtp_from_email
     if not smtp_user or not smtp_password or not smtp_from:
         raise RuntimeError("SMTP credentials are not configured")
-
-    html = f"""<!DOCTYPE html>
-<html lang="en">
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
-<body style="margin:0;padding:0;background:#F1F5F9;font-family:'Inter',Arial,sans-serif;">
-  <table width="100%" cellpadding="0" cellspacing="0" style="background:#F1F5F9;padding:40px 16px;">
-    <tr><td align="center">
-      <table width="100%" style="max-width:520px;background:#FFFFFF;border-radius:12px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.08);">
-        <tr><td style="background:#0F172A;padding:32px 40px;text-align:center;">
-          <span style="display:inline-block;background:#3B82F6;border-radius:8px;padding:8px 14px;">
-            <span style="color:#FFFFFF;font-size:18px;font-weight:700;letter-spacing:0.5px;">WebVulnScanner</span>
-          </span>
-        </td></tr>
-        <tr><td style="padding:40px 40px 32px;">
-          <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#0F172A;">Verify your email</h1>
-          <p style="margin:0 0 24px;font-size:15px;color:#64748B;line-height:1.6;">
-            Hi <strong style="color:#0F172A;">{username}</strong>, confirm your email address to activate your account.
-          </p>
-          <table width="100%" cellpadding="0" cellspacing="0">
-            <tr><td align="center" style="padding:8px 0 28px;">
-              <a href="{verify_link}" style="display:inline-block;background:#3B82F6;color:#FFFFFF;text-decoration:none;font-size:15px;font-weight:600;padding:14px 32px;border-radius:8px;">
-                Verify Email
-              </a>
-            </td></tr>
-          </table>
-          <p style="margin:0 0 12px;font-size:13px;color:#94A3B8;">Or copy this link into your browser:</p>
-          <p style="margin:0 0 24px;font-size:12px;word-break:break-all;background:#F8FAFC;border:1px solid #E2E8F0;border-radius:6px;padding:10px 14px;color:#475569;">
-            {verify_link}
-          </p>
-          <hr style="border:none;border-top:1px solid #E2E8F0;margin:0 0 24px;">
-          <p style="margin:0;font-size:13px;color:#94A3B8;">This link expires in 24 hours. If you did not create this account you can ignore this email.</p>
-        </td></tr>
-        <tr><td style="background:#F8FAFC;border-top:1px solid #E2E8F0;padding:20px 40px;text-align:center;">
-          <p style="margin:0;font-size:12px;color:#94A3B8;">&copy; 2026 WebVulnScanner</p>
-        </td></tr>
-      </table>
-    </td></tr>
-  </table>
-</body>
-</html>"""
-
-    message = EmailMessage()
-    message["Subject"] = "Verify your WebVulnScanner email address"
-    message["From"] = smtp_from
-    message["To"] = email
-    message.set_content(f"Hi {username},\n\nVerify your email: {verify_link}\n\nThis link expires in 24 hours.")
-    message.add_alternative(html, subtype="html")
-
-    with smtplib.SMTP(current_app.config["SMTP_HOST"], current_app.config["SMTP_PORT"]) as smtp:
-        smtp.ehlo()
-        if current_app.config["SMTP_USE_TLS"]:
-            smtp.starttls()
-            smtp.ehlo()
-        smtp.login(smtp_user, smtp_password)
-        smtp.send_message(message)
+    html = f"""<!DOCTYPE html><html lang="en"><body style="font-family:Arial,sans-serif;background:#F1F5F9;padding:40px 16px;">
+<table width="100%" style="max-width:520px;margin:0 auto;background:#fff;border-radius:12px;padding:40px;">
+<tr><td><h1 style="color:#0F172A">Verify your email</h1>
+<p>Hi <strong>{username}</strong>, confirm your email to activate your account.</p>
+<a href="{verify_link}" style="display:inline-block;background:#3B82F6;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:600;">Verify Email</a>
+<p style="color:#94A3B8;font-size:13px;margin-top:24px">Expires in 24 hours.</p>
+</td></tr></table></body></html>"""
+    msg = EmailMessage()
+    msg["Subject"] = "Verify your LaunchGuard email"
+    msg["From"] = smtp_from
+    msg["To"] = email
+    msg.set_content(f"Hi {username},\n\nVerify your email: {verify_link}\n\nExpires in 24 hours.")
+    msg.add_alternative(html, subtype="html")
+    with smtplib.SMTP(settings.smtp_host, settings.smtp_port) as s:
+        s.ehlo()
+        if settings.smtp_use_tls:
+            s.starttls(); s.ehlo()
+        s.login(smtp_user, smtp_password)
+        s.send_message(msg)
 
 
-@bp.route('/verify-email/confirm', methods=['POST'])
-@limiter.limit("20 per hour")
-def confirm_email_verification():
-    data = request.get_json(silent=True) or {}
-    token = (data.get('token') or '').strip()
+def _create_access_token(user_id: int) -> tuple[str, int]:
+    expires_in = 3600
+    exp = datetime.now(timezone.utc) + timedelta(seconds=expires_in)
+    token = pyjwt.encode(
+        {"sub": str(user_id), "exp": exp},
+        settings.effective_jwt_secret_key,
+        algorithm="HS256",
+    )
+    return token, expires_in
+
+
+def _set_auth_cookies(response: Response, token: str) -> None:
+    secure = settings.app_env.lower() == "production"
+    response.set_cookie(
+        "access_token_cookie", token, httponly=True,
+        samesite="lax", secure=secure, path="/",
+    )
+    response.set_cookie(
+        "csrf_access_token", token[-32:],
+        httponly=False, samesite="lax", secure=secure, path="/",
+    )
+
+
+def _unset_auth_cookies(response: Response) -> None:
+    response.delete_cookie("access_token_cookie", path="/")
+    response.delete_cookie("csrf_access_token", path="/")
+
+
+def _user_dict(user: User) -> dict:
+    return {
+        "id": user.id,
+        "username": user.username,
+        "email": user.email,
+        "role": user.role,
+        "is_admin": user.is_admin,
+        "email_verified": user.email_verified,
+        "created_on": user.created_on.isoformat() if user.created_on else None,
+        "scan_limit": user.scan_limit,
+        "monitor_limit": user.monitor_limit,
+    }
+
+
+# ── email verification ───────────────────────────────────────────────────────
+
+@router.post("/verify-email/confirm")
+async def confirm_email_verification(request: Request):
+    data = await request.json() if request.headers.get("content-type", "").startswith("application/json") else {}
+    token = (data.get("token") or "").strip()
     if not token:
-        return jsonify({'error': 'Verification token is required'}), 400
-
-    token_hash = _hash_reset_token(token)
+        raise HTTPException(400, "Verification token is required")
+    token_hash = _hash_token(token)
     user = User.query.filter_by(verification_token_hash=token_hash).first()
-    if (
-        not user
-        or not user.verification_token_expires_at
-        or user.verification_token_expires_at < utc_now()
-    ):
-        return jsonify({'error': 'Invalid or expired verification link'}), 400
-
+    if not user or not user.verification_token_expires_at or user.verification_token_expires_at < utc_now():
+        raise HTTPException(400, "Invalid or expired verification link")
     user.email_verified = True
     user.verification_token_hash = None
     user.verification_token_expires_at = None
     db.session.commit()
-    return jsonify({'message': 'Email verified successfully'}), 200
+    return {"message": "Email verified successfully"}
 
 
-@bp.route('/verify-email/resend', methods=['POST'])
-@jwt_required()
-@limiter.limit("3 per hour")
-def resend_verification_email():
-    user = get_current_user()
+@router.post("/verify-email/resend", status_code=200)
+def resend_verification_email(user: Annotated[User, Depends(current_user)]):
     if user.email_verified:
-        return jsonify({'message': 'Email already verified'}), 200
-
+        return {"message": "Email already verified"}
     raw_token = secrets.token_urlsafe(32)
-    user.verification_token_hash = _hash_reset_token(raw_token)
+    user.verification_token_hash = _hash_token(raw_token)
     user.verification_token_expires_at = utc_now() + timedelta(hours=24)
     db.session.commit()
-
     try:
         _send_verification_email(user.email, user.username, _build_verify_link(raw_token))
     except Exception:
-        current_app.logger.exception("Failed to send verification email")
-        return jsonify({'error': 'Could not send verification email'}), 500
-
-    return jsonify({'message': 'Verification email sent'}), 200
+        raise HTTPException(500, "Could not send verification email")
+    return {"message": "Verification email sent"}
 
 
-@bp.route('/register', methods=['POST'])
-@limiter.limit("5 per hour")
-def register():
+# ── register / login / logout ────────────────────────────────────────────────
+
+@router.post("/register", status_code=201)
+async def register(request: Request):
     try:
-        payload = AuthRegisterPayload.model_validate(request.get_json(silent=True) or {})
-        username = payload.username
-        password = payload.password
-        email = payload.email.lower()
-        
-        if User.query.filter_by(username=username).first():
-            return jsonify({'error': 'Username already taken'}), 400
-        if User.query.filter_by(email=email).first():
-            return jsonify({'error': 'Email address already registered'}), 400
-            
-        raw_token = secrets.token_urlsafe(32)
-        user = User(username=username, email=email)
-        user.set_password(password)
-        user.verification_token_hash = _hash_reset_token(raw_token)
-        user.verification_token_expires_at = utc_now() + timedelta(hours=24)
+        data = await request.json()
+        payload = AuthRegisterPayload.model_validate(data)
+    except (ValidationError, Exception) as exc:
+        raise HTTPException(400, str(exc))
 
-        db.session.add(user)
+    if User.query.filter_by(username=payload.username).first():
+        raise HTTPException(400, "Username already taken")
+    if User.query.filter_by(email=payload.email.lower()).first():
+        raise HTTPException(400, "Email address already registered")
+
+    raw_token = secrets.token_urlsafe(32)
+    user = User(username=payload.username, email=payload.email.lower())
+    user.set_password(payload.password)
+    user.verification_token_hash = _hash_token(raw_token)
+    user.verification_token_expires_at = utc_now() + timedelta(hours=24)
+    db.session.add(user)
+    try:
         db.session.commit()
+    except Exception:
+        db.session.rollback()
+        raise HTTPException(500, "Unable to create account at this time")
 
+    try:
+        _send_verification_email(payload.email.lower(), payload.username, _build_verify_link(raw_token))
+    except Exception:
+        pass
+
+    return {"message": "Account created. Check your email to verify your address."}
+
+
+@router.post("/login")
+async def login(request: Request, response: Response):
+    try:
+        data = await request.json()
+        payload = AuthLoginPayload.model_validate(data)
+    except (ValidationError, Exception) as exc:
+        raise HTTPException(400, str(exc))
+
+    identifier = payload.identifier.strip()
+    user = (
+        User.query.filter_by(email=identifier.lower()).first()
+        if "@" in identifier
+        else User.query.filter_by(username=identifier).first()
+    )
+    if not user or not user.check_password(payload.password):
+        raise HTTPException(401, "Invalid credentials")
+
+    token, expires_in = _create_access_token(user.id)
+    _set_auth_cookies(response, token)
+    return {
+        "username": user.username,
+        "user_id": user.id,
+        "is_admin": user.is_admin,
+        "role": user.role,
+        "expires_in": expires_in,
+    }
+
+
+@router.post("/logout")
+def logout(response: Response):
+    _unset_auth_cookies(response)
+    return {"message": "Signed out successfully"}
+
+
+# ── password reset ───────────────────────────────────────────────────────────
+
+@router.post("/forgot-password")
+async def forgot_password(request: Request):
+    try:
+        data = await request.json()
+        payload = ForgotPasswordPayload.model_validate(data)
+    except Exception as exc:
+        raise HTTPException(400, str(exc))
+
+    user = User.query.filter_by(email=payload.email.lower()).first()
+    if user:
+        token = secrets.token_urlsafe(32)
+        user.reset_token_hash = _hash_token(token)
+        user.reset_requested_at = utc_now()
+        user.reset_token_expires_at = user.reset_requested_at + timedelta(
+            minutes=settings.reset_password_token_ttl_minutes
+        )
+        db.session.commit()
         try:
-            _send_verification_email(email, username, _build_verify_link(raw_token))
+            _send_reset_email(user.email, user.username, _build_reset_link(token))
         except Exception:
-            current_app.logger.warning("Could not send verification email to %s", email)
+            raise HTTPException(503, "Could not send reset email. Please try again later.")
 
-        return jsonify({'message': 'Account created. Check your email to verify your address.'}), 201
-    except ValidationError as exc:
-        return jsonify(_validation_error_payload(exc)), 400
-    except Exception:
-        db.session.rollback()
-        current_app.logger.exception("Failed to register user")
-        return jsonify({'error': 'Unable to create account at this time'}), 500
+    return {"message": "If the account exists, a password reset link will be sent shortly."}
 
-@bp.route('/login', methods=['POST'])
-@limiter.limit("10 per hour")
-def login():
+
+@router.post("/reset-password")
+async def reset_password(request: Request):
     try:
-        payload = AuthLoginPayload.model_validate(request.get_json(silent=True) or {})
-        identifier = payload.identifier.strip()
+        data = await request.json()
+        payload = ResetPasswordPayload.model_validate(data)
+    except Exception as exc:
+        raise HTTPException(400, str(exc))
 
-        if '@' in identifier:
-            user = User.query.filter_by(email=identifier.lower()).first()
-        else:
-            user = User.query.filter_by(username=identifier).first()
+    token_hash = _hash_token(payload.token)
+    user = User.query.filter_by(reset_token_hash=token_hash).first()
+    if not user or not user.reset_token_expires_at or user.reset_token_expires_at < utc_now():
+        raise HTTPException(400, "This password reset link is invalid or has expired")
 
-        if not user or not user.check_password(payload.password):
-            return jsonify({'error': 'Invalid credentials'}), 401
-
-        expires_in = int(current_app.config["JWT_ACCESS_TOKEN_EXPIRES"].total_seconds())
-        access_token = create_access_token(identity=str(user.id))
-        response = jsonify({
-            'username': user.username,
-            'user_id': user.id,
-            'is_admin': user.is_admin,
-            'expires_in': expires_in,
-        })
-        set_access_cookies(response, access_token)
-        return response, 200
-    except ValidationError as exc:
-        return jsonify(_validation_error_payload(exc)), 400
-    except Exception:
-        current_app.logger.exception("Failed to authenticate user")
-        return jsonify({'error': 'Unable to complete sign in at this time'}), 500
+    user.set_password(payload.password)
+    user.reset_token_hash = None
+    user.reset_token_expires_at = None
+    user.reset_requested_at = None
+    db.session.commit()
+    return {"message": "Password reset successfully"}
 
 
-@bp.route('/logout', methods=['POST'])
-@jwt_required()
-def logout():
-    response = jsonify({'message': 'Signed out successfully'})
-    unset_jwt_cookies(response)
-    return response, 200
+# ── profile ──────────────────────────────────────────────────────────────────
+
+@router.get("/profile")
+def get_profile(user: Annotated[User, Depends(current_user)]):
+    return {
+        "username": user.username,
+        "email": user.email,
+        "created_on": user.created_on.isoformat() if user.created_on else None,
+        "email_verified": user.email_verified,
+        "is_admin": user.is_admin,
+        "role": user.role,
+        "scan_limit": user.scan_limit,
+        "monitor_limit": user.monitor_limit,
+    }
 
 
-@bp.route('/forgot-password', methods=['POST'])
-@limiter.limit("5 per hour")
-def forgot_password():
-    try:
-        payload = ForgotPasswordPayload.model_validate(request.get_json(silent=True) or {})
-        user = User.query.filter_by(email=payload.email.lower()).first()
-
-        if user:
-            token = secrets.token_urlsafe(32)
-            user.reset_token_hash = _hash_reset_token(token)
-            user.reset_requested_at = utc_now()
-            user.reset_token_expires_at = user.reset_requested_at + timedelta(
-                minutes=current_app.config["RESET_PASSWORD_TOKEN_TTL_MINUTES"]
-            )
-            db.session.commit()
-            try:
-                _send_reset_email(user.email, user.username, _build_reset_link(token))
-            except Exception:
-                current_app.logger.exception("Failed to send password reset email")
-                return jsonify({'error': 'Could not send reset email. Please try again later.'}), 503
-
-        return jsonify(
-            {
-                'message': 'If the account exists, a password reset link will be sent shortly.'
-            }
-        ), 200
-    except ValidationError as exc:
-        return jsonify(_validation_error_payload(exc)), 400
-    except Exception:
-        db.session.rollback()
-        current_app.logger.exception("Failed to process forgot password request")
-        return jsonify({'error': 'Unable to process password reset request'}), 500
-
-
-@bp.route('/reset-password', methods=['POST'])
-@limiter.limit("10 per hour")
-def reset_password():
-    try:
-        payload = ResetPasswordPayload.model_validate(request.get_json(silent=True) or {})
-        token_hash = _hash_reset_token(payload.token)
-        user = User.query.filter_by(reset_token_hash=token_hash).first()
-
-        if (
-            not user
-            or not user.reset_token_expires_at
-            or user.reset_token_expires_at < utc_now()
-        ):
-            return jsonify({'error': 'This password reset link is invalid or has expired'}), 400
-
-        user.set_password(payload.password)
-        user.reset_token_hash = None
-        user.reset_token_expires_at = None
-        user.reset_requested_at = None
-        db.session.commit()
-
-        return jsonify({'message': 'Password reset successfully'}), 200
-    except ValidationError as exc:
-        return jsonify(_validation_error_payload(exc)), 400
-    except Exception:
-        db.session.rollback()
-        current_app.logger.exception("Failed to reset password")
-        return jsonify({'error': 'Unable to reset password at this time'}), 500
-
-@bp.route('/profile', methods=['GET'])
-@jwt_required()
-def get_profile():
-    user = get_current_user()
-    if not user:
-        return jsonify({'error': 'User not found'}), 404
-    
-    return jsonify({
-        'username': user.username,
-        'email': user.email,
-        'created_on': user.created_on.isoformat(),
-        'email_verified': user.email_verified,
-        'is_admin': user.is_admin,
-    }), 200
-
-@bp.route('/profile', methods=['PATCH'])
-@jwt_required()
-@limiter.limit("10 per hour")
-def update_profile():
-    user = get_current_user()
-    if not user:
-        return jsonify({'error': 'User not found'}), 404
-
-    data = request.get_json(silent=True) or {}
-    username = (data.get('username') or '').strip()
-    current_password = data.get('current_password', '')
-    new_password = data.get('new_password', '')
+@router.patch("/profile")
+async def update_profile(request: Request, user: Annotated[User, Depends(current_user)]):
+    data = await request.json() if request.headers.get("content-type", "").startswith("application/json") else {}
+    username = (data.get("username") or "").strip()
+    current_password = data.get("current_password", "")
+    new_password = data.get("new_password", "")
 
     if username and username != user.username:
-        if len(username) < 3 or len(username) > 50:
-            return jsonify({'error': 'Username must be between 3 and 50 characters'}), 400
+        if not (3 <= len(username) <= 50):
+            raise HTTPException(400, "Username must be between 3 and 50 characters")
         if User.query.filter(User.username == username, User.id != user.id).first():
-            return jsonify({'error': 'Username already taken'}), 400
+            raise HTTPException(400, "Username already taken")
         user.username = username
 
     if new_password:
         if len(new_password) < 8:
-            return jsonify({'error': 'New password must be at least 8 characters'}), 400
+            raise HTTPException(400, "New password must be at least 8 characters")
         if not current_password or not user.check_password(current_password):
-            return jsonify({'error': 'Current password is incorrect'}), 400
+            raise HTTPException(400, "Current password is incorrect")
         user.set_password(new_password)
 
     try:
         db.session.commit()
-        return jsonify({'message': 'Profile updated successfully', 'username': user.username}), 200
+        return {"message": "Profile updated successfully", "username": user.username}
     except Exception:
         db.session.rollback()
-        current_app.logger.exception("Failed to update profile")
-        return jsonify({'error': 'Unable to update profile'}), 500
+        raise HTTPException(500, "Unable to update profile")
 
 
-@bp.route('/users', methods=['GET'])
-@jwt_required()
-def get_users():
-    current_user = get_current_user()
-    if not current_user:
-        return jsonify({'error': 'User not found'}), 404
-    
-    if not current_user.is_admin:
-        return jsonify({'error': 'Unauthorized'}), 403
-        
-    users = User.query.all()
-    users_data = [{
-        'id': user.id,
-        'username': user.username,
-        'email': user.email,
-        'created_on': user.created_on.isoformat()
-    } for user in users]
-    
-    return jsonify(users_data), 200
+# ── admin: user management ───────────────────────────────────────────────────
+
+@router.get("/users")
+def get_users(
+    admin: Annotated[User, Depends(require_admin)],
+    page: int = 1,
+    per_page: int = 50,
+    request: Request = None,
+):
+    per_page = min(per_page, 200)
+    query = User.query.order_by(User.created_on.desc())
+    total = query.count()
+    users = query.offset((page - 1) * per_page).limit(per_page).all()
+    return {"users": [_user_dict(u) for u in users], "total": total, "page": page, "per_page": per_page}
+
+
+@router.patch("/admin/users/{user_id}/role")
+async def set_user_role(
+    user_id: int,
+    request: Request,
+    admin: Annotated[User, Depends(require_admin)],
+):
+    target = db.session.get(User, user_id)
+    if not target:
+        raise HTTPException(404, "User not found")
+    if target.id == admin.id:
+        raise HTTPException(400, "Cannot change your own role")
+    data = await request.json() if request.headers.get("content-type", "").startswith("application/json") else {}
+    new_role = (data.get("role") or "").strip()
+    if new_role not in ROLES:
+        raise HTTPException(400, f"Invalid role. Must be one of: {', '.join(ROLES)}")
+    target.role = new_role
+    try:
+        db.session.commit()
+        return {"message": f"Role updated to {new_role}", "user": _user_dict(target)}
+    except Exception:
+        db.session.rollback()
+        raise HTTPException(500, "Unable to update role")
+
+
+@router.get("/admin/tiers")
+def get_tier_config(admin: Annotated[User, Depends(require_admin)]):
+    return {
+        "tiers": [
+            {
+                "role": role,
+                "scan_limit_per_hour": ROLE_SCAN_LIMITS.get(role),
+                "monitor_limit": ROLE_MONITOR_LIMITS.get(role),
+            }
+            for role in ROLES
+        ]
+    }

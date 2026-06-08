@@ -3,28 +3,23 @@ from __future__ import annotations
 import hashlib
 import secrets
 from datetime import timedelta
+from typing import Annotated
 from urllib.parse import urljoin
 
 import requests
 from bs4 import BeautifulSoup
-from flask import Blueprint, current_app, jsonify, request
-from flask_jwt_extended import jwt_required
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import ValidationError
 
-from app import db, limiter
-from app.auth import get_current_user
-from app.models import VerifiedTarget
+from app import db
+from app.auth import current_user
+from app.models import User, VerifiedTarget
 from app.schemas import VerifiedTargetCreatePayload
-from app.utils.scan_helpers import (
-    extract_target_hostname,
-    extract_target_origin,
-    normalize_target_url,
-    validate_target_redirect,
-)
+from app.settings import settings
+from app.utils.scan_helpers import extract_target_hostname, extract_target_origin, normalize_target_url, validate_target_redirect
 from app.utils.time_utils import utc_now
 
-
-bp = Blueprint("targets", __name__)
+router = APIRouter()
 
 _META_NAME = "wvs-site-verification"
 
@@ -39,51 +34,31 @@ def _generate_token() -> str:
 
 def _build_instructions(method: str, token: str, origin: str) -> dict:
     if method == "well_known_file":
-        return {
-            "method": "well_known_file",
-            "path": "/.well-known/wvs-site-verification.txt",
-            "content": token,
-            "verification_url": f"{origin}/.well-known/wvs-site-verification.txt",
-        }
-
-    return {
-        "method": "meta_tag",
-        "tag": f'<meta name="{_META_NAME}" content="{token}" />',
-        "placement": "Add the meta tag inside the <head> element of the submitted site.",
-        "verification_url": origin,
-    }
+        return {"method": "well_known_file", "path": "/.well-known/wvs-site-verification.txt",
+                "content": token, "verification_url": f"{origin}/.well-known/wvs-site-verification.txt"}
+    return {"method": "meta_tag", "tag": f'<meta name="{_META_NAME}" content="{token}" />',
+            "placement": "Add the meta tag inside the <head> element.", "verification_url": origin}
 
 
 def _serialize_target(target: VerifiedTarget) -> dict:
     data = target.to_dict()
     data.pop("verification_token", None)
-    data["requires_verification_for_scans"] = current_app.config.get("REQUIRE_VERIFIED_TARGETS", False)
-    # Include live instructions whenever a token is stored and not yet verified
+    data["requires_verification_for_scans"] = settings.require_verified_targets
     if target.verification_token and target.verification_status != "verified":
-        data["instructions"] = _build_instructions(
-            target.verification_method,
-            target.verification_token,
-            extract_target_origin(target.target_url),
-        )
+        data["instructions"] = _build_instructions(target.verification_method, target.verification_token, extract_target_origin(target.target_url))
     else:
         data["instructions"] = None
     return data
 
 
 def _fetch_verification_response(url: str, expected_hostname: str) -> tuple[str, str]:
-    timeout = current_app.config["TARGET_VERIFICATION_TIMEOUT_SECONDS"]
-    max_bytes = current_app.config["TARGET_VERIFICATION_MAX_BYTES"]
-    max_redirects = current_app.config["TARGET_VERIFICATION_MAX_REDIRECTS"]
+    timeout = settings.target_verification_timeout_seconds
+    max_bytes = settings.target_verification_max_bytes
+    max_redirects = settings.target_verification_max_redirects
     current_url = validate_target_redirect(url, expected_hostname)
 
     for redirect_count in range(max_redirects + 1):
-        response = requests.get(
-            current_url,
-            timeout=timeout,
-            allow_redirects=False,
-            stream=True,
-            headers={"User-Agent": "WVS-TargetVerification/1.0"},
-        )
+        response = requests.get(current_url, timeout=timeout, allow_redirects=False, stream=True, headers={"User-Agent": "WVS-TargetVerification/1.0"})
         if response.is_redirect or response.is_permanent_redirect:
             if redirect_count >= max_redirects:
                 response.close()
@@ -95,12 +70,10 @@ def _fetch_verification_response(url: str, expected_hostname: str) -> tuple[str,
             current_url = validate_target_redirect(urljoin(current_url, location), expected_hostname)
             response.close()
             continue
-
         declared_length = response.headers.get("Content-Length")
         if declared_length and int(declared_length) > max_bytes:
             response.close()
             raise ValueError("Verification response exceeded allowed size")
-
         chunks: list[bytes] = []
         total = 0
         for chunk in response.iter_content(chunk_size=8192):
@@ -129,45 +102,31 @@ def _verify_meta_tag(target: VerifiedTarget, raw_token: str) -> None:
 
 def _verify_well_known_file(target: VerifiedTarget, raw_token: str) -> None:
     origin = extract_target_origin(target.target_url)
-    verification_url = f"{origin}/.well-known/wvs-site-verification.txt"
-    body, _ = _fetch_verification_response(verification_url, target.normalized_domain)
+    body, _ = _fetch_verification_response(f"{origin}/.well-known/wvs-site-verification.txt", target.normalized_domain)
     if body.strip() != raw_token:
         raise ValueError("Verification token did not match")
 
 
 def _verification_expiry():
-    return utc_now() + timedelta(hours=current_app.config["TARGET_VERIFICATION_TOKEN_TTL_HOURS"])
+    return utc_now() + timedelta(hours=settings.target_verification_token_ttl_hours)
 
 
-@bp.route("/targets", methods=["POST"])
-@jwt_required()
-@limiter.limit("20 per hour")
-def create_target():
+@router.post("/targets", status_code=201)
+async def create_target(request: Request, user: Annotated[User, Depends(current_user)]):
     try:
-        user = get_current_user()
-        if not user:
-            return jsonify({"error": "User not found"}), 404
-
-        payload = VerifiedTargetCreatePayload.model_validate(request.get_json(silent=True) or {})
+        data = await request.json()
+        payload = VerifiedTargetCreatePayload.model_validate(data)
         target_url = normalize_target_url(payload.target_url)
         normalized_domain = extract_target_hostname(target_url)
         raw_token = _generate_token()
 
-        target = VerifiedTarget.query.filter_by(
-            user_id=user.id,
-            normalized_domain=normalized_domain,
-        ).first()
+        target = VerifiedTarget.query.filter_by(user_id=user.id, normalized_domain=normalized_domain).first()
         status_code = 200
         if not target:
             target = VerifiedTarget(
-                user_id=user.id,
-                target_url=target_url,
-                normalized_domain=normalized_domain,
-                verification_method=payload.verification_method,
-                verification_token_hash=_hash_token(raw_token),
-                verification_token=raw_token,
-                verification_status="pending",
-                token_expires_at=_verification_expiry(),
+                user_id=user.id, target_url=target_url, normalized_domain=normalized_domain,
+                verification_method=payload.verification_method, verification_token_hash=_hash_token(raw_token),
+                verification_token=raw_token, verification_status="pending", token_expires_at=_verification_expiry(),
             )
             db.session.add(target)
             status_code = 201
@@ -181,64 +140,38 @@ def create_target():
             target.token_expires_at = _verification_expiry()
 
         db.session.commit()
-
-        return jsonify(
-            {
-                "status": "success",
-                "target": _serialize_target(target),
-                "verification_token": raw_token,
-                "instructions": _build_instructions(
-                    target.verification_method,
-                    raw_token,
-                    extract_target_origin(target.target_url),
-                ),
-            }
-        ), status_code
+        from fastapi.responses import JSONResponse
+        return JSONResponse(
+            status_code=status_code,
+            content={"status": "success", "target": _serialize_target(target), "verification_token": raw_token,
+                     "instructions": _build_instructions(target.verification_method, raw_token, extract_target_origin(target.target_url))},
+        )
     except (ValidationError, ValueError) as exc:
-        return jsonify({"error": str(exc)}), 400
+        raise HTTPException(400, str(exc))
     except Exception:
         db.session.rollback()
-        current_app.logger.exception("Failed to create verification target")
-        return jsonify({"error": "Unable to create verification target"}), 500
+        raise HTTPException(500, "Unable to create verification target")
 
 
-@bp.route("/targets", methods=["GET"])
-@jwt_required()
-def list_targets():
-    user = get_current_user()
-    if not user:
-        return jsonify({"error": "User not found"}), 404
-
+@router.get("/targets")
+def list_targets(user: Annotated[User, Depends(current_user)]):
     targets = VerifiedTarget.query.filter_by(user_id=user.id).order_by(VerifiedTarget.created_at.desc()).all()
-    return jsonify({"status": "success", "targets": [_serialize_target(target) for target in targets]}), 200
+    return {"status": "success", "targets": [_serialize_target(t) for t in targets]}
 
 
-@bp.route("/targets/<string:target_id>", methods=["GET"])
-@jwt_required()
-def get_target(target_id: str):
-    user = get_current_user()
-    if not user:
-        return jsonify({"error": "User not found"}), 404
-
+@router.get("/targets/{target_id}")
+def get_target(target_id: str, user: Annotated[User, Depends(current_user)]):
     target = VerifiedTarget.query.filter_by(public_id=target_id).first_or_404()
     if target.user_id != user.id and not user.is_admin:
-        return jsonify({"error": "Unauthorized"}), 403
+        raise HTTPException(403, "Unauthorized")
+    return {"status": "success", "target": _serialize_target(target)}
 
-    return jsonify({"status": "success", "target": _serialize_target(target)}), 200
 
-
-@bp.route("/targets/<string:target_id>/verification-token", methods=["POST"])
-@jwt_required()
-@limiter.limit("10 per hour")
-def regenerate_verification_token(target_id: str):
-    user = get_current_user()
-    if not user:
-        return jsonify({"error": "User not found"}), 404
-
+@router.post("/targets/{target_id}/verification-token")
+def regenerate_verification_token(target_id: str, user: Annotated[User, Depends(current_user)]):
     target = VerifiedTarget.query.filter_by(public_id=target_id).first_or_404()
     if target.user_id != user.id and not user.is_admin:
-        return jsonify({"error": "Unauthorized"}), 403
-
+        raise HTTPException(403, "Unauthorized")
     raw_token = _generate_token()
     target.verification_token_hash = _hash_token(raw_token)
     target.verification_token = raw_token
@@ -246,45 +179,28 @@ def regenerate_verification_token(target_id: str):
     target.verified_at = None
     target.token_expires_at = _verification_expiry()
     db.session.commit()
-
-    return jsonify(
-        {
-            "status": "success",
-            "target": _serialize_target(target),
-            "verification_token": raw_token,
-            "instructions": _build_instructions(
-                target.verification_method,
-                raw_token,
-                extract_target_origin(target.target_url),
-            ),
-        }
-    ), 200
+    return {"status": "success", "target": _serialize_target(target), "verification_token": raw_token,
+            "instructions": _build_instructions(target.verification_method, raw_token, extract_target_origin(target.target_url))}
 
 
-@bp.route("/targets/<string:target_id>/verify", methods=["POST"])
-@jwt_required()
-@limiter.limit("20 per hour")
-def verify_target(target_id: str):
-    user = get_current_user()
-    if not user:
-        return jsonify({"error": "User not found"}), 404
-
+@router.post("/targets/{target_id}/verify")
+async def verify_target(target_id: str, request: Request, user: Annotated[User, Depends(current_user)]):
     target = VerifiedTarget.query.filter_by(public_id=target_id).first_or_404()
     if target.user_id != user.id and not user.is_admin:
-        return jsonify({"error": "Unauthorized"}), 403
-
+        raise HTTPException(403, "Unauthorized")
     if target.token_expires_at < utc_now():
         target.verification_status = "expired"
         db.session.commit()
-        return jsonify({"error": "Verification token has expired"}), 400
+        raise HTTPException(400, "Verification token has expired")
 
-    raw_token = (request.get_json(silent=True) or {}).get("token", "").strip()
+    data = await request.json() if request.headers.get("content-type", "").startswith("application/json") else {}
+    raw_token = (data.get("token") or "").strip()
     if not raw_token:
-        return jsonify({"error": "Verification token is required"}), 400
+        raise HTTPException(400, "Verification token is required")
     if _hash_token(raw_token) != target.verification_token_hash:
         target.verification_status = "failed"
         db.session.commit()
-        return jsonify({"error": "Verification token did not match"}), 400
+        raise HTTPException(400, "Verification token did not match")
 
     try:
         if target.verification_method == "well_known_file":
@@ -292,32 +208,24 @@ def verify_target(target_id: str):
         else:
             _verify_meta_tag(target, raw_token)
     except requests.RequestException:
-        current_app.logger.exception("Verification request failed")
-        return jsonify({"error": "Could not fetch target for verification"}), 502
+        raise HTTPException(502, "Could not fetch target for verification")
     except ValueError as exc:
         target.verification_status = "failed"
         db.session.commit()
-        return jsonify({"error": str(exc)}), 400
+        raise HTTPException(400, str(exc))
 
     target.verification_status = "verified"
     target.verified_at = utc_now()
     target.verification_token = None
     db.session.commit()
+    return {"status": "success", "target": _serialize_target(target)}
 
-    return jsonify({"status": "success", "target": _serialize_target(target)}), 200
 
-
-@bp.route("/targets/<string:target_id>", methods=["DELETE"])
-@jwt_required()
-def delete_target(target_id: str):
-    user = get_current_user()
-    if not user:
-        return jsonify({"error": "User not found"}), 404
-
+@router.delete("/targets/{target_id}")
+def delete_target(target_id: str, user: Annotated[User, Depends(current_user)]):
     target = VerifiedTarget.query.filter_by(public_id=target_id).first_or_404()
     if target.user_id != user.id and not user.is_admin:
-        return jsonify({"error": "Unauthorized"}), 403
-
+        raise HTTPException(403, "Unauthorized")
     db.session.delete(target)
     db.session.commit()
-    return jsonify({"status": "success", "message": "Target deleted"}), 200
+    return {"status": "success", "message": "Target deleted"}

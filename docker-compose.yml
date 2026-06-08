@@ -31,6 +31,11 @@ x-backend-env: &backend-env
   CLAMAV_ENABLED: ${CLAMAV_ENABLED:-false}
   SECURITY_SCAN_QUEUE: ${SECURITY_SCAN_QUEUE:-security_scans}
   UX_SCAN_QUEUE: ${UX_SCAN_QUEUE:-ux_scans}
+  AI_SCAN_QUEUE: ${AI_SCAN_QUEUE:-ai_scans}
+  SENTRY_DSN: ${SENTRY_DSN:-}
+  VISUAL_AI_PROVIDER: ${VISUAL_AI_PROVIDER:-}
+  VISUAL_AI_BASE_URL: ${VISUAL_AI_BASE_URL:-http://ollama:11434/v1}
+  VISUAL_AI_MODEL: ${VISUAL_AI_MODEL:-}
 
 x-backend-service: &backend-service
   image: wvs-backend:local
@@ -58,11 +63,11 @@ services:
     ports:
       - "${FRONTEND_PORT:-8080}:80"
     depends_on:
-      backend:
+      api:
         condition: service_healthy
     restart: unless-stopped
 
-  backend:
+  api:
     <<: *backend-service
     build:
       context: ./wvs_backend
@@ -83,7 +88,7 @@ services:
       --loglevel=${CELERY_LOG_LEVEL:-info}
       --concurrency=${SECURITY_WORKER_CONCURRENCY:-2}
     depends_on:
-      backend:
+      api:
         condition: service_healthy
       redis:
         condition: service_healthy
@@ -99,7 +104,22 @@ services:
       --loglevel=${CELERY_LOG_LEVEL:-info}
       --concurrency=${UX_WORKER_CONCURRENCY:-1}
     depends_on:
-      backend:
+      api:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      db:
+        condition: service_healthy
+
+  worker-ai:
+    <<: *backend-service
+    command: >
+      uv run celery -A app.celery_app:celery_app worker
+      -Q ${AI_SCAN_QUEUE:-ai_scans}
+      --loglevel=${CELERY_LOG_LEVEL:-info}
+      --concurrency=${AI_WORKER_CONCURRENCY:-1}
+    depends_on:
+      api:
         condition: service_healthy
       redis:
         condition: service_healthy
@@ -113,7 +133,7 @@ services:
       --loglevel=${CELERY_LOG_LEVEL:-info}
       --schedule=/app/instance/celerybeat-schedule
     depends_on:
-      backend:
+      api:
         condition: service_healthy
       redis:
         condition: service_healthy
@@ -164,8 +184,40 @@ services:
       retries: 20
     restart: unless-stopped
 
+  ollama:
+    image: ollama/ollama:latest
+    profiles: ["ollama"]
+    volumes:
+      - ollama_data:/root/.ollama
+    ports:
+      - "${OLLAMA_PORT:-11434}:11434"
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2-alpine
+    profiles: ["edge"]
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+    command: >
+      caddy reverse-proxy
+      --from ${PUBLIC_ORIGIN:-:80}
+      --to frontend:80
+    depends_on:
+      frontend:
+        condition: service_started
+      api:
+        condition: service_healthy
+    volumes:
+      - caddy_data:/data
+      - caddy_config:/config
+    restart: unless-stopped
+
 volumes:
   backend_instance:
   backend_reports:
   db_data:
   redis_data:
+  ollama_data:
+  caddy_data:
+  caddy_config:

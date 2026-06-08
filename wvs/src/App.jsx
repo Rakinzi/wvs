@@ -1,7 +1,7 @@
 import React, { Suspense } from 'react';
 import { ThemeContext, useThemeProvider } from './hooks/useTheme';
 import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate, useLocation, useParams } from 'react-router-dom';
-import { clearSession, getSessionIsAdmin, getSessionUsername, isAuthenticated, updateSession } from './lib/auth';
+import { clearSession, getSessionIsAdmin, getSessionRole, getSessionUsername, isAuthenticated, updateSession } from './lib/auth';
 import { apiJson } from './lib/api';
 import Sidebar from './components/Sidebar';
 const Dashboard = React.lazy(() => import('./components/Dashboard'));
@@ -20,6 +20,7 @@ const UptimeMonitors = React.lazy(() => import('./components/UptimeMonitors'));
 const LandingPage = React.lazy(() => import('./components/LandingPage'));
 const NewsPage = React.lazy(() => import('./components/NewsPage'));
 const NewsAdmin = React.lazy(() => import('./components/NewsAdmin'));
+const AdminUsers = React.lazy(() => import('./components/AdminUsers'));
 const TermsOfService = React.lazy(() => import('./components/TermsOfService'));
 const PrivacyPolicy = React.lazy(() => import('./components/PrivacyPolicy'));
 
@@ -74,7 +75,7 @@ const AdminRoute = ({ children }) => {
     apiJson('/profile', { auth: true })
       .then(({ data }) => {
         const next = Boolean(data?.is_admin);
-        updateSession({ isAdmin: next });
+        updateSession({ isAdmin: next, role: data?.role || 'free' });
         setIsAdmin(next);
       })
       .catch(() => setIsAdmin(false));
@@ -115,7 +116,7 @@ const Layout = ({ children }) => {
     apiJson('/profile', { auth: true })
       .then(({ data }) => {
         const next = Boolean(data?.is_admin);
-        updateSession({ isAdmin: next });
+        updateSession({ isAdmin: next, role: data?.role || 'free' });
         setIsAdmin(next);
       })
       .catch(() => {});
@@ -136,6 +137,7 @@ const Layout = ({ children }) => {
     const path = location.pathname;
     if (path === '/') return 'dashboard';
     if (path.startsWith('/report')) return 'report';
+    if (path.startsWith('/admin/users')) return 'admin/users';
     if (path.startsWith('/news/admin')) return 'news/admin';
     if (path.startsWith('/news')) return 'news';
     return path.replace('/', '');
@@ -389,6 +391,16 @@ const App = () => {
           </Layout>
         } />
 
+        <Route path="/admin/users" element={
+          <Layout>
+            <ProtectedRoute>
+              <AdminRoute>
+                <AdminUsers />
+              </AdminRoute>
+            </ProtectedRoute>
+          </Layout>
+        } />
+
         <Route path="/" element={
           <Layout>
             <HomeRoute />
@@ -430,7 +442,9 @@ const App = () => {
         <Route path="/blockedSites" element={
           <Layout>
             <ProtectedRoute>
-              <BlockedSitesWrapper />
+              <AdminRoute>
+                <BlockedSitesWrapper />
+              </AdminRoute>
             </ProtectedRoute>
           </Layout>
         } />

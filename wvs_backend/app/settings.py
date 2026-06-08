@@ -97,6 +97,7 @@ class AppSettings(BaseSettings):
     lighthouse_timeout_seconds: int = Field(default=90, alias="LIGHTHOUSE_TIMEOUT_SECONDS")
     security_scan_queue: str = Field(default="security_scans", alias="SECURITY_SCAN_QUEUE")
     ux_scan_queue: str = Field(default="ux_scans", alias="UX_SCAN_QUEUE")
+    ai_scan_queue: str = Field(default="ai_scans", alias="AI_SCAN_QUEUE")
     ux_scan_rate_limit: str = Field(default="10/h", alias="UX_SCAN_RATE_LIMIT")
     scan_result_retention_days: int = Field(default=90, alias="SCAN_RESULT_RETENTION_DAYS")
     screenshot_retention_days: int = Field(default=30, alias="SCREENSHOT_RETENTION_DAYS")
@@ -157,6 +158,8 @@ class AppSettings(BaseSettings):
     zap_active_scan_max_minutes: int = Field(default=4, alias="ZAP_ACTIVE_SCAN_MAX_MINUTES")
     zap_auto_start: bool = Field(default=False, alias="ZAP_AUTO_START")
     zap_start_cmd: str | None = Field(default=None, alias="ZAP_START_CMD")
+    sentry_dsn: str | None = Field(default=None, alias="SENTRY_DSN")
+    sentry_traces_sample_rate: float = Field(default=0.0, alias="SENTRY_TRACES_SAMPLE_RATE")
 
     @property
     def effective_jwt_secret_key(self) -> str | None:
