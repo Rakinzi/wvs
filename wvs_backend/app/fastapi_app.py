@@ -1,17 +1,20 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+import secrets
 
 import sentry_sdk
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
+from fastapi.responses import JSONResponse
 from sentry_sdk.integrations.celery import CeleryIntegration
 from sentry_sdk.integrations.fastapi import FastApiIntegration
 
 from app import db
 from app.config import get_config
 from app.settings import settings
+from app.rate_limit import RateLimiter
 
 
 def _init_sentry() -> None:
@@ -71,11 +74,34 @@ def create_fastapi_app() -> FastAPI:
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
         allow_headers=["Authorization", "Content-Type", "X-CSRF-TOKEN"],
     )
+    rate_limiter = RateLimiter(settings.ratelimit_storage_uri)
 
     @app.middleware("http")
     async def session_and_security(request: Request, call_next):
         try:
+            if request.method not in {"GET", "HEAD", "OPTIONS"} and request.cookies.get("access_token_cookie"):
+                csrf_cookie = request.cookies.get("csrf_access_token")
+                csrf_header = request.headers.get("X-CSRF-TOKEN")
+                if not csrf_cookie or not csrf_header or not secrets.compare_digest(csrf_cookie, csrf_header):
+                    response = JSONResponse({"detail": "CSRF token missing or invalid"}, status_code=403)
+                    _security_headers(response)
+                    return response
+
+            limit = rate_limiter.limit_for(request)
+            if limit:
+                allowed, remaining, retry_after = rate_limiter.check(request, limit)
+                if not allowed:
+                    response = JSONResponse(
+                        {"detail": "Too many requests"},
+                        status_code=429,
+                        headers={"Retry-After": str(retry_after), "X-RateLimit-Remaining": "0"},
+                    )
+                    _security_headers(response)
+                    return response
             response = await call_next(request)
+            if limit:
+                response.headers["X-RateLimit-Limit"] = str(limit.requests)
+                response.headers["X-RateLimit-Remaining"] = str(remaining)
             _security_headers(response)
             return response
         finally:

@@ -1,15 +1,32 @@
 from __future__ import annotations
 
 from datetime import timedelta
+from contextlib import nullcontext
 from pathlib import Path
 import sys
 
+import httpx
 import pytest
+from fastapi.testclient import TestClient
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from app import create_app, db
+from app import db
+from app.fastapi_app import create_fastapi_app
 from app.models import User
+from app.settings import settings
+
+
+# Keep the assertions readable while the test suite uses FastAPI's httpx client.
+if not hasattr(httpx.Response, "get_json"):
+    def _get_json(response: httpx.Response):
+        payload = response.json()
+        if isinstance(payload, dict) and "detail" in payload:
+            payload.setdefault("error", payload["detail"])
+            payload.setdefault("message", payload["detail"])
+        return payload
+
+    httpx.Response.get_json = _get_json
 
 
 @pytest.fixture()
@@ -140,19 +157,42 @@ def app(tmp_path: Path):
             reports_dir.mkdir(parents=True, exist_ok=True)
             cache_path.parent.mkdir(parents=True, exist_ok=True)
 
-    app = create_app(TestConfig)
-    app.config.update(TESTING=True)
+    setting_overrides = {
+        "database_url": TestConfig.SQLALCHEMY_DATABASE_URI,
+        "secret_key": TestConfig.SECRET_KEY,
+        "jwt_secret_key": TestConfig.JWT_SECRET_KEY,
+        "frontend_base_url": TestConfig.FRONTEND_BASE_URL,
+        "allow_private_scan_targets": TestConfig.ALLOW_PRIVATE_SCAN_TARGETS,
+        "require_verified_targets": TestConfig.REQUIRE_VERIFIED_TARGETS,
+        "security_headers_enabled": TestConfig.SECURITY_HEADERS_ENABLED,
+        "report_folder": TestConfig.REPORT_FOLDER,
+        "ux_scan_screenshot_dir": TestConfig.UX_SCAN_SCREENSHOT_DIR,
+        "malware_temp_dir": TestConfig.MALWARE_TEMP_DIR,
+        "yara_rules_dir": TestConfig.YARA_RULES_DIR,
+        "lighthouse_enabled": TestConfig.LIGHTHOUSE_ENABLED,
+        "external_tools_enabled": False,
+    }
+    original_settings = {name: getattr(settings, name) for name in setting_overrides}
+    for name, value in setting_overrides.items():
+        setattr(settings, name, value)
 
-    with app.app_context():
-        db.create_all()
-        yield app
-        db.session.remove()
-        db.drop_all()
+    app = create_fastapi_app()
+    app.config = {"TESTING": True}
+    app.app_context = nullcontext
+    db.init_db(TestConfig.SQLALCHEMY_DATABASE_URI)
+    db.create_all()
+    yield app
+    db.session.remove()
+    db.drop_all()
+    for name, value in original_settings.items():
+        setattr(settings, name, value)
 
 
 @pytest.fixture()
 def client(app):
-    return app.test_client()
+    # The fixture initializes an isolated database explicitly; entering the
+    # TestClient context would run the production lifespan and rebind it.
+    return TestClient(app)
 
 
 @pytest.fixture()
@@ -178,6 +218,6 @@ def auth_client(client, user):
 
 @pytest.fixture()
 def auth_headers(auth_client):
-    csrf_cookie = auth_client.get_cookie("csrf_access_token")
+    csrf_cookie = auth_client.cookies.get("csrf_access_token")
     assert csrf_cookie is not None
-    return {"X-CSRF-TOKEN": csrf_cookie.value}
+    return {"X-CSRF-TOKEN": csrf_cookie}

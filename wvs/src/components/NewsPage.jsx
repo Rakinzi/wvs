@@ -186,7 +186,6 @@ const ArticleDetail = ({ article, onBack }) => {
 
 const NewsPage = ({ navigateTo, isAuthenticated }) => {
   const [articles, setArticles] = useState([]);
-  const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [pages, setPages] = useState(1);
   const [loading, setLoading] = useState(true);
@@ -218,7 +217,6 @@ const NewsPage = ({ navigateTo, isAuthenticated }) => {
       const { data } = await apiJson(`/news?${params}`);
       const payload = data.data;
       setArticles(payload.articles);
-      setTotal(payload.total);
       setPage(payload.page);
       setPages(payload.pages);
       if (Array.isArray(payload.categories)) {

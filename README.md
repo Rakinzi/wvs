@@ -5,7 +5,7 @@ WVS is a full-stack website security and product-readiness platform. It combines
 The repository is split into:
 
 - `wvs/`: React SPA for authentication, dashboarding, scan setup, history, and report viewing
-- `wvs_backend/`: Flask API, Celery jobs, persistence, scanner modules, and PDF report generation
+- `wvs_backend/`: FastAPI API, Celery jobs, persistence, scanner modules, and PDF report generation
 
 ## Current Capabilities
 
@@ -52,8 +52,8 @@ Backend:
 ```bash
 cd wvs_backend
 uv sync
-uv run flask --app manage.py db upgrade
-uv run flask --app manage.py run
+uv run alembic -c migrations/alembic.ini upgrade head
+uv run uvicorn asgi:app --host 0.0.0.0 --port 5001 --reload
 ```
 
 Celery worker:
@@ -91,7 +91,7 @@ uv run playwright install chromium
 The repository includes a Docker Compose setup for the full stack:
 
 - `frontend`: Vite production build served by Nginx
-- `backend`: Flask API served by Gunicorn
+- `backend`: FastAPI API served by Uvicorn
 - `worker-security`: Celery worker for security scans
 - `worker-ux`: Celery worker for Playwright-backed UX scans
 - `beat`: Celery beat scheduler
@@ -178,7 +178,7 @@ Artifact cleanup:
 
 ```bash
 cd wvs_backend
-uv run flask --app manage.py cleanup-report-artifacts --dry-run
+uv run python manage.py cleanup-report-artifacts --dry-run
 ```
 
 Lighthouse setup:

@@ -89,7 +89,7 @@ const deltaLabel = (value) => {
 };
 
 /* Collapsible section */
-const Section = ({ id, label, subLabel, icon: Icon, iconColor, iconBg, expanded, onToggle, children }) => (
+const Section = ({ id, label, subLabel, iconColor, expanded, onToggle, children }) => (
   <div id={`report-section-${id}`} className="card overflow-hidden scroll-mt-24">
     <button onClick={() => onToggle(id)}
       className="w-full flex items-center justify-between px-5 py-4 cursor-pointer transition-colors"
@@ -378,7 +378,6 @@ const ScanReport = ({ scanId, navigateTo }) => {
   const VerdictIcon = verdictInfo.icon;
   const scanProfile = findings.scan_profile || 'full_scan';
   const isSecurityScan = scanProfile === 'full_scan' || scanProfile === 'full_launch_audit' || scanProfile === 'security_only';
-  const isUxScan = scanProfile === 'product_readiness' || scanProfile === 'full_launch_audit';
   const comparison = report.comparison || null;
 
   const hasSql       = findings.sqli && findings.sqli.length > 0;

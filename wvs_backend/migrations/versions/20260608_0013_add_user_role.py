@@ -22,6 +22,7 @@ def _column_exists(table: str, column: str) -> bool:
 
 
 def upgrade():
+    bind = op.get_bind()
     if not _column_exists("user", "role"):
         op.add_column(
             "user",
@@ -29,17 +30,9 @@ def upgrade():
         )
         op.create_index("ix_user_role", "user", ["role"], unique=False)
 
-    # Promote existing is_admin=True rows to role='admin'
-    op.execute(
-        "UPDATE \"user\" SET role = 'admin' WHERE role = 'free' AND id IN "
-        "(SELECT id FROM \"user\" WHERE role = 'free')"
-    )
-    # The above is a no-op pattern — actual promotion via raw SQL:
-    bind = op.get_bind()
+    table_name = "`user`" if bind.dialect.name == "mysql" else '"user"'
     try:
-        bind.execute(
-            sa.text("UPDATE \"user\" SET role = 'admin' WHERE is_admin = TRUE AND role = 'free'")
-        )
+        bind.execute(sa.text(f"UPDATE {table_name} SET role = 'admin' WHERE is_admin = TRUE AND role = 'free'"))
     except Exception:
         # is_admin column may not exist if dropped; skip gracefully
         pass

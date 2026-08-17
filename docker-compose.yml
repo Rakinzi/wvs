@@ -1,6 +1,7 @@
 x-backend-env: &backend-env
   APP_ENV: ${APP_ENV:-development}
   PORT: 5001
+  WEB_CONCURRENCY: ${WEB_CONCURRENCY:-1}
   DATABASE_URL: ${DATABASE_URL:-mysql+pymysql://wvs:wvs_password@db:3306/wvs}
   SECRET_KEY: ${SECRET_KEY:-dev-secret-key-change-me}
   JWT_SECRET_KEY: ${JWT_SECRET_KEY:-dev-jwt-secret-change-me}

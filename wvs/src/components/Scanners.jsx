@@ -8,7 +8,6 @@ import {
 import { useScansData } from '../hooks/useScansData';
 import { useVerifiedTargetsData } from '../hooks/useVerifiedTargetsData';
 import { apiDateMs, formatApiDateTime, formatApiTime } from '../lib/time';
-import { apiJson } from '../lib/api';
 import Spinner from './Spinner';
 
 const V = {
@@ -117,7 +116,7 @@ const VulnBadge = ({ vulnerable, label }) => (
   </span>
 );
 
-const FindingItem = ({ color, bg, icon, title, meta }) => (
+const FindingItem = ({ color, title, meta }) => (
   <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '8px 12px', borderLeft: `2px solid ${color}`, background: 'var(--color-surface)' }}>
     <div style={{ minWidth: 0, flex: 1 }}>
       <p style={{ fontSize: 11, fontWeight: 600, color, fontFamily: "var(--font-mono)" }}>{title}</p>
@@ -304,7 +303,7 @@ const Scanners = ({ navigateTo }) => {
     exposureScanUrl, setExposureScanUrl, malwareScanUrl, setMalwareScanUrl,
     isFullScanSubmitting, isSqlScanning, isSslScanning, isWordpressScanning,
     isXssScanning, isTechScanning, isExposureScanning, isMalwareScanning,
-    fullScanJob, setFullScanJob, sqlScanResult, sslScanResult, wordpressScanResult,
+    fullScanJob, sqlScanResult, sslScanResult, wordpressScanResult,
     xssScanResult, techScanResult, exposureScanResult, malwareScanResult,
     fullScanError, sqlError, sslError, wordpressError, xssError, techError, exposureError, malwareError,
     handleFullScan, handleSqlScan, handleSslScan, handleWordpressScan,

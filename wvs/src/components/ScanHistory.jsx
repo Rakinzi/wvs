@@ -85,12 +85,14 @@ const ScoreBadge = ({ score }) => {
 const CompareView = ({ ids, onClose }) => {
   const [reports, setReports] = useState([null, null]);
   const [loading, setLoading] = useState(true);
+  const idKey = ids.join(',');
 
   useEffect(() => {
-    Promise.all(ids.map(id => apiJson(`/report/${id}?format=json`, { auth: true }).then(r => r.data)))
+    const reportIds = idKey.split(',').filter(Boolean);
+    Promise.all(reportIds.map(id => apiJson(`/report/${id}?format=json`, { auth: true }).then(r => r.data)))
       .then(data => { setReports(data); setLoading(false); })
       .catch(() => setLoading(false));
-  }, [ids.join(',')]);
+  }, [idKey]);
 
   const fmtShort = (d) => new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 

@@ -42,7 +42,7 @@ const CodeBlock = ({ value }) => {
       await navigator.clipboard.writeText(value);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
-    } catch {}
+    } catch { /* Clipboard access can be unavailable in non-secure contexts. */ }
   };
   return (
     <div className="rounded-lg overflow-hidden" style={{ border: '1px solid var(--color-border-subtle)', background: 'var(--color-elevated)' }}>

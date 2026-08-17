@@ -8,9 +8,6 @@ from celery import Celery
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Query, declarative_base, declared_attr, relationship, scoped_session, sessionmaker
 
-from app.config import get_config
-
-
 class CompatQuery(Query):
     def first_or_404(self):
         value = self.first()
@@ -85,20 +82,8 @@ class SQLAlchemyCompat:
         return value
 
 
-class _Limiter:
-    """No-op rate limiter shim — real limiting is done at the FastAPI layer."""
-    def limit(self, *args, **kwargs):
-        def decorator(fn):
-            return fn
-        return decorator
-
-    def init_app(self, *args, **kwargs):
-        pass
-
-
 db = SQLAlchemyCompat()
 celery: Celery | None = None
-limiter = _Limiter()
 
 
 def init_celery(config):

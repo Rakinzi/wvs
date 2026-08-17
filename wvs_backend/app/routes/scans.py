@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import FileResponse, JSONResponse
 
 from app.auth import current_user
-from app.models import ScanJob, ScanResult, VerifiedTarget, ROLE_SCAN_LIMITS
+from app.models import ScanJob, ScanResult, User, VerifiedTarget
 from app.settings import settings
 from app.scanners import SecurityScanner
 from app.schemas import ScanRequestPayload
@@ -23,7 +23,7 @@ from app.utils.scan_helpers import (
 from app.utils.scan_comparison import build_scan_comparison
 from app.utils.reports import generate_report
 from app.utils.ux_screenshot_manager import collect_screenshot_paths
-from app import db, init_celery, limiter
+from app import db, init_celery
 from app.config import get_config
 from pydantic import ValidationError
 from app.utils.time_utils import utc_now, utc_now_isoformat
@@ -448,7 +448,7 @@ def _find_previous_scan_for_comparison(scan: ScanResult) -> ScanResult | None:
             return candidate
     return candidates[0] if candidates else None
 
-@router.post("/scan")
+@router.post("/scan", status_code=202)
 async def start_scan(request: Request, user: Annotated['User', Depends(current_user)]):
     try:
 
@@ -711,9 +711,7 @@ def get_scan_job(job_id: str, user: Annotated['User', Depends(current_user)]):
 
 
 @router.get("/scan/jobs")
-def list_scan_jobs(user: Annotated['User', Depends(current_user)], limit: int = Query(default=20, ge=1, le=100), request: Request = None):
-
-    limit = request.args.get('limit', 20, type=int)
+def list_scan_jobs(user: Annotated[User, Depends(current_user)], limit: int = Query(default=20, ge=1, le=100)):
     job_ids = [
         row.id
         for row in ScanJob.query.with_entities(ScanJob.id)
@@ -870,7 +868,7 @@ def get_report_asset(scan_id: str, asset_name: str, user: Annotated['User', Depe
     return FileResponse(target_path, media_type="image/png")
 
 @router.get("/scans/history")
-def get_scan_history(user: Annotated['User', Depends(current_user)], limit: int = Query(default=20, ge=1, le=200), request: Request = None):
+def get_scan_history(user: Annotated[User, Depends(current_user)], limit: int = Query(default=20, ge=1, le=200)):
     try:
             
         scans = DBManager.get_user_scans(user.id, limit)

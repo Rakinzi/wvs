@@ -119,7 +119,7 @@ const StatCard = ({ icon: Icon, label, value, sub, danger, warn, secure }) => {
 };
 
 /* ── Activity row ── */
-const ActivityRow = ({ icon: Icon, iconBg, iconColor, primary, badge, badgeColor, meta, onAction }) => (
+const ActivityRow = ({ icon: Icon, iconColor, primary, badge, badgeColor, meta, onAction }) => (
   <div
     className="flex items-center gap-3 px-4 py-2.5 transition-colors duration-100 group"
     style={{

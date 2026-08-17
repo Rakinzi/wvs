@@ -35,7 +35,42 @@ const parseErrorMessage = (data, fallbackMessage) => {
     return fallbackMessage;
   }
 
-  return data.message || data.error || fallbackMessage;
+  const detail = data.detail;
+
+  if (typeof data.message === 'string' && data.message.trim()) {
+    return data.message;
+  }
+
+  if (typeof data.error === 'string' && data.error.trim()) {
+    return data.error;
+  }
+
+  if (typeof detail === 'string' && detail.trim()) {
+    return detail;
+  }
+
+  if (Array.isArray(detail)) {
+    const messages = detail
+      .map((issue) => {
+        if (typeof issue === 'string') return issue;
+        if (!issue || typeof issue !== 'object') return null;
+
+        const field = Array.isArray(issue.loc)
+          ? issue.loc.filter((part) => !['body', 'query', 'path'].includes(part)).join('.')
+          : '';
+        const message = issue.msg || issue.message;
+
+        if (!message) return null;
+        return field ? `${field}: ${message}` : message;
+      })
+      .filter(Boolean);
+
+    if (messages.length) {
+      return messages.join('; ');
+    }
+  }
+
+  return fallbackMessage;
 };
 
 const handleUnauthorized = () => {

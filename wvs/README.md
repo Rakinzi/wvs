@@ -42,7 +42,7 @@ npm run build
 
 ## Backend Expectations
 
-The SPA expects the Flask backend to expose:
+The SPA expects the FastAPI backend to expose:
 
 - cookie-based JWT auth
 - CSRF support via `X-CSRF-TOKEN`

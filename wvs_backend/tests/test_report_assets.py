@@ -5,6 +5,7 @@ from pathlib import Path
 
 from app import db
 from app.models import ScanResult
+from app.settings import settings
 
 
 def test_report_json_rewrites_screenshot_paths_to_asset_urls(auth_client, user, app, tmp_path: Path):
@@ -48,8 +49,9 @@ def test_report_json_rewrites_screenshot_paths_to_asset_urls(auth_client, user, 
     assert evidence["screenshot_url"] == f"/report/{scan_id}/assets/{screenshot.name}"
 
 
-def test_report_asset_requires_scan_owner(auth_client, user, app, tmp_path: Path):
-    screenshot = tmp_path / "issue.png"
+def test_report_asset_requires_scan_owner(auth_client, user, app):
+    screenshot = Path(settings.ux_scan_screenshot_dir) / "issue.png"
+    screenshot.parent.mkdir(parents=True, exist_ok=True)
     screenshot.write_bytes(b"fake-image")
 
     with app.app_context():
@@ -71,4 +73,4 @@ def test_report_asset_requires_scan_owner(auth_client, user, app, tmp_path: Path
 
     response = auth_client.get(f"/report/{scan_id}/assets/{screenshot.name}")
     assert response.status_code == 200
-    assert response.data == b"fake-image"
+    assert response.content == b"fake-image"

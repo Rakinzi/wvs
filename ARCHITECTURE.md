@@ -2,13 +2,13 @@
 
 ## Overview
 
-WVS is a React + Flask + Celery application that stores scan jobs and results, generates PDF reports, and exposes report JSON that the SPA renders directly.
+LaunchGuard is a React + FastAPI + Celery application that stores scan jobs and results, generates PDF reports, and exposes report JSON that the SPA renders directly.
 
 Flow:
 
 ```txt
 React SPA
-  -> Flask API routes
+  -> FastAPI routes
   -> scanner modules / Celery full-scan task
   -> normalized findings + summary + sections
   -> ScanResult persistence + PDF generation
@@ -39,9 +39,10 @@ Main backend paths live in `wvs_backend/app/`.
 
 Important modules:
 
-- `__init__.py`: Flask app factory, extensions, blueprint registration, security headers, JWT config
+- `fastapi_app.py`: FastAPI app factory, router registration, CORS, CSRF enforcement, rate limiting, and security headers
+- `__init__.py`: SQLAlchemy and Celery compatibility layer used by models and workers
 - `models.py`: `User`, `ScanJob`, `ScanResult`, `MaliciousSite`, `BlockedRequest`, `VerifiedTarget`
-- `schemas.py`: request validation contracts for auth, scans, malicious URLs, and verified targets
+- `schemas.py`: Pydantic request validation contracts for auth, scans, malicious URLs, and verified targets
 - `routes/scans.py`: scan launch, job status, report APIs, report asset serving, history, deletion
 - `routes/targets.py`: verified target ownership lifecycle
 - `routes/dashboard.py`: dashboard metrics

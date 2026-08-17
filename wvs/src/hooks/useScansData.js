@@ -216,7 +216,7 @@ export const useScansData = ({ onScanComplete } = {}) => {
     } finally {
       setIsFullScanSubmitting(false);
     }
-  }, [fullScanActiveCheckBudget, fullScanActiveCheckPaths, fullScanAuthAccounts, fullScanEnableActiveChecks, fullScanEnableAiReview, fullScanIdorPaths, fullScanPagePaths, fullScanProfile, fullScanProtectedPaths, fullScanUrl, fullScanVerifiedTargetId, onScanComplete]);
+  }, [fullScanActiveCheckBudget, fullScanActiveCheckPaths, fullScanAuthAccounts, fullScanEnableActiveChecks, fullScanEnableAiReview, fullScanIdorPaths, fullScanPagePaths, fullScanProfile, fullScanProtectedPaths, fullScanUrl, fullScanVerifiedTargetId, onScanComplete, setFullScanJob]);
 
   const handleSqlScan = useCallback(async () => {
     if (!sqlScanUrl) { setSqlError('Please enter a URL to scan'); return; }
@@ -249,7 +249,7 @@ export const useScansData = ({ onScanComplete } = {}) => {
     } finally {
       setIsSqlScanning(false);
     }
-  }, [fullScanEnableActiveChecks, fullScanVerifiedTargetId, sqlScanUrl, onScanComplete]);
+  }, [fullScanEnableActiveChecks, fullScanVerifiedTargetId, sqlScanUrl, onScanComplete, setSqlScanResult]);
 
   const handleSslScan = useCallback(async () => {
     if (!sslScanUrl) { setSslError('Please enter a URL to scan'); return; }
@@ -277,7 +277,7 @@ export const useScansData = ({ onScanComplete } = {}) => {
     } finally {
       setIsSslScanning(false);
     }
-  }, [sslScanUrl, onScanComplete]);
+  }, [sslScanUrl, onScanComplete, setSslScanResult]);
 
   const handleWordpressScan = useCallback(async () => {
     if (!wordpressScanUrl) { setWordpressError('Please enter a URL to scan'); return; }
@@ -310,7 +310,7 @@ export const useScansData = ({ onScanComplete } = {}) => {
     } finally {
       setIsWordpressScanning(false);
     }
-  }, [fullScanEnableActiveChecks, fullScanVerifiedTargetId, wordpressScanUrl, onScanComplete]);
+  }, [fullScanEnableActiveChecks, fullScanVerifiedTargetId, wordpressScanUrl, onScanComplete, setWordpressScanResult]);
 
   const handleXssScan = useCallback(async () => {
     if (!xssScanUrl) { setXssError('Please enter a URL to scan'); return; }
@@ -339,7 +339,7 @@ export const useScansData = ({ onScanComplete } = {}) => {
     } finally {
       setIsXssScanning(false);
     }
-  }, [xssScanUrl, onScanComplete]);
+  }, [xssScanUrl, onScanComplete, setXssScanResult]);
 
   const handleTechScan = useCallback(async () => {
     if (!techScanUrl) { setTechError('Please enter a URL to scan'); return; }
@@ -368,7 +368,7 @@ export const useScansData = ({ onScanComplete } = {}) => {
     } finally {
       setIsTechScanning(false);
     }
-  }, [techScanUrl, onScanComplete]);
+  }, [techScanUrl, onScanComplete, setTechScanResult]);
 
   const handleExposureScan = useCallback(async () => {
     if (!exposureScanUrl) { setExposureError('Please enter a URL to scan'); return; }
@@ -401,7 +401,7 @@ export const useScansData = ({ onScanComplete } = {}) => {
     } finally {
       setIsExposureScanning(false);
     }
-  }, [exposureScanUrl, fullScanEnableActiveChecks, fullScanVerifiedTargetId, onScanComplete]);
+  }, [exposureScanUrl, fullScanEnableActiveChecks, fullScanVerifiedTargetId, onScanComplete, setExposureScanResult]);
 
   const handleMalwareScan = useCallback(async () => {
     if (!malwareScanUrl) { setMalwareError('Please enter a URL to scan'); return; }
@@ -430,7 +430,7 @@ export const useScansData = ({ onScanComplete } = {}) => {
     } finally {
       setIsMalwareScanning(false);
     }
-  }, [malwareScanUrl, onScanComplete]);
+  }, [malwareScanUrl, onScanComplete, setMalwareScanResult]);
 
   return {
     fullScanUrl, setFullScanUrl, fullScanProfile, setFullScanProfile,

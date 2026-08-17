@@ -7,6 +7,10 @@ wvs_backend/instance/*.sqlite-*
 wvs_backend/.env
 wvs/.env
 .env.docker
+wvs_backend/reports/*.pdf
+wvs_backend/app/reports/*.pdf
+wvs_backend/app/reports/screenshots/
+wvs_backend/app/reports/malware/
 __pycache__/
 *.py[cod]
 wvs_backend/**/__pycache__/

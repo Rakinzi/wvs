@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 from app import db
 from app.models import VerifiedTarget
 from app.routes import scans as scans_routes
+from app.settings import settings
 from app.utils.scan_helpers import build_scan_sections, build_scan_summary
 
 
@@ -53,7 +54,7 @@ def test_build_scan_sections_includes_product_readiness_sections():
 
 
 def test_product_readiness_scan_requires_verified_target_when_enabled(auth_client, auth_headers, app, user, monkeypatch):
-    app.config["REQUIRE_VERIFIED_TARGETS"] = True
+    monkeypatch.setattr(settings, "require_verified_targets", True)
 
     response = auth_client.post(
         "/scan",
@@ -65,8 +66,8 @@ def test_product_readiness_scan_requires_verified_target_when_enabled(auth_clien
     assert "verified target" in response.get_json()["message"].lower()
 
 
-def test_active_checks_require_verified_target_even_when_global_gate_disabled(auth_client, auth_headers, app):
-    app.config["REQUIRE_VERIFIED_TARGETS"] = False
+def test_active_checks_require_verified_target_even_when_global_gate_disabled(auth_client, auth_headers, app, monkeypatch):
+    monkeypatch.setattr(settings, "require_verified_targets", False)
 
     response = auth_client.post(
         "/scan",
@@ -83,7 +84,7 @@ def test_active_checks_require_verified_target_even_when_global_gate_disabled(au
 
 
 def test_product_readiness_scan_queues_when_verified_target_exists(auth_client, auth_headers, app, user, monkeypatch):
-    app.config["REQUIRE_VERIFIED_TARGETS"] = True
+    monkeypatch.setattr(settings, "require_verified_targets", True)
 
     with app.app_context():
         target = VerifiedTarget(

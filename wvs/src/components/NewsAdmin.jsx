@@ -262,7 +262,6 @@ const NewsAdmin = ({ navigateTo }) => {
 
   const handleEditLoad = async (article) => {
     try {
-      const { data } = await apiJson(`/news/admin/all?page=1&per_page=1`, { auth: true });
       const full = await apiJson(`/news/${article.slug}`, { auth: false }).catch(() => ({ data: article }));
       setEditing({ ...article, body: full.data?.body || '' });
       setIsNew(false);

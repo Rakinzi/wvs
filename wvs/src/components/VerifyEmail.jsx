@@ -6,13 +6,13 @@ import Spinner from './Spinner';
 
 const VerifyEmail = () => {
   const [searchParams] = useSearchParams();
+  const token = searchParams.get('token');
   const navigate = useNavigate();
   const [status, setStatus] = useState('verifying'); // verifying | success | error | no_token
   const [message, setMessage] = useState('');
 
   useEffect(() => {
     document.title = 'Verify Email — LaunchGuard';
-    const token = searchParams.get('token');
     if (!token) { setStatus('no_token'); return; }
 
     apiJson('/verify-email/confirm', { method: 'POST', json: true, body: { token } })
@@ -21,7 +21,7 @@ const VerifyEmail = () => {
         setMessage(err instanceof ApiError ? err.message : 'Verification failed');
         setStatus('error');
       });
-  }, []);
+  }, [token]);
 
   return (
     <div className="min-h-screen flex items-center justify-center px-4" style={{ background: 'var(--color-bg)' }}>

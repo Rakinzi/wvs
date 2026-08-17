@@ -11,12 +11,14 @@ const geoCache = new Map();
 const useGeoLookup = (ips) => {
   const [geoMap, setGeoMap] = useState({});
   const pendingRef = useRef(new Set());
+  const ipKey = ips.join(',');
 
   useEffect(() => {
-    const unique = [...new Set(ips)].filter(ip => ip && ip !== 'Unknown' && !geoCache.has(ip) && !pendingRef.current.has(ip));
+    const currentIps = ipKey.split(',').filter(Boolean);
+    const unique = [...new Set(currentIps)].filter(ip => ip !== 'Unknown' && !geoCache.has(ip) && !pendingRef.current.has(ip));
     if (!unique.length) {
       const snapshot = {};
-      ips.forEach(ip => { if (ip && geoCache.has(ip)) snapshot[ip] = geoCache.get(ip); });
+      currentIps.forEach(ip => { if (geoCache.has(ip)) snapshot[ip] = geoCache.get(ip); });
       setGeoMap(snapshot);
       return;
     }
@@ -30,10 +32,10 @@ const useGeoLookup = (ips) => {
       )
     ).then(() => {
       const snapshot = {};
-      ips.forEach(ip => { if (ip && geoCache.has(ip)) snapshot[ip] = geoCache.get(ip); });
+      currentIps.forEach(ip => { if (geoCache.has(ip)) snapshot[ip] = geoCache.get(ip); });
       setGeoMap(snapshot);
     });
-  }, [ips.join(',')]);
+  }, [ipKey]);
 
   return geoMap;
 };
@@ -110,7 +112,7 @@ const BlockedAccess = ({ navigateTo }) => {
   const domainStats = useMemo(() => {
     const map = new Map();
     blockedRequests.forEach(r => {
-      try { const d = new URL(r.url).hostname; map.set(d, (map.get(d) || 0) + 1); } catch {}
+      try { const d = new URL(r.url).hostname; map.set(d, (map.get(d) || 0) + 1); } catch { /* Ignore malformed recorded URLs. */ }
     });
     return [...map].sort((a, b) => b[1] - a[1]).slice(0, 5);
   }, [blockedRequests]);

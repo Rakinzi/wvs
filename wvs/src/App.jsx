@@ -1,7 +1,7 @@
 import React, { Suspense } from 'react';
 import { ThemeContext, useThemeProvider } from './hooks/useTheme';
 import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate, useLocation, useParams } from 'react-router-dom';
-import { clearSession, getSessionIsAdmin, getSessionRole, getSessionUsername, isAuthenticated, updateSession } from './lib/auth';
+import { clearSession, getSessionIsAdmin, getSessionUsername, isAuthenticated, updateSession } from './lib/auth';
 import { apiJson } from './lib/api';
 import Sidebar from './components/Sidebar';
 const Dashboard = React.lazy(() => import('./components/Dashboard'));

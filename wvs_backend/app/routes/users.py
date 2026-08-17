@@ -29,6 +29,17 @@ def _hash_token(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
+def _validation_message(exc: ValidationError) -> str:
+    messages = []
+    for issue in exc.errors():
+        field = ".".join(str(part) for part in issue.get("loc", []) if part != "body")
+        message = issue.get("msg", "Invalid value")
+        if message.startswith("Value error, "):
+            message = message.removeprefix("Value error, ")
+        messages.append(f"{field}: {message}" if field else message)
+    return "; ".join(messages) or "The submitted information is invalid"
+
+
 def _build_reset_link(token: str) -> str:
     return f"{settings.frontend_base_url.rstrip('/')}/reset-password?token={token}"
 
@@ -178,8 +189,10 @@ async def register(request: Request):
     try:
         data = await request.json()
         payload = AuthRegisterPayload.model_validate(data)
-    except (ValidationError, Exception) as exc:
-        raise HTTPException(400, str(exc))
+    except ValidationError as exc:
+        raise HTTPException(400, _validation_message(exc))
+    except Exception:
+        raise HTTPException(400, "Request body must be valid JSON")
 
     if User.query.filter_by(username=payload.username).first():
         raise HTTPException(400, "Username already taken")
@@ -211,8 +224,10 @@ async def login(request: Request, response: Response):
     try:
         data = await request.json()
         payload = AuthLoginPayload.model_validate(data)
-    except (ValidationError, Exception) as exc:
-        raise HTTPException(400, str(exc))
+    except ValidationError as exc:
+        raise HTTPException(400, _validation_message(exc))
+    except Exception:
+        raise HTTPException(400, "Request body must be valid JSON")
 
     identifier = payload.identifier.strip()
     user = (
@@ -247,8 +262,10 @@ async def forgot_password(request: Request):
     try:
         data = await request.json()
         payload = ForgotPasswordPayload.model_validate(data)
-    except Exception as exc:
-        raise HTTPException(400, str(exc))
+    except ValidationError as exc:
+        raise HTTPException(400, _validation_message(exc))
+    except Exception:
+        raise HTTPException(400, "Request body must be valid JSON")
 
     user = User.query.filter_by(email=payload.email.lower()).first()
     if user:
@@ -272,8 +289,10 @@ async def reset_password(request: Request):
     try:
         data = await request.json()
         payload = ResetPasswordPayload.model_validate(data)
-    except Exception as exc:
-        raise HTTPException(400, str(exc))
+    except ValidationError as exc:
+        raise HTTPException(400, _validation_message(exc))
+    except Exception:
+        raise HTTPException(400, "Request body must be valid JSON")
 
     token_hash = _hash_token(payload.token)
     user = User.query.filter_by(reset_token_hash=token_hash).first()

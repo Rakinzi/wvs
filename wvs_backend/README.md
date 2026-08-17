@@ -1,6 +1,6 @@
 # WVS Backend
 
-This backend now uses `uv` for Python dependency management.
+This FastAPI backend uses `uv` for Python dependency management.
 
 ## Setup
 
@@ -86,9 +86,11 @@ Optional:
 - Added `pyproject.toml` so dependencies are explicit and reproducible with `uv`
 - Removed hardcoded MySQL credentials from default config
 - Switched development fallback storage to local SQLite
-- Centralized Flask and Celery initialization around one app factory
+- Centralized FastAPI and Celery initialization around shared typed settings
 - Stopped duplicate command registration and duplicated Celery configuration
 - Made table creation explicit instead of a startup side effect
 - Added typed settings and request validation with Pydantic
 - Added cached HTTP threat-intel fetches and retry logic for external requests
 - Added optional OWASP ZAP integration when a local/remote ZAP daemon is available
+- Migrated HTTP routes to FastAPI with Pydantic validation and OpenAPI documentation
+- Added CSRF checks for cookie-authenticated writes and Redis-backed API rate limiting
